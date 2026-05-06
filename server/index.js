@@ -153,5 +153,5 @@ app.get('/health', (_, res) => res.json({ ok: true, players: game.players.length
 
 app.get('*', (_, res) => res.sendFile(path.join(clientBuild, 'index.html')));
 
-const PORT = process.env.PORT || 3001;
+const PORT = process.env.PORT || 3843;
 server.listen(PORT, () => console.log(`Poker server on port ${PORT}`));
