@@ -338,6 +338,7 @@ html, body {
   flex-direction: column;
   background: radial-gradient(ellipse at center, #1a5e35 0%, #0d3b22 60%, #081f14 100%);
   overflow: hidden;
+  position: relative;
 }
 
 
@@ -392,12 +393,11 @@ html, body {
 .seat-cards-compact .card { transform: scale(0.85); transform-origin: top left; }
 .seat-folded-label { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 0.65rem; font-weight: 900; color: rgba(255,255,255,0.4); letter-spacing: 2px; background: rgba(0,0,0,0.2); border-radius: 10px; }
 
-/* ─── Main felt row (center + raise slider) ──────────────────── */
+/* ─── Main felt row ──────────────────────────────────────────── */
 .table-main {
   flex: 1;
   display: flex;
   flex-direction: row;
-  overflow: hidden;
   min-height: 0;
 }
 
@@ -439,22 +439,21 @@ html, body {
 .pot-label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 1px; color: var(--gray); }
 .pot-amount { font-size: 1rem; font-weight: 800; color: var(--gold-light); }
 
-/* ─── Raise Panel (vertical slider on right of felt) ─────────── */
+/* ─── Raise Panel (absolute, full right edge of table) ───────── */
 .raise-panel {
-  width: 0;
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 58px;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 6px;
-  overflow: hidden;
-  transition: width 0.15s ease;
-  background: rgba(0,0,0,0.25);
+  z-index: 10;
+  background: rgba(0,0,0,0.18);
   border-left: 1px solid rgba(255,255,255,0.06);
-}
-
-.raise-panel-active {
-  width: 58px;
 }
 
 .raise-amount-label {
@@ -503,8 +502,6 @@ html, body {
 /* ─── My Area ────────────────────────────────────────────────── */
 .table-bottom {
   flex-shrink: 0;
-  background: rgba(0,0,0,0.4);
-  border-top: 1px solid rgba(255,255,255,0.08);
 }
 
 /* ─── Fixed Action Bar ───────────────────────────────────────── */

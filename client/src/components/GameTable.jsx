@@ -58,7 +58,7 @@ export default function GameTable({ gameState, myId, onAction, onLeave }) {
         </div>
       </div>
 
-      {/* Felt: community cards + pot, with vertical raise slider on the right */}
+      {/* Felt: community cards + pot */}
       <div className="table-main">
         <div className="table-center">
           <div className="community-area">
@@ -82,37 +82,35 @@ export default function GameTable({ gameState, myId, onAction, onLeave }) {
             )}
           </div>
         </div>
-
-        {/* Vertical raise slider — only when it's your turn and you can raise */}
-        <div className={`raise-panel ${canRaise ? 'raise-panel-active' : ''}`}>
-          {canRaise && (
-            <>
-              <div className="raise-amount-label">${raiseAmount.toLocaleString()}</div>
-              <div className="raise-presets-v">
-                {[
-                  { label: 'Max', value: maxRaise },
-                  { label: 'Pot', value: Math.min((gameState?.pot || 0) + currentBet, maxRaise) },
-                  { label: '½', value: Math.min(Math.floor((gameState?.pot || 0) / 2) + currentBet, maxRaise) },
-                  { label: 'Min', value: effectiveMin },
-                ].map(p => (
-                  <button key={p.label} className="btn-preset-v" onClick={() => setRaiseAmount(p.value)}>
-                    {p.label}
-                  </button>
-                ))}
-              </div>
-              <input
-                type="range"
-                className="raise-slider-v"
-                min={effectiveMin}
-                max={maxRaise}
-                step={bigBlind}
-                value={raiseAmount}
-                onChange={e => setRaiseAmount(parseInt(e.target.value))}
-              />
-            </>
-          )}
-        </div>
       </div>
+
+      {/* Vertical raise slider — absolutely positioned on the right of the full table */}
+      {canRaise && (
+        <div className="raise-panel">
+          <div className="raise-amount-label">${raiseAmount.toLocaleString()}</div>
+          <div className="raise-presets-v">
+            {[
+              { label: 'Max', value: maxRaise },
+              { label: 'Pot', value: Math.min((gameState?.pot || 0) + currentBet, maxRaise) },
+              { label: '½', value: Math.min(Math.floor((gameState?.pot || 0) / 2) + currentBet, maxRaise) },
+              { label: 'Min', value: effectiveMin },
+            ].map(p => (
+              <button key={p.label} className="btn-preset-v" onClick={() => setRaiseAmount(p.value)}>
+                {p.label}
+              </button>
+            ))}
+          </div>
+          <input
+            type="range"
+            className="raise-slider-v"
+            min={effectiveMin}
+            max={maxRaise}
+            step={bigBlind}
+            value={raiseAmount}
+            onChange={e => setRaiseAmount(parseInt(e.target.value))}
+          />
+        </div>
+      )}
 
       {/* My info + cards */}
       <div className="table-bottom">
