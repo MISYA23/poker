@@ -467,6 +467,7 @@ html, body {
 /* ─── Betting Controls ───────────────────────────────────────── */
 .betting-controls {
   padding: 8px 14px 10px;
+  padding-bottom: calc(10px + 10vh);
   border-top: 1px solid rgba(255,255,255,0.06);
 }
 
