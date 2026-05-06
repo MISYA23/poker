@@ -29,16 +29,6 @@ export default function GameTable({ gameState, myId, onAction, onLeave }) {
 
   return (
     <div className="game-table">
-      <div className="table-header">
-        <div className="table-phase">{PHASE_LABELS[gameState?.phase] || gameState?.phase}</div>
-        <div className="table-meta">
-          {waitlistCount > 0 && (
-            <span className="waitlist-pill">{waitlistCount} waiting</span>
-          )}
-          <button className="btn-ghost btn-sm" onClick={onLeave}>Leave</button>
-        </div>
-      </div>
-
       <div className="table-top">
         <div className="other-players">
           {others.map(player => (
@@ -47,6 +37,12 @@ export default function GameTable({ gameState, myId, onAction, onLeave }) {
           {others.length === 0 && (
             <div className="waiting-msg">Waiting for other players to join...</div>
           )}
+        </div>
+        <div className="table-top-actions">
+          {waitlistCount > 0 && (
+            <span className="waitlist-pill">{waitlistCount} waiting</span>
+          )}
+          <button className="btn-ghost btn-sm" onClick={onLeave}>Leave</button>
         </div>
       </div>
 

@@ -329,28 +329,29 @@ html, body {
   overflow: hidden;
 }
 
-.table-header {
-  display: flex;
-  align-items: center;
-  padding: 8px 14px;
-  background: rgba(0,0,0,0.3);
-  border-bottom: 1px solid rgba(255,255,255,0.06);
-  flex-shrink: 0;
-}
-.table-phase { flex: 1; text-align: center; font-size: 0.9rem; font-weight: 700; color: var(--gold-light); text-transform: uppercase; letter-spacing: 1px; }
-.table-meta { display: flex; align-items: center; gap: 8px; }
 
 /* ─── Other Players ──────────────────────────────────────────── */
 .table-top {
   flex-shrink: 0;
   padding: 8px;
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
 }
 
 .other-players {
+  flex: 1;
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
   justify-content: center;
+}
+
+.table-top-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
 }
 
 .player-seat {
