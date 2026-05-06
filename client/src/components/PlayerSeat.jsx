@@ -2,7 +2,7 @@ import React from 'react';
 import Card from './Card.jsx';
 import { ChipStack } from './PokerChip.jsx';
 
-export default function PlayerSeat({ player, isMe, compact = false }) {
+export default function PlayerSeat({ player, isMe, compact = false, win = null }) {
   if (!player) return <div className="player-seat player-seat-empty" />;
 
   const cardSize = compact ? 'xs' : (isMe ? 'lg' : 'sm');
@@ -37,6 +37,13 @@ export default function PlayerSeat({ player, isMe, compact = false }) {
               faceDown={card?.hidden}
             />
           ))}
+        </div>
+      )}
+
+      {win && (
+        <div className="seat-win">
+          <ChipStack amount={win.amount} size={20} />
+          <div className="seat-win-hand">{win.handName}</div>
         </div>
       )}
 

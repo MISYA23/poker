@@ -2,7 +2,6 @@ import React from 'react';
 import Card from './Card.jsx';
 import PlayerSeat from './PlayerSeat.jsx';
 import BettingControls from './BettingControls.jsx';
-import WinnerDisplay from './WinnerDisplay.jsx';
 import { ChipStack } from './PokerChip.jsx';
 
 const PHASE_LABELS = {
@@ -22,6 +21,12 @@ export default function GameTable({ gameState, myId, onAction, onLeave }) {
   const totalPot = (gameState?.pot || 0) +
     (gameState?.players || []).reduce((s, p) => s + (p.roundBet || 0), 0);
 
+  const winnerMap = {};
+  if (gameState?.phase === 'showdown' && gameState?.winners) {
+    for (const w of gameState.winners) winnerMap[w.playerId] = w;
+  }
+  const myWin = winnerMap[myId];
+
   return (
     <div className="game-table">
       <div className="table-header">
@@ -37,7 +42,7 @@ export default function GameTable({ gameState, myId, onAction, onLeave }) {
       <div className="table-top">
         <div className="other-players">
           {others.map(player => (
-            <PlayerSeat key={player.id} player={player} isMe={false} compact={others.length > 3} />
+            <PlayerSeat key={player.id} player={player} isMe={false} compact={others.length > 3} win={winnerMap[player.id]} />
           ))}
           {others.length === 0 && (
             <div className="waiting-msg">Waiting for other players to join...</div>
@@ -59,16 +64,12 @@ export default function GameTable({ gameState, myId, onAction, onLeave }) {
           </div>
           {totalPot > 0 && (
             <div className="pot-info">
-              <span className="pot-label">POT</span>
+              <ChipStack amount={totalPot} size={26} />
               <span className="pot-amount">${totalPot.toLocaleString()}</span>
             </div>
           )}
         </div>
       </div>
-
-      {gameState?.phase === 'showdown' && gameState?.winners?.length > 0 && (
-        <WinnerDisplay winners={gameState.winners} />
-      )}
 
       <div className="table-bottom">
         {me && (
@@ -84,9 +85,16 @@ export default function GameTable({ gameState, myId, onAction, onLeave }) {
               <span className="my-chips">${me.chips.toLocaleString()}</span>
             </div>
 
-            {me.roundBet > 0 && (
+            {me.roundBet > 0 && !myWin && (
               <div className="my-bet-chips">
                 <ChipStack amount={me.roundBet} size={30} />
+              </div>
+            )}
+
+            {myWin && (
+              <div className="my-win">
+                <ChipStack amount={myWin.amount} size={30} />
+                <span className="my-win-hand">{myWin.handName}</span>
               </div>
             )}
 

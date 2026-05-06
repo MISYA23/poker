@@ -109,7 +109,7 @@ io.on('connection', (socket) => {
       game.handleAction(player.id, action, amount);
       broadcastState();
       if (game.phase === 'showdown') {
-        scheduleNextHand(5000);
+        scheduleNextHand(3000);
       }
     } catch (err) {
       socket.emit('error', { message: err.message });
