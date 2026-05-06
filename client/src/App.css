@@ -439,65 +439,43 @@ html, body {
 .pot-label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 1px; color: var(--gray); }
 .pot-amount { font-size: 1rem; font-weight: 800; color: var(--gold-light); }
 
-/* ─── Raise Panel (absolute, full right edge of table) ───────── */
+/* ─── Raise Panel (absolute, middle 50% of right edge) ───────── */
 .raise-panel {
   position: absolute;
-  top: 0;
+  top: 25%;
+  bottom: 25%;
   right: 0;
-  bottom: 0;
-  width: 58px;
+  width: 54px;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  gap: 8px;
   z-index: 10;
-  background: rgba(0,0,0,0.18);
-  border-left: 1px solid rgba(255,255,255,0.06);
+  background: rgba(0,0,0,0.22);
+  border-left: 1px solid rgba(255,255,255,0.08);
+  border-radius: 12px 0 0 12px;
 }
 
 .raise-amount-label {
-  font-size: 0.7rem;
+  font-size: 0.72rem;
   font-weight: 800;
   color: var(--gold-light);
   text-align: center;
   white-space: nowrap;
-  writing-mode: horizontal-tb;
 }
 
 .raise-slider-v {
   flex: 1;
-  width: 28px;
+  width: 36px;
   cursor: pointer;
   writing-mode: vertical-lr;
   direction: rtl;
   -webkit-appearance: slider-vertical;
   appearance: slider-vertical;
   accent-color: var(--gold);
-  max-height: calc(100% - 80px);
+  max-height: calc(100% - 40px);
 }
-
-.raise-presets-v {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  width: 100%;
-  padding: 0 5px;
-}
-
-.btn-preset-v {
-  width: 100%;
-  padding: 3px 0;
-  background: rgba(255,255,255,0.07);
-  border: 1px solid rgba(255,255,255,0.12);
-  border-radius: 4px;
-  color: var(--gray);
-  font-size: 0.62rem;
-  font-weight: 700;
-  cursor: pointer;
-  text-align: center;
-}
-.btn-preset-v:hover { background: rgba(255,255,255,0.15); color: var(--white); }
 
 /* ─── My Area ────────────────────────────────────────────────── */
 .table-bottom {

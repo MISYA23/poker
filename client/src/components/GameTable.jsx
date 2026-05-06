@@ -88,18 +88,6 @@ export default function GameTable({ gameState, myId, onAction, onLeave }) {
       {canRaise && (
         <div className="raise-panel">
           <div className="raise-amount-label">${raiseAmount.toLocaleString()}</div>
-          <div className="raise-presets-v">
-            {[
-              { label: 'Max', value: maxRaise },
-              { label: 'Pot', value: Math.min((gameState?.pot || 0) + currentBet, maxRaise) },
-              { label: '½', value: Math.min(Math.floor((gameState?.pot || 0) / 2) + currentBet, maxRaise) },
-              { label: 'Min', value: effectiveMin },
-            ].map(p => (
-              <button key={p.label} className="btn-preset-v" onClick={() => setRaiseAmount(p.value)}>
-                {p.label}
-              </button>
-            ))}
-          </div>
           <input
             type="range"
             className="raise-slider-v"
