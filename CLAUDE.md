@@ -70,7 +70,7 @@ poker-game/
 
 **Turn timer:** Server enforces a 20-second auto-fold. `turnDeadline` (Unix ms timestamp) is broadcast in every `game-state` so clients can show an accurate countdown without drift.
 
-**Raise slider:** Vertical, positioned absolute on the right edge of `.game-table` (middle 50% of screen height). `raiseAmount` state lives in `GameTable`, passed down to `BettingControls` (buttons only) and rendered as a slider alongside.
+**Raise slider:** Vertical, positioned absolute on the right edge of `.game-table` (middle 50% of screen height, `top: 25%` to `bottom: 25%`, `z-index: 10`). `raiseAmount` state lives in `GameTable`, passed down to `BettingControls` (buttons only) and rendered as a slider alongside. The `.action-bar` has `z-index: 20` to stay above the slider — without this the slider overlay eats clicks on the All In / Raise buttons.
 
 **Winner display:** No overlay. During showdown, chips appear on the winner's seat with hand name. Next hand starts automatically after 3s.
 
