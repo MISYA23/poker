@@ -3,6 +3,7 @@ import Card from './Card.jsx';
 import PlayerSeat from './PlayerSeat.jsx';
 import BettingControls from './BettingControls.jsx';
 import WinnerDisplay from './WinnerDisplay.jsx';
+import { ChipStack } from './PokerChip.jsx';
 
 const PHASE_LABELS = {
   waiting: 'Waiting for players...',
@@ -84,7 +85,9 @@ export default function GameTable({ gameState, myId, onAction, onLeave }) {
             </div>
 
             {me.roundBet > 0 && (
-              <div className="my-bet">Bet: ${me.roundBet.toLocaleString()}</div>
+              <div className="my-bet-chips">
+                <ChipStack amount={me.roundBet} size={30} />
+              </div>
             )}
 
             <div className="my-cards">

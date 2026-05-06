@@ -1,5 +1,6 @@
 import React from 'react';
 import Card from './Card.jsx';
+import { ChipStack } from './PokerChip.jsx';
 
 export default function PlayerSeat({ player, isMe, compact = false }) {
   if (!player) return <div className="player-seat player-seat-empty" />;
@@ -20,7 +21,9 @@ export default function PlayerSeat({ player, isMe, compact = false }) {
           {player.allIn && <span className="badge badge-allin">ALL IN</span>}
         </div>
         {player.roundBet > 0 && (
-          <div className="seat-bet">Bet: ${player.roundBet}</div>
+          <div className="seat-bet-chips">
+            <ChipStack amount={player.roundBet} size={22} />
+          </div>
         )}
       </div>
 
