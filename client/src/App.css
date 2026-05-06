@@ -487,6 +487,8 @@ html, body {
   flex-shrink: 0;
   background: rgba(0,0,0,0.5);
   border-top: 1px solid rgba(255,255,255,0.08);
+  position: relative;
+  z-index: 20;
 }
 
 .action-bar-placeholder {
