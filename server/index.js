@@ -182,9 +182,7 @@ io.on('connection', (socket) => {
 
 app.get('/health', (_, res) => res.json({ ok: true, players: game.players.length, waitlist: waitlist.length }));
 
-const RESET_SECRET = process.env.RESET_SECRET || 'dev-reset';
 app.post('/admin/reset', (req, res) => {
-  if (req.query.secret !== RESET_SECRET) return res.status(403).json({ error: 'forbidden' });
 
   // Clear timers
   if (turnTimer) { clearTimeout(turnTimer); turnTimer = null; }

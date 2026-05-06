@@ -44,6 +44,7 @@ export default function GameTable({ gameState, myId, onAction, onLeave }) {
             <span className="waitlist-pill">{waitlistCount} waiting</span>
           )}
           <button className="btn-ghost btn-sm" onClick={onLeave}>Leave</button>
+          <button className="btn-ghost btn-sm btn-reset" onClick={() => fetch('/admin/reset', { method: 'POST' })}>Reset</button>
         </div>
       </div>
 

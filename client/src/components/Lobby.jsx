@@ -16,6 +16,10 @@ export default function Lobby({ onJoin, error }) {
         <p className="lobby-sub">Multiplayer Texas Hold'em</p>
       </div>
 
+      <button className="btn-ghost btn-sm lobby-reset" onClick={() => fetch('/admin/reset', { method: 'POST' })}>
+        Reset Game
+      </button>
+
       <div className="lobby-card">
         <form onSubmit={handleSubmit} className="lobby-form">
           <div className="form-group">

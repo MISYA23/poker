@@ -164,6 +164,17 @@ html, body {
 .btn-ghost:hover { border-color: rgba(255,255,255,0.4); color: var(--white); }
 .btn-sm { padding: 6px 10px; font-size: 0.8rem; }
 
+.btn-reset { border-color: rgba(192,57,43,0.4); color: rgba(231,76,60,0.8); }
+.btn-reset:hover { border-color: var(--red); color: #e74c3c; }
+
+.lobby-reset {
+  margin-bottom: 16px;
+  align-self: flex-end;
+  font-size: 0.75rem;
+  opacity: 0.5;
+}
+.lobby-reset:hover { opacity: 1; }
+
 .btn-copy {
   background: rgba(255,255,255,0.1);
   border: 1px solid rgba(255,255,255,0.2);
