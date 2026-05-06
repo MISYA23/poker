@@ -54,7 +54,7 @@ export default function GameTable({ gameState, myId, onAction, onLeave }) {
         <div className="table-top-actions">
           {waitlistCount > 0 && <span className="waitlist-pill">{waitlistCount} waiting</span>}
           <button className="btn-ghost btn-sm" onClick={onLeave}>Leave</button>
-          <button className="btn-ghost btn-sm btn-reset" onClick={() => fetch('/admin/reset', { method: 'POST' })}>Reset</button>
+          <button className="btn-ghost btn-sm btn-reset" onClick={() => fetch('/admin/reset', { method: 'POST' }).then(() => window.location.href = '/')}>Reset</button>
         </div>
       </div>
 

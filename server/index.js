@@ -185,22 +185,25 @@ io.on('connection', (socket) => {
 
 app.get('/health', (_, res) => res.json({ ok: true, players: game.players.length, waitlist: waitlist.length }));
 
-app.post('/admin/reset', (req, res) => {
-  // Cancel every pending timer
+function doReset() {
   if (turnTimer)     { clearTimeout(turnTimer);     turnTimer = null; }
   if (autoStartTimer){ clearTimeout(autoStartTimer); autoStartTimer = null; }
   if (nextHandTimer) { clearTimeout(nextHandTimer);  nextHandTimer = null; }
   timerPlayerId = null;
   turnDeadline  = null;
-
-  // Fresh game instance — wipes all internal state cleanly
   game = new PokerGame('table', GAME_OPTIONS);
   waitlist.length = 0;
   socketPlayers.clear();
-
-  // Kick every connected socket back to the lobby
   io.emit('reset');
+}
 
+app.get('/reset', (req, res) => {
+  doReset();
+  res.redirect('/');
+});
+
+app.post('/admin/reset', (req, res) => {
+  doReset();
   res.json({ ok: true });
 });
 

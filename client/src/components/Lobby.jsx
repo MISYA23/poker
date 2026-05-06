@@ -16,7 +16,7 @@ export default function Lobby({ onJoin, error }) {
         <p className="lobby-sub">Multiplayer Texas Hold'em</p>
       </div>
 
-      <button className="btn-ghost btn-sm lobby-reset" onClick={() => fetch('/admin/reset', { method: 'POST' })}>
+      <button className="btn-ghost btn-sm lobby-reset" onClick={() => fetch('/admin/reset', { method: 'POST' }).then(() => window.location.reload())}>
         Reset Game
       </button>
 
