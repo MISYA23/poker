@@ -26,6 +26,12 @@ export default function App() {
     error: ({ message }) => {
       setError(message);
     },
+    reset: () => {
+      setScreen('lobby');
+      setMyId(null);
+      setGameState(null);
+      setError(null);
+    },
   });
 
   const handleJoin = useCallback((playerName) => {

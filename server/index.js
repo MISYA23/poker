@@ -182,6 +182,36 @@ io.on('connection', (socket) => {
 
 app.get('/health', (_, res) => res.json({ ok: true, players: game.players.length, waitlist: waitlist.length }));
 
+const RESET_SECRET = process.env.RESET_SECRET || 'dev-reset';
+app.post('/admin/reset', (req, res) => {
+  if (req.query.secret !== RESET_SECRET) return res.status(403).json({ error: 'forbidden' });
+
+  // Clear timers
+  if (turnTimer) { clearTimeout(turnTimer); turnTimer = null; }
+  timerPlayerId = null;
+  turnDeadline = null;
+  if (autoStartTimer) { clearTimeout(autoStartTimer); autoStartTimer = null; }
+
+  // Reset game state
+  game.players.length = 0;
+  game.phase = 'waiting';
+  game.communityCards = [];
+  game.pot = 0;
+  game.currentPlayerId = null;
+  game.winners = null;
+  game.lastAction = null;
+  game.dealerIndex = -1;
+  waitlist.length = 0;
+
+  // Disconnect all sockets so clients return to lobby
+  for (const [socketId] of socketPlayers) {
+    io.to(socketId).emit('reset');
+  }
+  socketPlayers.clear();
+
+  res.json({ ok: true });
+});
+
 app.get('*', (_, res) => res.sendFile(path.join(clientBuild, 'index.html')));
 
 const PORT = process.env.PORT || 3843;
