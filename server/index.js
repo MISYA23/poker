@@ -19,7 +19,8 @@ const io = new Server(server, {
 });
 
 const TABLE_MAX = 9;
-const game = new PokerGame('table', { startingChips: 1000, bigBlind: 20, smallBlind: 10 });
+const GAME_OPTIONS = { startingChips: 1000, bigBlind: 20, smallBlind: 10 };
+let game = new PokerGame('table', GAME_OPTIONS);
 
 // socketId -> { id, name }
 const socketPlayers = new Map();
@@ -28,6 +29,7 @@ const socketPlayers = new Map();
 const waitlist = [];
 
 let autoStartTimer = null;
+let nextHandTimer = null;
 let turnTimer = null;
 let timerPlayerId = null;
 let turnDeadline = null;
@@ -96,8 +98,9 @@ function tryAutoStart() {
 }
 
 function scheduleNextHand(delay = 5000) {
-  setTimeout(() => {
-    // Promote from waitlist if there are open seats
+  if (nextHandTimer) { clearTimeout(nextHandTimer); }
+  nextHandTimer = setTimeout(() => {
+    nextHandTimer = null;
     while (waitlist.length > 0 && game.players.length < TABLE_MAX) {
       const next = waitlist.shift();
       game.addPlayer(next.id, next.name);
@@ -183,29 +186,20 @@ io.on('connection', (socket) => {
 app.get('/health', (_, res) => res.json({ ok: true, players: game.players.length, waitlist: waitlist.length }));
 
 app.post('/admin/reset', (req, res) => {
-
-  // Clear timers
-  if (turnTimer) { clearTimeout(turnTimer); turnTimer = null; }
+  // Cancel every pending timer
+  if (turnTimer)     { clearTimeout(turnTimer);     turnTimer = null; }
+  if (autoStartTimer){ clearTimeout(autoStartTimer); autoStartTimer = null; }
+  if (nextHandTimer) { clearTimeout(nextHandTimer);  nextHandTimer = null; }
   timerPlayerId = null;
-  turnDeadline = null;
-  if (autoStartTimer) { clearTimeout(autoStartTimer); autoStartTimer = null; }
+  turnDeadline  = null;
 
-  // Reset game state
-  game.players.length = 0;
-  game.phase = 'waiting';
-  game.communityCards = [];
-  game.pot = 0;
-  game.currentPlayerId = null;
-  game.winners = null;
-  game.lastAction = null;
-  game.dealerIndex = -1;
+  // Fresh game instance — wipes all internal state cleanly
+  game = new PokerGame('table', GAME_OPTIONS);
   waitlist.length = 0;
-
-  // Disconnect all sockets so clients return to lobby
-  for (const [socketId] of socketPlayers) {
-    io.to(socketId).emit('reset');
-  }
   socketPlayers.clear();
+
+  // Kick every connected socket back to the lobby
+  io.emit('reset');
 
   res.json({ ok: true });
 });
