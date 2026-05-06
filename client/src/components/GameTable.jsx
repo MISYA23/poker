@@ -32,7 +32,8 @@ export default function GameTable({ gameState, myId, onAction, onLeave }) {
       <div className="table-top">
         <div className="other-players">
           {others.map(player => (
-            <PlayerSeat key={player.id} player={player} isMe={false} compact={others.length > 3} win={winnerMap[player.id]} />
+            <PlayerSeat key={player.id} player={player} isMe={false} compact={others.length > 3} win={winnerMap[player.id]}
+              turnDeadline={player.isCurrentPlayer ? gameState?.turnDeadline : null} />
           ))}
           {others.length === 0 && (
             <div className="waiting-msg">Waiting for other players to join...</div>

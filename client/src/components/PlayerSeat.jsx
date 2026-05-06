@@ -1,14 +1,31 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import Card from './Card.jsx';
 import { ChipStack } from './PokerChip.jsx';
 
-export default function PlayerSeat({ player, isMe, compact = false, win = null }) {
+function useTurnTimer(turnDeadline) {
+  const [timeLeft, setTimeLeft] = useState(null);
+  useEffect(() => {
+    if (!turnDeadline) { setTimeLeft(null); return; }
+    const update = () => setTimeLeft(Math.max(0, Math.ceil((turnDeadline - Date.now()) / 1000)));
+    update();
+    const id = setInterval(update, 200);
+    return () => clearInterval(id);
+  }, [turnDeadline]);
+  return timeLeft;
+}
+
+export default function PlayerSeat({ player, isMe, compact = false, win = null, turnDeadline = null }) {
+  const timeLeft = useTurnTimer(turnDeadline);
   if (!player) return <div className="player-seat player-seat-empty" />;
 
   const cardSize = compact ? 'xs' : (isMe ? 'lg' : 'sm');
 
   return (
     <div className={`player-seat ${player.isCurrentPlayer ? 'seat-active' : ''} ${player.folded ? 'seat-folded' : ''} ${isMe ? 'seat-me' : ''}`}>
+      {timeLeft !== null && (
+        <div className={`seat-timer ${timeLeft <= 5 ? 'seat-timer-urgent' : ''}`}>{timeLeft}s</div>
+      )}
+
       <div className="seat-info">
         <div className="seat-name">
           {player.name}

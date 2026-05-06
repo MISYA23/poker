@@ -584,6 +584,34 @@ html, body {
 
 @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
 
+/* ─── Turn Timer ─────────────────────────────────────────────── */
+.turn-timer {
+  text-align: center;
+  font-size: 1rem;
+  font-weight: 800;
+  color: var(--gold-light);
+  padding: 2px 0 6px;
+  letter-spacing: 1px;
+}
+.turn-timer-urgent {
+  color: var(--red);
+  animation: blink 0.5s infinite;
+}
+
+.seat-timer {
+  position: absolute;
+  top: 4px;
+  right: 6px;
+  font-size: 0.62rem;
+  font-weight: 800;
+  color: var(--gold-light);
+  line-height: 1;
+}
+.seat-timer-urgent {
+  color: var(--red);
+  animation: blink 0.5s infinite;
+}
+
 /* ─── Poker Chips ────────────────────────────────────────────── */
 .chip-stack {
   display: flex;

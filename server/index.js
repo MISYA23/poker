@@ -28,6 +28,35 @@ const socketPlayers = new Map();
 const waitlist = [];
 
 let autoStartTimer = null;
+let turnTimer = null;
+let timerPlayerId = null;
+let turnDeadline = null;
+
+const TURN_SECONDS = 20;
+
+function startTurnTimer() {
+  const pid = game.currentPlayerId;
+  if (pid === timerPlayerId) return;
+
+  if (turnTimer) { clearTimeout(turnTimer); turnTimer = null; }
+  timerPlayerId = pid;
+  turnDeadline = null;
+
+  if (!pid || game.phase === 'waiting' || game.phase === 'showdown') return;
+
+  turnDeadline = Date.now() + TURN_SECONDS * 1000;
+  turnTimer = setTimeout(() => {
+    turnTimer = null;
+    if (game.currentPlayerId !== pid) return;
+    timerPlayerId = null;
+    turnDeadline = null;
+    try {
+      game.handleAction(pid, 'fold');
+      broadcastState();
+      if (game.phase === 'showdown') scheduleNextHand(3000);
+    } catch (e) {}
+  }, TURN_SECONDS * 1000);
+}
 
 function broadcastState() {
   const allSocketIds = [...socketPlayers.keys()];
@@ -46,8 +75,10 @@ function broadcastState() {
       waitlistPosition: waitlistPos >= 0 ? waitlistPos + 1 : null,
       waitlistCount: waitlist.length,
       tableCount: game.players.length,
+      turnDeadline,
     });
   }
+  startTurnTimer();
 }
 
 function tryAutoStart() {
