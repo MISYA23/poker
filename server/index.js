@@ -3,11 +3,15 @@ const http = require('http');
 const { Server } = require('socket.io');
 const cors = require('cors');
 const { v4: uuidv4 } = require('uuid');
+const path = require('path');
 const { PokerGame } = require('./game/PokerGame');
 
 const app = express();
 app.use(cors());
 app.use(express.json());
+
+const clientBuild = path.join(__dirname, '../client/dist');
+app.use(express.static(clientBuild));
 
 const server = http.createServer(app);
 const io = new Server(server, {
@@ -146,6 +150,8 @@ io.on('connection', (socket) => {
 });
 
 app.get('/health', (_, res) => res.json({ ok: true, players: game.players.length, waitlist: waitlist.length }));
+
+app.get('*', (_, res) => res.sendFile(path.join(clientBuild, 'index.html')));
 
 const PORT = process.env.PORT || 3001;
 server.listen(PORT, () => console.log(`Poker server on port ${PORT}`));
