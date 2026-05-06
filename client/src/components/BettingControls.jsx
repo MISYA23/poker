@@ -12,72 +12,33 @@ function useTurnTimer(turnDeadline) {
   return timeLeft;
 }
 
-export default function BettingControls({ gameState, myId, onAction }) {
+export default function BettingControls({ gameState, myId, onAction, raiseAmount, canRaise }) {
   const me = gameState?.players?.find(p => p.id === myId);
+  const timeLeft = useTurnTimer(gameState?.turnDeadline);
+
+  const isMyTurn = gameState?.currentPlayerId === myId &&
+    !['waiting', 'showdown'].includes(gameState?.phase);
+
+  if (!isMyTurn) return <div className="action-bar-placeholder" />;
 
   const currentBet = gameState?.currentBet || 0;
   const myBet = me?.roundBet || 0;
   const callAmount = Math.min(currentBet - myBet, me?.chips || 0);
   const canCheck = myBet >= currentBet;
-  const minRaise = currentBet + (gameState?.minRaise || gameState?.bigBlind || 20);
   const maxRaise = myBet + (me?.chips || 0);
-  const effectiveMin = Math.min(minRaise, maxRaise);
-
-  const [raiseAmount, setRaiseAmount] = useState(effectiveMin);
-
-  useEffect(() => {
-    setRaiseAmount(effectiveMin);
-  }, [gameState?.currentPlayerId]);
-
-  const timeLeft = useTurnTimer(gameState?.turnDeadline);
-
-  if (!me || gameState?.currentPlayerId !== myId) return null;
-  if (['waiting', 'showdown'].includes(gameState?.phase)) return null;
 
   const handleRaise = () => {
-    const amt = raiseAmount || effectiveMin;
+    const amt = raiseAmount || 0;
     onAction(amt >= maxRaise ? 'all-in' : 'raise', amt);
   };
 
   const urgent = timeLeft !== null && timeLeft <= 5;
 
   return (
-    <div className="betting-controls">
+    <div className="action-buttons-bar">
       {timeLeft !== null && (
-        <div className={`turn-timer ${urgent ? 'turn-timer-urgent' : ''}`}>
-          {timeLeft}s
-        </div>
+        <div className={`turn-timer ${urgent ? 'turn-timer-urgent' : ''}`}>{timeLeft}s</div>
       )}
-
-      {me.chips > callAmount && (
-        <div className="raise-selector">
-          <div className="raise-label">
-            Raise to: <strong>${(raiseAmount || effectiveMin).toLocaleString()}</strong>
-          </div>
-          <input
-            type="range"
-            min={effectiveMin}
-            max={maxRaise}
-            step={gameState.bigBlind || 20}
-            value={raiseAmount || effectiveMin}
-            onChange={e => setRaiseAmount(parseInt(e.target.value))}
-            className="raise-slider"
-          />
-          <div className="raise-presets">
-            {[
-              { label: 'Min', value: effectiveMin },
-              { label: '½ Pot', value: Math.min(Math.floor((gameState.pot || 0) / 2) + currentBet, maxRaise) },
-              { label: 'Pot', value: Math.min((gameState.pot || 0) + currentBet, maxRaise) },
-              { label: 'Max', value: maxRaise },
-            ].map(p => (
-              <button key={p.label} className="btn-preset" onClick={() => setRaiseAmount(p.value)}>
-                {p.label}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
       <div className="action-buttons">
         <button className="btn-action btn-fold" onClick={() => onAction('fold')}>
           Fold
@@ -93,13 +54,13 @@ export default function BettingControls({ gameState, myId, onAction }) {
           </button>
         )}
 
-        {me.chips > callAmount && (
+        {canRaise && (
           <button className="btn-action btn-raise" onClick={handleRaise}>
-            {raiseAmount >= maxRaise ? 'All In' : `Raise $${(raiseAmount || effectiveMin).toLocaleString()}`}
+            {raiseAmount >= maxRaise ? 'All In' : `Raise $${(raiseAmount || 0).toLocaleString()}`}
           </button>
         )}
 
-        {me.chips > 0 && (
+        {me?.chips > 0 && (
           <button className="btn-action btn-allin" onClick={() => onAction('all-in', 0)}>
             All In
           </button>

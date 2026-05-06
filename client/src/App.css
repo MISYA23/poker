@@ -392,6 +392,15 @@ html, body {
 .seat-cards-compact .card { transform: scale(0.85); transform-origin: top left; }
 .seat-folded-label { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 0.65rem; font-weight: 900; color: rgba(255,255,255,0.4); letter-spacing: 2px; background: rgba(0,0,0,0.2); border-radius: 10px; }
 
+/* ─── Main felt row (center + raise slider) ──────────────────── */
+.table-main {
+  flex: 1;
+  display: flex;
+  flex-direction: row;
+  overflow: hidden;
+  min-height: 0;
+}
+
 /* ─── Community Area ─────────────────────────────────────────── */
 .table-center {
   flex: 1;
@@ -430,11 +439,87 @@ html, body {
 .pot-label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 1px; color: var(--gray); }
 .pot-amount { font-size: 1rem; font-weight: 800; color: var(--gold-light); }
 
+/* ─── Raise Panel (vertical slider on right of felt) ─────────── */
+.raise-panel {
+  width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  overflow: hidden;
+  transition: width 0.15s ease;
+  background: rgba(0,0,0,0.25);
+  border-left: 1px solid rgba(255,255,255,0.06);
+}
+
+.raise-panel-active {
+  width: 58px;
+}
+
+.raise-amount-label {
+  font-size: 0.7rem;
+  font-weight: 800;
+  color: var(--gold-light);
+  text-align: center;
+  white-space: nowrap;
+  writing-mode: horizontal-tb;
+}
+
+.raise-slider-v {
+  flex: 1;
+  width: 28px;
+  cursor: pointer;
+  writing-mode: vertical-lr;
+  direction: rtl;
+  -webkit-appearance: slider-vertical;
+  appearance: slider-vertical;
+  accent-color: var(--gold);
+  max-height: calc(100% - 80px);
+}
+
+.raise-presets-v {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  padding: 0 5px;
+}
+
+.btn-preset-v {
+  width: 100%;
+  padding: 3px 0;
+  background: rgba(255,255,255,0.07);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 4px;
+  color: var(--gray);
+  font-size: 0.62rem;
+  font-weight: 700;
+  cursor: pointer;
+  text-align: center;
+}
+.btn-preset-v:hover { background: rgba(255,255,255,0.15); color: var(--white); }
+
 /* ─── My Area ────────────────────────────────────────────────── */
 .table-bottom {
   flex-shrink: 0;
   background: rgba(0,0,0,0.4);
   border-top: 1px solid rgba(255,255,255,0.08);
+}
+
+/* ─── Fixed Action Bar ───────────────────────────────────────── */
+.action-bar {
+  flex-shrink: 0;
+  background: rgba(0,0,0,0.5);
+  border-top: 1px solid rgba(255,255,255,0.08);
+}
+
+.action-bar-placeholder {
+  height: calc(70px + 10vh);
+}
+
+.action-buttons-bar {
+  padding: 8px 14px calc(10px + 10vh);
 }
 
 .my-area {
@@ -475,60 +560,6 @@ html, body {
   color: var(--gray);
   padding: 4px 14px 6px;
 }
-
-/* ─── Betting Controls ───────────────────────────────────────── */
-.betting-controls {
-  padding: 8px 14px 10px;
-  padding-bottom: calc(10px + 10vh);
-  border-top: 1px solid rgba(255,255,255,0.06);
-}
-
-.raise-selector {
-  margin-bottom: 10px;
-  background: rgba(255,255,255,0.04);
-  border-radius: 8px;
-  padding: 10px;
-}
-
-.raise-label { text-align: center; font-size: 0.85rem; color: var(--gray); margin-bottom: 8px; }
-.raise-label strong { color: var(--gold-light); }
-
-.raise-slider {
-  width: 100%;
-  height: 6px;
-  -webkit-appearance: none;
-  background: linear-gradient(to right, var(--gold) 0%, rgba(255,255,255,0.2) 0%);
-  border-radius: 3px;
-  outline: none;
-  margin-bottom: 8px;
-}
-.raise-slider::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
-  background: var(--gold);
-  cursor: pointer;
-  box-shadow: 0 2px 6px rgba(0,0,0,0.4);
-}
-
-.raise-presets {
-  display: flex;
-  gap: 6px;
-  justify-content: center;
-}
-.btn-preset {
-  flex: 1;
-  padding: 6px;
-  background: rgba(255,255,255,0.08);
-  border: 1px solid rgba(255,255,255,0.15);
-  border-radius: 6px;
-  color: var(--white);
-  font-size: 0.75rem;
-  cursor: pointer;
-  transition: background 0.2s;
-}
-.btn-preset:hover { background: rgba(255,255,255,0.15); }
 
 .action-buttons {
   display: flex;
