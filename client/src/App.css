@@ -336,7 +336,7 @@ html, body {
   height: 100%;
   display: flex;
   flex-direction: column;
-  background: radial-gradient(ellipse at center, #6b1a1a 0%, #3b0d0d 60%, #1f0606 100%);
+  background: radial-gradient(ellipse at center, #1a3b6b 0%, #0d2148 60%, #061224 100%);
   overflow: hidden;
   position: relative;
 }
