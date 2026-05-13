@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import Card from './Card.jsx';
+import Avatar from './Avatar.jsx';
 import { ChipStack } from './PokerChip.jsx';
 
 function useTurnTimer(turnDeadline) {
@@ -28,7 +29,8 @@ export default function PlayerSeat({ player, isMe, compact = false, win = null, 
 
       <div className="seat-info">
         <div className="seat-name">
-          {player.name}
+          <Avatar size={compact ? 18 : 22} />
+          <span className="seat-name-text">{player.name}</span>
           {player.isDealer && <span className="badge badge-dealer">D</span>}
           {player.isSmallBlind && <span className="badge badge-sb">SB</span>}
           {player.isBigBlind && <span className="badge badge-bb">BB</span>}

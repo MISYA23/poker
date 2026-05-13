@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import Card from './Card.jsx';
 import PlayerSeat from './PlayerSeat.jsx';
+import Avatar from './Avatar.jsx';
 import BettingControls from './BettingControls.jsx';
 import { ChipStack } from './PokerChip.jsx';
 
@@ -38,6 +39,9 @@ export default function GameTable({ gameState, myId, onAction, onLeave }) {
 
   return (
     <div className="game-table">
+
+      <div className="billboard billboard-left">WELCOME</div>
+      <div className="billboard billboard-right">POKER ROOM</div>
 
       {/* Opponents + top-right controls */}
       <div className="table-top">
@@ -106,7 +110,8 @@ export default function GameTable({ gameState, myId, onAction, onLeave }) {
           <div className="my-area">
             <div className="my-info">
               <span className="my-name">
-                {me.name}
+                <Avatar size={26} />
+                <span className="my-name-text">{me.name}</span>
                 {me.isDealer && <span className="badge badge-dealer">D</span>}
                 {me.isSmallBlind && <span className="badge badge-sb">SB</span>}
                 {me.isBigBlind && <span className="badge badge-bb">BB</span>}

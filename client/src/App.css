@@ -345,11 +345,34 @@ html, body {
 /* ─── Other Players ──────────────────────────────────────────── */
 .table-top {
   flex-shrink: 0;
-  padding: 8px;
+  padding: 40px 130px 8px;
   display: flex;
   align-items: flex-start;
   gap: 6px;
 }
+
+.billboard {
+  position: absolute;
+  top: 6px;
+  width: 118px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 2px;
+  color: #fff8d8;
+  text-shadow: 0 0 4px rgba(255,200,80,0.7);
+  background: linear-gradient(180deg, #2a0808 0%, #1a0404 100%);
+  border: 2px solid var(--gold);
+  border-radius: 4px;
+  box-shadow: 0 0 10px rgba(212,160,23,0.35), inset 0 0 6px rgba(0,0,0,0.5);
+  z-index: 30;
+  pointer-events: none;
+}
+.billboard-left { left: 10px; }
+.billboard-right { right: 10px; }
 
 .other-players {
   flex: 1;
@@ -385,7 +408,17 @@ html, body {
 .seat-folded { opacity: 0.45; }
 
 .seat-info { margin-bottom: 4px; }
-.seat-name { font-size: 0.78rem; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.seat-name { font-size: 0.78rem; font-weight: 700; display: flex; align-items: center; gap: 5px; min-width: 0; }
+.seat-name-text { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.avatar-frame {
+  display: inline-flex;
+  flex-shrink: 0;
+  border-radius: 50%;
+  border: 1.5px solid var(--gold);
+  box-shadow: 0 0 4px rgba(0,0,0,0.5);
+  overflow: hidden;
+  background: #141414;
+}
 .seat-chips { font-size: 0.72rem; color: var(--gold-light); }
 .seat-bet { font-size: 0.68rem; color: #74b9ff; }
 
@@ -510,10 +543,12 @@ html, body {
 .my-info {
   display: flex;
   justify-content: space-between;
+  align-items: center;
   width: 100%;
   font-size: 0.85rem;
 }
-.my-name { font-weight: 700; }
+.my-name { font-weight: 700; display: flex; align-items: center; gap: 8px; }
+.my-name-text { white-space: nowrap; }
 .my-chips { color: var(--gold-light); font-weight: 700; }
 .my-bet { font-size: 0.8rem; color: #74b9ff; }
 
