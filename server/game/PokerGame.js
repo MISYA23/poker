@@ -24,12 +24,13 @@ class PokerGame {
     this.startingChips = options.startingChips || 1000;
   }
 
-  addPlayer(id, name) {
+  addPlayer(id, name, avatarId = 'dk') {
     if (this.players.find(p => p.id === id)) return;
     if (this.players.length >= 9) throw new Error('Table is full');
     this.players.push({
       id,
       name,
+      avatarId,
       chips: this.startingChips,
       holeCards: [],
       roundBet: 0,
@@ -103,8 +104,14 @@ class PokerGame {
     const active = this.players.filter(p => p.isActive);
     const count = active.length;
 
-    const sbIdx = this._nextActiveIndex(this.dealerIndex);
-    const bbIdx = this._nextActiveIndex(sbIdx);
+    let sbIdx, bbIdx;
+    if (count === 2) {
+      sbIdx = this.dealerIndex;
+      bbIdx = this._nextActiveIndex(this.dealerIndex);
+    } else {
+      sbIdx = this._nextActiveIndex(this.dealerIndex);
+      bbIdx = this._nextActiveIndex(sbIdx);
+    }
 
     this._postBlind(this.players[sbIdx].id, this.smallBlind);
     this._postBlind(this.players[bbIdx].id, this.bigBlind);
@@ -168,12 +175,12 @@ class PokerGame {
     if (action === 'fold') {
       player.folded = true;
       this.actionsNeeded.delete(playerId);
-      this.lastAction = { playerId, action: 'fold', name: player.name };
+      this.lastAction = { playerId, action: 'fold', name: player.name, t: Date.now() };
 
     } else if (action === 'check') {
       if (player.roundBet < this.currentBet) throw new Error('Cannot check, must call or raise');
       this.actionsNeeded.delete(playerId);
-      this.lastAction = { playerId, action: 'check', name: player.name };
+      this.lastAction = { playerId, action: 'check', name: player.name, t: Date.now() };
 
     } else if (action === 'call') {
       const callAmt = Math.min(this.currentBet - player.roundBet, player.chips);
@@ -185,9 +192,10 @@ class PokerGame {
         player.allIn = true;
       }
       this.actionsNeeded.delete(playerId);
-      this.lastAction = { playerId, action: 'call', amount: callAmt, name: player.name };
+      this.lastAction = { playerId, action: 'call', amount: callAmt, name: player.name, t: Date.now() };
 
     } else if (action === 'raise' || action === 'all-in') {
+      const wasOpening = this.currentBet === 0;
       const totalBet = action === 'all-in' ? player.roundBet + player.chips : amount;
       if (totalBet < this.currentBet + this.minRaise && player.chips > 0) {
         throw new Error(`Minimum raise is to ${this.currentBet + this.minRaise}`);
@@ -210,7 +218,8 @@ class PokerGame {
         }
       }
       this.actionsNeeded.delete(playerId);
-      this.lastAction = { playerId, action: player.allIn ? 'all-in' : 'raise', amount: actualTotal, name: player.name };
+      const actionLabel = player.allIn ? 'all-in' : (wasOpening ? 'bet' : 'raise');
+      this.lastAction = { playerId, action: actionLabel, amount: actualTotal, name: player.name, t: Date.now() };
     }
 
     if (this._isRoundOver()) {
@@ -383,7 +392,7 @@ class PokerGame {
     this.winners = [{
       playerId: player.id,
       playerName: player.name,
-      handName: 'Last player standing',
+      handName: 'Winner',
       amount: this.pot,
       holeCards: player.holeCards,
     }];
@@ -395,8 +404,15 @@ class PokerGame {
   }
 
   getStateFor(requestingPlayerId) {
-    const sbIdx = this._nextActiveIndex(this.dealerIndex);
-    const bbIdx = this._nextActiveIndex(sbIdx);
+    const activeCount = this.players.filter(p => p.isActive).length;
+    let sbIdx, bbIdx;
+    if (activeCount === 2) {
+      sbIdx = this.dealerIndex;
+      bbIdx = this._nextActiveIndex(this.dealerIndex);
+    } else {
+      sbIdx = this._nextActiveIndex(this.dealerIndex);
+      bbIdx = this._nextActiveIndex(sbIdx);
+    }
     const sbId = this.players[sbIdx]?.id;
     const bbId = this.players[bbIdx]?.id;
 
@@ -420,6 +436,7 @@ class PokerGame {
         return {
           id: p.id,
           name: p.name,
+          avatarId: p.avatarId,
           chips: p.chips,
           roundBet: p.roundBet,
           folded: p.folded,

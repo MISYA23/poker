@@ -18,7 +18,7 @@ const io = new Server(server, {
   cors: { origin: '*', methods: ['GET', 'POST'] },
 });
 
-const TABLE_MAX = 9;
+const TABLE_MAX = 2;
 const GAME_OPTIONS = { startingChips: 1000, bigBlind: 20, smallBlind: 10 };
 let game = new PokerGame('table', GAME_OPTIONS);
 
@@ -55,12 +55,13 @@ function startTurnTimer() {
     try {
       game.handleAction(pid, 'fold');
       broadcastState();
-      if (game.phase === 'showdown') scheduleNextHand(3000);
+      if (game.phase === 'showdown') scheduleNextHand(5000);
     } catch (e) {}
   }, TURN_SECONDS * 1000);
 }
 
 function broadcastState() {
+  startTurnTimer();
   const allSocketIds = [...socketPlayers.keys()];
   for (const socketId of allSocketIds) {
     const player = socketPlayers.get(socketId);
@@ -80,7 +81,6 @@ function broadcastState() {
       turnDeadline,
     });
   }
-  startTurnTimer();
 }
 
 function tryAutoStart() {
@@ -103,12 +103,17 @@ function scheduleNextHand(delay = 5000) {
     nextHandTimer = null;
     while (waitlist.length > 0 && game.players.length < TABLE_MAX) {
       const next = waitlist.shift();
-      game.addPlayer(next.id, next.name);
+      game.addPlayer(next.id, next.name, next.avatarId);
     }
 
-    const ready = game.players.filter(p => p.chips > 0);
-    if (ready.length >= 2) {
-      game.startHand();
+    const ready = game.players.filter(p => p.isActive && p.chips > 0);
+    if (ready.length >= 2 && game.canStart()) {
+      try {
+        game.startHand();
+      } catch (err) {
+        console.error('startHand failed:', err.message);
+        game.phase = 'waiting';
+      }
       broadcastState();
     } else {
       game.phase = 'waiting';
@@ -118,19 +123,20 @@ function scheduleNextHand(delay = 5000) {
 }
 
 io.on('connection', (socket) => {
-  socket.on('join', ({ playerName }) => {
+  socket.on('join', ({ playerName, avatarId }) => {
     const name = (playerName || 'Player').trim().slice(0, 20);
+    const safeAvatarId = ['dk', 'diddy'].includes(avatarId) ? avatarId : 'dk';
     const playerId = uuidv4();
 
-    socketPlayers.set(socket.id, { id: playerId, name });
+    socketPlayers.set(socket.id, { id: playerId, name, avatarId: safeAvatarId });
 
     if (game.players.length < TABLE_MAX) {
-      game.addPlayer(playerId, name);
+      game.addPlayer(playerId, name, safeAvatarId);
       socket.emit('joined', { playerId, atTable: true });
       broadcastState();
       tryAutoStart();
     } else {
-      waitlist.push({ socketId: socket.id, id: playerId, name });
+      waitlist.push({ socketId: socket.id, id: playerId, name, avatarId: safeAvatarId });
       socket.emit('joined', { playerId, atTable: false });
       broadcastState();
     }
@@ -143,7 +149,7 @@ io.on('connection', (socket) => {
       game.handleAction(player.id, action, amount);
       broadcastState();
       if (game.phase === 'showdown') {
-        scheduleNextHand(3000);
+        scheduleNextHand(5000);
       }
     } catch (err) {
       socket.emit('error', { message: err.message });
@@ -169,13 +175,13 @@ io.on('connection', (socket) => {
       // Fill the vacated seat from waitlist
       if (waitlist.length > 0 && game.players.length < TABLE_MAX) {
         const next = waitlist.shift();
-        game.addPlayer(next.id, next.name);
+        game.addPlayer(next.id, next.name, next.avatarId);
       }
 
       broadcastState();
 
       if (game.phase === 'showdown') {
-        scheduleNextHand(3000);
+        scheduleNextHand(5000);
       } else if (game.phase === 'waiting') {
         tryAutoStart();
       }

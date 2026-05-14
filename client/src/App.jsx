@@ -34,9 +34,9 @@ export default function App() {
     },
   });
 
-  const handleJoin = useCallback((playerName) => {
+  const handleJoin = useCallback((playerName, avatarId) => {
     setError(null);
-    emit('join', { playerName });
+    emit('join', { playerName, avatarId });
   }, [emit]);
 
   const handleAction = useCallback((action, amount) => {
