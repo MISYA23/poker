@@ -7,7 +7,7 @@ export default defineConfig({
     port: 5843,
     proxy: {
       '/socket.io': {
-        target: 'http://localhost:3843',
+        target: `http://localhost:${process.env.SERVER_PORT || 3843}`,
         ws: true,
       },
     },

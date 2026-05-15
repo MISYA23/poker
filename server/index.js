@@ -20,137 +20,155 @@ const io = new Server(server, {
 
 const TABLE_MAX = 2;
 const GAME_OPTIONS = { startingChips: 1000, bigBlind: 20, smallBlind: 10 };
-let game = new PokerGame('table', GAME_OPTIONS);
-
-// socketId -> { id, name }
-const socketPlayers = new Map();
-
-// [{ socketId, id, name }]
-const waitlist = [];
-
-let autoStartTimer = null;
-let nextHandTimer = null;
-let turnTimer = null;
-let timerPlayerId = null;
-let turnDeadline = null;
-
 const TURN_SECONDS = 20;
 
-function startTurnTimer() {
-  const pid = game.currentPlayerId;
-  if (pid === timerPlayerId) return;
+// tableId -> { id, game, autoStartTimer, nextHandTimer, turnTimer, timerPlayerId, turnDeadline }
+const tables = new Map();
 
-  if (turnTimer) { clearTimeout(turnTimer); turnTimer = null; }
-  timerPlayerId = pid;
-  turnDeadline = null;
+// socketId -> { id, name, avatarId, tableId }
+const socketPlayers = new Map();
 
-  if (!pid || game.phase === 'waiting' || game.phase === 'showdown') return;
+function createTable() {
+  const id = uuidv4();
+  const t = {
+    id,
+    game: new PokerGame(id, GAME_OPTIONS),
+    autoStartTimer: null,
+    nextHandTimer: null,
+    turnTimer: null,
+    timerPlayerId: null,
+    turnDeadline: null,
+  };
+  tables.set(id, t);
+  console.log('[server] table created:', id, '| total tables:', tables.size);
+  return t;
+}
 
-  turnDeadline = Date.now() + TURN_SECONDS * 1000;
-  turnTimer = setTimeout(() => {
-    turnTimer = null;
-    if (game.currentPlayerId !== pid) return;
-    timerPlayerId = null;
-    turnDeadline = null;
+function destroyTable(tableId) {
+  const t = tables.get(tableId);
+  if (!t) return;
+  clearTimeout(t.autoStartTimer);
+  clearTimeout(t.nextHandTimer);
+  clearTimeout(t.turnTimer);
+  tables.delete(tableId);
+  console.log('[server] table destroyed:', tableId, '| total tables:', tables.size);
+}
+
+function findAvailableTable() {
+  for (const t of tables.values()) {
+    if (t.game.players.length < TABLE_MAX) return t;
+  }
+  return null;
+}
+
+function startTurnTimer(t) {
+  const pid = t.game.currentPlayerId;
+  if (pid === t.timerPlayerId) return;
+
+  if (t.turnTimer) { clearTimeout(t.turnTimer); t.turnTimer = null; }
+  t.timerPlayerId = pid;
+  t.turnDeadline = null;
+
+  if (!pid || t.game.phase === 'waiting' || t.game.phase === 'showdown') return;
+
+  t.turnDeadline = Date.now() + TURN_SECONDS * 1000;
+  t.turnTimer = setTimeout(() => {
+    t.turnTimer = null;
+    if (t.game.currentPlayerId !== pid) return;
+    t.timerPlayerId = null;
+    t.turnDeadline = null;
     try {
-      game.handleAction(pid, 'fold');
-      broadcastState();
-      if (game.phase === 'showdown') scheduleNextHand(5000);
+      t.game.handleAction(pid, 'fold');
+      broadcastTableState(t);
+      if (t.game.phase === 'showdown') scheduleNextHand(t, 5000);
     } catch (e) {}
   }, TURN_SECONDS * 1000);
 }
 
-function broadcastState() {
-  startTurnTimer();
-  const allSocketIds = [...socketPlayers.keys()];
-  for (const socketId of allSocketIds) {
-    const player = socketPlayers.get(socketId);
-    const atTable = game.players.some(p => p.id === player.id);
-    const waitlistPos = waitlist.findIndex(w => w.id === player.id);
-
-    const state = atTable
-      ? game.getStateFor(player.id)
-      : game.getStateFor(null);
-
+function broadcastTableState(t) {
+  startTurnTimer(t);
+  for (const [socketId, player] of socketPlayers) {
+    if (player.tableId !== t.id) continue;
+    const atTable = t.game.players.some(p => p.id === player.id);
+    const state = atTable ? t.game.getStateFor(player.id) : t.game.getStateFor(null);
     io.to(socketId).emit('game-state', {
       ...state,
       atTable,
-      waitlistPosition: waitlistPos >= 0 ? waitlistPos + 1 : null,
-      waitlistCount: waitlist.length,
-      tableCount: game.players.length,
-      turnDeadline,
+      waitlistPosition: null,
+      waitlistCount: 0,
+      tableCount: t.game.players.length,
+      turnDeadline: t.turnDeadline,
     });
   }
 }
 
-function tryAutoStart() {
-  if (autoStartTimer) return;
-  const ready = game.players.filter(p => p.isActive && p.chips > 0);
-  if (ready.length >= 2 && game.phase === 'waiting') {
-    autoStartTimer = setTimeout(() => {
-      autoStartTimer = null;
-      if (game.phase === 'waiting' && game.canStart()) {
-        game.startHand();
-        broadcastState();
+function tryAutoStart(t) {
+  if (t.autoStartTimer) return;
+  const ready = t.game.players.filter(p => p.isActive && p.chips > 0);
+  if (ready.length >= 2 && t.game.phase === 'waiting') {
+    t.autoStartTimer = setTimeout(() => {
+      t.autoStartTimer = null;
+      if (t.game.phase === 'waiting' && t.game.canStart()) {
+        t.game.startHand();
+        broadcastTableState(t);
       }
     }, 3000);
   }
 }
 
-function scheduleNextHand(delay = 5000) {
-  if (nextHandTimer) { clearTimeout(nextHandTimer); }
-  nextHandTimer = setTimeout(() => {
-    nextHandTimer = null;
-    while (waitlist.length > 0 && game.players.length < TABLE_MAX) {
-      const next = waitlist.shift();
-      game.addPlayer(next.id, next.name, next.avatarId);
-    }
-
-    const ready = game.players.filter(p => p.isActive && p.chips > 0);
-    if (ready.length >= 2 && game.canStart()) {
+function scheduleNextHand(t, delay = 5000) {
+  if (t.nextHandTimer) { clearTimeout(t.nextHandTimer); }
+  t.nextHandTimer = setTimeout(() => {
+    t.nextHandTimer = null;
+    const ready = t.game.players.filter(p => p.isActive && p.chips > 0);
+    if (ready.length >= 2 && t.game.canStart()) {
       try {
-        game.startHand();
+        t.game.startHand();
       } catch (err) {
-        console.error('startHand failed:', err.message);
-        game.phase = 'waiting';
+        console.error('[server] startHand failed:', err.message);
+        t.game.phase = 'waiting';
       }
-      broadcastState();
     } else {
-      game.phase = 'waiting';
-      broadcastState();
+      t.game.phase = 'waiting';
     }
+    broadcastTableState(t);
   }, delay);
 }
 
 io.on('connection', (socket) => {
+  console.log('[server] socket connected:', socket.id);
+
   socket.on('join', ({ playerName, avatarId }) => {
+    if (socketPlayers.has(socket.id)) {
+      console.log('[server] duplicate join ignored from', socket.id);
+      return;
+    }
+    console.log('[server] join from', socket.id, { playerName, avatarId });
     const name = (playerName || 'Player').trim().slice(0, 20);
     const safeAvatarId = ['dk', 'diddy'].includes(avatarId) ? avatarId : 'dk';
     const playerId = uuidv4();
 
-    socketPlayers.set(socket.id, { id: playerId, name, avatarId: safeAvatarId });
+    let t = findAvailableTable();
+    if (!t) t = createTable();
 
-    if (game.players.length < TABLE_MAX) {
-      game.addPlayer(playerId, name, safeAvatarId);
-      socket.emit('joined', { playerId, atTable: true });
-      broadcastState();
-      tryAutoStart();
-    } else {
-      waitlist.push({ socketId: socket.id, id: playerId, name, avatarId: safeAvatarId });
-      socket.emit('joined', { playerId, atTable: false });
-      broadcastState();
-    }
+    socketPlayers.set(socket.id, { id: playerId, name, avatarId: safeAvatarId, tableId: t.id });
+    t.game.addPlayer(playerId, name, safeAvatarId);
+
+    console.log('[server] player seated at table', t.id, '| seats:', t.game.players.length, '/', TABLE_MAX);
+    socket.emit('joined', { playerId, atTable: true });
+    broadcastTableState(t);
+    tryAutoStart(t);
   });
 
   socket.on('player-action', ({ action, amount }) => {
     const player = socketPlayers.get(socket.id);
     if (!player) return;
+    const t = tables.get(player.tableId);
+    if (!t) return;
     try {
-      game.handleAction(player.id, action, amount);
-      broadcastState();
-      if (game.phase === 'showdown') {
-        scheduleNextHand(5000);
-      }
+      t.game.handleAction(player.id, action, amount);
+      broadcastTableState(t);
+      if (t.game.phase === 'showdown') scheduleNextHand(t, 5000);
     } catch (err) {
       socket.emit('error', { message: err.message });
     }
@@ -160,58 +178,43 @@ io.on('connection', (socket) => {
     const player = socketPlayers.get(socket.id);
     if (!player) return;
     socketPlayers.delete(socket.id);
+    console.log('[server] socket disconnected:', socket.id, 'player:', player.name);
 
-    const waitlistIdx = waitlist.findIndex(w => w.socketId === socket.id);
-    if (waitlistIdx >= 0) {
-      waitlist.splice(waitlistIdx, 1);
-      broadcastState();
+    const t = tables.get(player.tableId);
+    if (!t) return;
+
+    t.game.removePlayer(player.id);
+
+    if (t.game.players.length === 0) {
+      destroyTable(t.id);
       return;
     }
 
-    const wasInGame = game.players.some(p => p.id === player.id);
-    if (wasInGame) {
-      game.removePlayer(player.id);
+    broadcastTableState(t);
 
-      // Fill the vacated seat from waitlist
-      if (waitlist.length > 0 && game.players.length < TABLE_MAX) {
-        const next = waitlist.shift();
-        game.addPlayer(next.id, next.name, next.avatarId);
-      }
-
-      broadcastState();
-
-      if (game.phase === 'showdown') {
-        scheduleNextHand(5000);
-      } else if (game.phase === 'waiting') {
-        tryAutoStart();
-      }
+    if (t.game.phase === 'showdown') {
+      scheduleNextHand(t, 5000);
+    } else if (t.game.phase === 'waiting') {
+      tryAutoStart(t);
     }
   });
 });
 
-app.get('/health', (_, res) => res.json({ ok: true, players: game.players.length, waitlist: waitlist.length }));
+app.get('/health', (_, res) => res.json({
+  ok: true,
+  tables: [...tables.values()].map(t => ({ id: t.id, players: t.game.players.length, phase: t.game.phase })),
+}));
 
 function doReset() {
-  if (turnTimer)     { clearTimeout(turnTimer);     turnTimer = null; }
-  if (autoStartTimer){ clearTimeout(autoStartTimer); autoStartTimer = null; }
-  if (nextHandTimer) { clearTimeout(nextHandTimer);  nextHandTimer = null; }
-  timerPlayerId = null;
-  turnDeadline  = null;
-  game = new PokerGame('table', GAME_OPTIONS);
-  waitlist.length = 0;
+  for (const t of tables.values()) destroyTable(t.id);
+  tables.clear();
   socketPlayers.clear();
   io.emit('reset');
+  console.log('[server] full reset');
 }
 
-app.get('/reset', (req, res) => {
-  doReset();
-  res.redirect('/');
-});
-
-app.post('/admin/reset', (req, res) => {
-  doReset();
-  res.json({ ok: true });
-});
+app.get('/reset', (req, res) => { doReset(); res.redirect('/'); });
+app.post('/admin/reset', (req, res) => { doReset(); res.json({ ok: true }); });
 
 app.get('*', (_, res) => res.sendFile(path.join(clientBuild, 'index.html')));
 

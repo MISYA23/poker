@@ -20,6 +20,7 @@ class PokerGame {
     this.bigBlind = options.bigBlind || 20;
     this.actionsNeeded = new Set();
     this.lastAction = null;
+    this.handActions = [];
     this.winners = null;
     this.startingChips = options.startingChips || 1000;
   }
@@ -74,6 +75,7 @@ class PokerGame {
     this.currentBet = 0;
     this.winners = null;
     this.lastAction = null;
+    this.handActions = [];
 
     for (const p of this.players) {
       p.holeCards = [];
@@ -221,6 +223,8 @@ class PokerGame {
       const actionLabel = player.allIn ? 'all-in' : (wasOpening ? 'bet' : 'raise');
       this.lastAction = { playerId, action: actionLabel, amount: actualTotal, name: player.name, t: Date.now() };
     }
+
+    if (this.lastAction) this.handActions.push(this.lastAction);
 
     if (this._isRoundOver()) {
       this._advancePhase();
@@ -424,6 +428,7 @@ class PokerGame {
       minRaise: this.minRaise,
       currentPlayerId: this.currentPlayerId,
       lastAction: this.lastAction,
+      handActions: this.handActions,
       winners: this.winners,
       dealerId: this.players[this.dealerIndex]?.id,
       smallBlindId: sbId,
