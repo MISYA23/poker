@@ -5,6 +5,8 @@ import { ChipStack } from './PokerChip.jsx';
 
 const TURN_DURATION_MS = 20000;
 const ACTION_DISPLAY_MS = 2000;
+const RING_R = 30;
+const RING_CIRC = 2 * Math.PI * RING_R; // 188.5
 
 function useTurnTimer(turnDeadline) {
   const [timeLeft, setTimeLeft] = useState(null);
@@ -43,7 +45,32 @@ export function useActionFlash(player, lastAction) {
   return label;
 }
 
-export default function PlayerSeat({ player, isMe, compact = false, win = null, turnDeadline = null, lastAction = null, actions = null }) {
+function TimerRing({ turnDeadline, elapsedMs, timeLeft }) {
+  if (!turnDeadline) return null;
+  const urgentClass = timeLeft !== null && timeLeft <= 5 ? 'ring-urgent'
+    : timeLeft !== null && timeLeft <= 10 ? 'ring-warning' : '';
+  return (
+    <svg
+      className={`avatar-timer-ring ${urgentClass}`}
+      width={64} height={64}
+      viewBox="0 0 64 64"
+      aria-hidden="true"
+    >
+      <circle className="ring-track" cx="32" cy="32" r={RING_R} />
+      <circle
+        key={turnDeadline}
+        className="ring-fill"
+        cx="32" cy="32" r={RING_R}
+        style={{
+          animationDuration: `${TURN_DURATION_MS}ms`,
+          animationDelay: `-${elapsedMs}ms`,
+        }}
+      />
+    </svg>
+  );
+}
+
+export default function PlayerSeat({ player, isMe, win = null, turnDeadline = null, lastAction = null, actions = null }) {
   const timeLeft = useTurnTimer(turnDeadline);
   const actionLabel = useActionFlash(player, lastAction);
   if (!player) return <div className="player-seat player-seat-empty" />;
@@ -51,8 +78,6 @@ export default function PlayerSeat({ player, isMe, compact = false, win = null, 
   const elapsedMs = turnDeadline
     ? Math.min(TURN_DURATION_MS, TURN_DURATION_MS - Math.max(0, turnDeadline - Date.now()))
     : 0;
-
-  const showCountdown = timeLeft !== null && timeLeft <= 10;
 
   return (
     <div className={`player-seat ${player.isCurrentPlayer ? 'seat-active' : ''} ${player.folded ? 'seat-folded' : ''} ${isMe ? 'seat-me' : 'seat-opponent'}`}>
@@ -72,10 +97,6 @@ export default function PlayerSeat({ player, isMe, compact = false, win = null, 
         </div>
 
         <div className="nameplate-row">
-          <div className={`seat-timer-left ${showCountdown ? 'visible' : ''} ${timeLeft <= 5 ? 'urgent' : ''}`}>
-            {showCountdown ? `${timeLeft}s` : ''}
-          </div>
-
           <div className="nameplate-stack">
             <div className="nameplate">
               <div className="np-text">
@@ -91,27 +112,14 @@ export default function PlayerSeat({ player, isMe, compact = false, win = null, 
               </div>
               <div className="np-avatar">
                 <Avatar size={52} avatarId={player.avatarId} />
+                <TimerRing turnDeadline={turnDeadline} elapsedMs={elapsedMs} timeLeft={timeLeft} />
               </div>
             </div>
-
-            <div className="turn-bar" aria-hidden="true">
-              <div
-                className="turn-bar-fill"
-                key={turnDeadline || 'idle'}
-                style={turnDeadline ? {
-                  animation: `turn-countdown ${TURN_DURATION_MS}ms linear forwards`,
-                  animationDelay: `-${elapsedMs}ms`,
-                } : { clipPath: 'inset(0 0 0 0%)' }}
-              />
-            </div>
           </div>
-
-          <div className="np-phantom" aria-hidden="true" />
         </div>
       </div>
 
       <div className="seat-actions">{actions}</div>
-
     </div>
   );
 }

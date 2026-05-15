@@ -560,9 +560,41 @@ html, body {
   text-shadow: 0 0 10px rgba(212,160,23,0.9);
 }
 .np-avatar {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+/* ─── Avatar timer ring ──────────────────────────────────────── */
+.avatar-timer-ring {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) rotate(-90deg);
+  pointer-events: none;
+  z-index: 2;
+}
+.ring-track {
+  fill: none;
+  stroke: rgba(0, 0, 0, 0.3);
+  stroke-width: 3;
+}
+.ring-fill {
+  fill: none;
+  stroke: #27ae60;
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-dasharray: 188.5;
+  stroke-dashoffset: 0;
+  animation: ring-countdown linear forwards;
+  transition: stroke 0.4s;
+}
+.ring-warning .ring-fill { stroke: #f1c40f; }
+.ring-urgent  .ring-fill { stroke: #e74c3c; }
+@keyframes ring-countdown {
+  from { stroke-dashoffset: 0; }
+  to   { stroke-dashoffset: 188.5; }
 }
 
 .seat-active .nameplate {
@@ -575,30 +607,9 @@ html, body {
 }
 .seat-active .seat-cards { filter: drop-shadow(0 0 6px rgba(212,160,23,0.6)); }
 
-.turn-bar {
-  width: 78%;
-  height: 10px;
-  margin: 2px auto 0;
-  border-radius: 0 0 50% 50% / 0 0 100% 100%;
-  overflow: hidden;
-  background: rgba(0,0,0,0.45);
-  box-shadow: 0 2px 4px rgba(0,0,0,0.4), inset 0 1px 2px rgba(0,0,0,0.55);
-}
-.turn-bar-fill {
-  height: 100%;
-  width: 100%;
-  background: linear-gradient(90deg,
-    #27ae60 0%,
-    #2ecc71 20%,
-    #f1c40f 55%,
-    #e67e22 80%,
-    #dc3c3c 100%);
-  clip-path: inset(0 0 0 0%);
-}
-@keyframes turn-countdown {
-  from { clip-path: inset(0 0 0 0%); }
-  to   { clip-path: inset(0 0 0 100%); }
-}
+.turn-bar { display: none; }
+.seat-timer-left { display: none; }
+.np-phantom { display: none; }
 
 /* ─── Dealer button (on the felt) ────────────────────────────── */
 .dealer-button {
@@ -998,8 +1009,117 @@ html, body {
 ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 2px; }
 
 /* ─── Responsive ─────────────────────────────────────────────── */
+@media (max-width: 768px) {
+  /* Fixed full-screen layout — no scroll, table fills the middle */
+  .game-table {
+    overflow: hidden;
+    height: 100%;
+  }
+
+  /* Seats overlap the table border so the thin line bisects the nameplate */
+  .above-table {
+    padding: 6px 0 4px;
+    position: relative;
+    z-index: 5;
+    margin-bottom: -38px; /* 4px pad + 34px half-nameplate (turn-bar removed) */
+  }
+  .below-table {
+    padding: 4px 0 6px;
+    position: relative;
+    z-index: 5;
+    margin-top: -102px; /* 4px pad + 60px cards + 4px gap + 34px half-nameplate (nameplate center) */
+  }
+
+  /* Table spans edge-to-edge, grows to fill all available vertical space.
+     Thin border replaces the thick leather rail. */
+  .table-oval {
+    width: 100%;
+    flex: 1 1 0;
+    aspect-ratio: unset;
+    border-radius: 32px;
+    margin: 0;
+    padding: 0;
+    background: transparent;
+    box-shadow: none;
+    border: 1.5px solid rgba(255, 255, 255, 0.25);
+    position: relative;
+    z-index: 1;
+  }
+
+  .table-felt {
+    border-radius: 30px;
+  }
+
+  /* Stack player seat: cards + nameplate, then buttons below */
+  .player-seat {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .player-seat > .seat-actions {
+    grid-column: unset;
+    padding-left: 0;
+    min-width: 0;
+    width: min(360px, 92vw);
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+  }
+
+  .seat-actions {
+    min-width: 0;
+    min-height: 0;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+  }
+
+  /* Buttons fill the width on mobile */
+  .action-buttons {
+    grid-template-columns: repeat(2, 1fr);
+    grid-auto-rows: 56px;
+    width: 100%;
+  }
+
+  /* Raise slider: horizontal strip above the buttons */
+  .raise-panel {
+    position: static;
+    top: auto;
+    bottom: auto;
+    right: auto;
+    width: 100%;
+    height: 52px;
+    flex-direction: row;
+    background: rgba(0,0,0,0.4);
+    border-radius: 12px;
+    border-left: none;
+    border: 1px solid rgba(255,255,255,0.1);
+    padding: 0 14px;
+    gap: 12px;
+  }
+
+  .raise-slider-v {
+    writing-mode: horizontal-tb;
+    direction: ltr;
+    -webkit-appearance: auto;
+    appearance: auto;
+    width: auto;
+    height: 36px;
+    flex: 1;
+    max-height: none;
+  }
+
+  .raise-amount-label { font-size: 0.9rem; }
+
+  .nameplate { min-width: 0; }
+}
+
 @media (max-width: 380px) {
-  .btn-action { padding: 10px 4px; font-size: 0.82rem; }
+  .btn-action { font-size: 0.85rem; }
   .community-cards .card { transform: scale(0.85); }
   .lobby-logo { font-size: 2.2rem; }
 }

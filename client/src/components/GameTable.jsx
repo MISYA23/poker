@@ -151,10 +151,6 @@ export default function GameTable({ gameState, myId, onAction, onLeave }) {
               </div>
 
               <div className="nameplate-row">
-                <div className={`seat-timer-left ${myShowCountdown ? 'visible' : ''} ${myTimeLeft <= 5 ? 'urgent' : ''}`}>
-                  {myShowCountdown ? `${myTimeLeft}s` : ''}
-                </div>
-
                 <div className="nameplate-stack">
                   <div className="nameplate">
                     <div className="np-text">
@@ -165,31 +161,46 @@ export default function GameTable({ gameState, myId, onAction, onLeave }) {
                         {me.allIn && <span className="badge badge-allin">ALL IN</span>}
                       </span>
                       <span className={`np-chips ${myActionLabel ? 'np-chips-action' : ''} ${myWin ? 'np-chips-winner' : ''}`}>
-                      {myWin ? 'Winner' : (myActionLabel || me.chips.toLocaleString())}
-                    </span>
+                        {myWin ? 'Winner' : (myActionLabel || me.chips.toLocaleString())}
+                      </span>
                     </div>
                     <div className="np-avatar">
                       <Avatar size={52} avatarId={me.avatarId} />
+                      {myTurnDeadline && (
+                        <svg
+                          className={`avatar-timer-ring ${myTimeLeft !== null && myTimeLeft <= 5 ? 'ring-urgent' : myTimeLeft !== null && myTimeLeft <= 10 ? 'ring-warning' : ''}`}
+                          width={64} height={64} viewBox="0 0 64 64" aria-hidden="true"
+                        >
+                          <circle className="ring-track" cx="32" cy="32" r="30" />
+                          <circle
+                            key={myTurnDeadline}
+                            className="ring-fill"
+                            cx="32" cy="32" r="30"
+                            style={{ animationDuration: `${TURN_DURATION_MS}ms`, animationDelay: `-${myElapsedMs}ms` }}
+                          />
+                        </svg>
+                      )}
                     </div>
                   </div>
-
-                  <div className="turn-bar" aria-hidden="true">
-                    <div
-                      className="turn-bar-fill"
-                      key={myTurnDeadline || 'idle'}
-                      style={myTurnDeadline ? {
-                        animation: `turn-countdown ${TURN_DURATION_MS}ms linear forwards`,
-                        animationDelay: `-${myElapsedMs}ms`,
-                      } : { clipPath: 'inset(0 0 0 0%)' }}
-                    />
-                  </div>
                 </div>
-
-                <div className="np-phantom" aria-hidden="true" />
               </div>
             </div>
 
             <div className="seat-actions">
+              {canRaise && (
+                <div className="raise-panel">
+                  <div className="raise-amount-label">${raiseAmount.toLocaleString()}</div>
+                  <input
+                    type="range"
+                    className="raise-slider-v"
+                    min={effectiveMin}
+                    max={maxRaise}
+                    step={bigBlind}
+                    value={raiseAmount}
+                    onChange={e => setRaiseAmount(parseInt(e.target.value))}
+                  />
+                </div>
+              )}
               <BettingControls
                 gameState={gameState}
                 myId={myId}
@@ -202,22 +213,6 @@ export default function GameTable({ gameState, myId, onAction, onLeave }) {
           </div>
         )}
       </div>
-
-      {/* Vertical raise slider — overlays the table when raising */}
-      {canRaise && (
-        <div className="raise-panel">
-          <div className="raise-amount-label">${raiseAmount.toLocaleString()}</div>
-          <input
-            type="range"
-            className="raise-slider-v"
-            min={effectiveMin}
-            max={maxRaise}
-            step={bigBlind}
-            value={raiseAmount}
-            onChange={e => setRaiseAmount(parseInt(e.target.value))}
-          />
-        </div>
-      )}
 
     </div>
   );
