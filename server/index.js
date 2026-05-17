@@ -34,6 +34,9 @@ let turnTimer = null;
 let timerPlayerId = null;
 let turnDeadline = null;
 
+let gameOver = false;
+let rematchVotes = {}; // { playerId: true|false }
+
 const TURN_SECONDS = 20;
 
 function startTurnTimer() {
@@ -53,9 +56,12 @@ function startTurnTimer() {
     timerPlayerId = null;
     turnDeadline = null;
     try {
-      game.handleAction(pid, 'fold');
+      // Auto-check if there's nothing to call; only auto-fold when facing a bet.
+      const player = game.players.find(p => p.id === pid);
+      const canCheck = player && player.roundBet >= game.currentBet;
+      game.handleAction(pid, canCheck ? 'check' : 'fold');
       broadcastState();
-      if (game.phase === 'showdown') scheduleNextHand(5000);
+      if (game.phase === 'showdown') scheduleNextHand(8000);
     } catch (e) {}
   }, TURN_SECONDS * 1000);
 }
@@ -79,6 +85,9 @@ function broadcastState() {
       waitlistCount: waitlist.length,
       tableCount: game.players.length,
       turnDeadline,
+      gameOver,
+      myVote: player ? (player.id in rematchVotes ? rematchVotes[player.id] : null) : null,
+      rematchVotesCount: Object.keys(rematchVotes).length,
     });
   }
 }
@@ -106,6 +115,18 @@ function scheduleNextHand(delay = 5000) {
       game.addPlayer(next.id, next.name, next.avatarId);
     }
 
+    // Game-over detection: with 2+ players seated, if only 1 has chips left → game over
+    if (game.players.length >= 2) {
+      const withChips = game.players.filter(p => p.chips > 0);
+      if (withChips.length <= 1) {
+        gameOver = true;
+        rematchVotes = {};
+        game.phase = 'game-over';
+        broadcastState();
+        return;
+      }
+    }
+
     const ready = game.players.filter(p => p.isActive && p.chips > 0);
     if (ready.length >= 2 && game.canStart()) {
       try {
@@ -122,10 +143,33 @@ function scheduleNextHand(delay = 5000) {
   }, delay);
 }
 
+function startRematch() {
+  const seatChips = game.startingChips || 1500;
+  for (const p of game.players) {
+    p.chips = seatChips;
+    p.isActive = true;
+    p.folded = false;
+    p.allIn = false;
+    p.holeCards = [];
+    p.roundBet = 0;
+    p.totalBet = 0;
+  }
+  gameOver = false;
+  rematchVotes = {};
+  game.phase = 'waiting';
+  game.communityCards = [];
+  game.pot = 0;
+  game.currentBet = 0;
+  game.lastAction = null;
+  game.winners = null;
+  broadcastState();
+  tryAutoStart();
+}
+
 io.on('connection', (socket) => {
   socket.on('join', ({ playerName, avatarId }) => {
     const name = (playerName || 'Player').trim().slice(0, 20);
-    const safeAvatarId = ['dk', 'diddy'].includes(avatarId) ? avatarId : 'dk';
+    const safeAvatarId = ['alfie', 'jazz'].includes(avatarId) ? avatarId : 'alfie';
     const playerId = uuidv4();
 
     socketPlayers.set(socket.id, { id: playerId, name, avatarId: safeAvatarId });
@@ -149,10 +193,39 @@ io.on('connection', (socket) => {
       game.handleAction(player.id, action, amount);
       broadcastState();
       if (game.phase === 'showdown') {
-        scheduleNextHand(5000);
+        scheduleNextHand(8000);
       }
     } catch (err) {
       socket.emit('error', { message: err.message });
+    }
+  });
+
+  socket.on('rematch-vote', ({ vote }) => {
+    const player = socketPlayers.get(socket.id);
+    if (!player || !gameOver) return;
+
+    rematchVotes[player.id] = vote === true;
+
+    const allVoted = game.players.every(p => p.id in rematchVotes);
+    if (!allVoted) {
+      broadcastState();
+      return;
+    }
+
+    const allYes = game.players.every(p => rematchVotes[p.id] === true);
+    if (allYes) {
+      startRematch();
+    } else {
+      // Someone declined — clear table and send everyone back to lobby
+      gameOver = false;
+      rematchVotes = {};
+      game.players = [];
+      game.phase = 'waiting';
+      game.communityCards = [];
+      game.pot = 0;
+      game.winners = null;
+      socketPlayers.clear();
+      io.emit('reset');
     }
   });
 
@@ -181,7 +254,7 @@ io.on('connection', (socket) => {
       broadcastState();
 
       if (game.phase === 'showdown') {
-        scheduleNextHand(5000);
+        scheduleNextHand(8000);
       } else if (game.phase === 'waiting') {
         tryAutoStart();
       }

@@ -1,9 +1,11 @@
 import React from 'react';
 
 const SUIT_SYMBOLS = { s: '♠', h: '♥', d: '♦', c: '♣' };
-const SUIT_COLORS = { s: '#1a1a1a', h: '#c81e1e', d: '#c81e1e', c: '#1a1a1a' };
+const SUIT_COLORS_REGULAR  = { s: '#1a1a1a', h: '#c81e1e', d: '#c81e1e', c: '#1a1a1a' };
+const SUIT_COLORS_FOUR     = { s: '#1a1a1a', h: '#c81e1e', d: '#1f63b0', c: '#1e7a3a' };
 
-export default function Card({ card, size = 'md', faceDown = false, className = '' }) {
+export default function Card({ card, size = 'md', faceDown = false, className = '', deckStyle = 'regular' }) {
+  const palette = deckStyle === 'four-color' ? SUIT_COLORS_FOUR : SUIT_COLORS_REGULAR;
   const sizes = {
     xs: { width: 32, height: 29, font: 13 },
     sm: { width: 42, height: 36, font: 18 },
@@ -23,7 +25,7 @@ export default function Card({ card, size = 'md', faceDown = false, className = 
   }
 
   const symbol = SUIT_SYMBOLS[card.suit] || card.suit;
-  const color = SUIT_COLORS[card.suit] || '#1a1a1a';
+  const color = palette[card.suit] || '#1a1a1a';
   const rank = card.rank;
   const rankFont = rank === '10' ? s.font * 0.82 : s.font;
 

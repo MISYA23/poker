@@ -21,10 +21,11 @@ class PokerGame {
     this.actionsNeeded = new Set();
     this.lastAction = null;
     this.winners = null;
-    this.startingChips = options.startingChips || 1000;
+    this.handEndedByFold = false;
+    this.startingChips = options.startingChips || 1500;
   }
 
-  addPlayer(id, name, avatarId = 'dk') {
+  addPlayer(id, name, avatarId = 'alfie') {
     if (this.players.find(p => p.id === id)) return;
     if (this.players.length >= 9) throw new Error('Table is full');
     this.players.push({
@@ -74,6 +75,7 @@ class PokerGame {
     this.currentBet = 0;
     this.winners = null;
     this.lastAction = null;
+    this.handEndedByFold = false;
 
     for (const p of this.players) {
       p.holeCards = [];
@@ -281,7 +283,10 @@ class PokerGame {
         return;
     }
 
-    if (allDone || nonFolded.filter(p => !p.allIn).length === 0) {
+    // No more meaningful betting once 0 or 1 non-all-in players remain.
+    // (In heads-up, one all-in + the other calling already means no further
+    //  action is possible — deal all remaining streets and go to showdown.)
+    if (allDone || nonFolded.filter(p => !p.allIn).length <= 1) {
       if (this.phase !== 'showdown' && this.communityCards.length < 5) {
         while (this.communityCards.length < 5) {
           this.communityCards.push(this.deck.deal());
@@ -387,6 +392,7 @@ class PokerGame {
 
   _awardToLastPlayer(player) {
     this.phase = 'showdown';
+    this.handEndedByFold = true;
     this.currentPlayerId = null;
     player.chips += this.pot;
     this.winners = [{
@@ -432,7 +438,9 @@ class PokerGame {
       bigBlind: this.bigBlind,
       players: this.players.map(p => {
         const isOwn = p.id === requestingPlayerId;
-        const showCards = this.phase === 'showdown' || isOwn;
+        // Hide opponents' hole cards unless we reached a true showdown (river call or all-in to the end).
+        // A fold-out (this.handEndedByFold) sets phase to 'showdown' too but the winner shouldn't reveal.
+        const showCards = isOwn || (this.phase === 'showdown' && !this.handEndedByFold && !p.folded);
         return {
           id: p.id,
           name: p.name,
