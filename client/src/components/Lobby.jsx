@@ -23,7 +23,9 @@ export default function Lobby({ onJoin, error }) {
   const [avatarId, setAvatarId]     = useState(saved?.avatarId || null);
   const [googleUser, setGoogleUser] = useState(saved?.sub ? saved : null);
   const [authError, setAuthError]   = useState(null);
-  const [pendingJoin, setPendingJoin] = useState(null);
+  const [pendingJoin, setPendingJoin] = useState(() =>
+    saved?.name && saved?.avatarId ? { name: saved.name, av: saved.avatarId } : null
+  );
   const btnRef = useRef(null);
   const gsiReady = useRef(false);
 

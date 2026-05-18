@@ -343,12 +343,6 @@ export default function GameTable({ gameState, myId, onAction, onLeave, onRematc
                 </button>
                 <button
                   className="px-4 py-3 text-left text-sm text-white/90 hover:bg-white/10 transition-colors border-b border-white/10"
-                  onClick={() => { setMenuOpen(false); onLeave(); }}
-                >
-                  🪑 Stand Up
-                </button>
-                <button
-                  className="px-4 py-3 text-left text-sm text-white/90 hover:bg-white/10 transition-colors border-b border-white/10"
                   onClick={() => { setMenuOpen(false); handleLogout(); }}
                 >
                   🚪 Log Out
