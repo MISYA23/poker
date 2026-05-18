@@ -10,6 +10,9 @@ export default defineConfig({
         target: `http://localhost:${process.env.SERVER_PORT || 3843}`,
         ws: true,
       },
+      '/auth': {
+        target: `http://localhost:${process.env.SERVER_PORT || 3843}`,
+      },
     },
   },
 });

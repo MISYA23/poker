@@ -20,19 +20,28 @@ function savePref(patch) {
 export default function Lobby({ onJoin, error }) {
   const saved = loadSaved();
   const [playerName, setPlayerName] = useState(saved?.name || '');
-  const [avatarId, setAvatarId]     = useState(saved?.avatarId || AVATARS[0].id);
-  const [deckStyle, setDeckStyle]   = useState(saved?.deckStyle || 'regular');
+  const [avatarId, setAvatarId]     = useState(saved?.avatarId || null);
   const [googleUser, setGoogleUser] = useState(saved?.sub ? saved : null);
   const [authError, setAuthError]   = useState(null);
+  const [pendingJoin, setPendingJoin] = useState(null);
   const btnRef = useRef(null);
+  const gsiReady = useRef(false);
 
-  const canSubmit = playerName.trim().length > 0;
+  useEffect(() => {
+    if (!pendingJoin) return;
+    onJoin(pendingJoin.name, pendingJoin.av, 'regular');
+    setPendingJoin(null);
+  }, [pendingJoin]);
+
+  const canSubmit = playerName.trim().length > 0 && avatarId !== null;
 
   useEffect(() => {
     const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
-    if (!clientId || !window.google) return;
+    if (!clientId || gsiReady.current) return;
 
     const init = () => {
+      if (!window.google?.accounts || gsiReady.current) return;
+      gsiReady.current = true;
       window.google.accounts.id.initialize({
         client_id: clientId,
         callback: handleCredential,
@@ -43,16 +52,17 @@ export default function Lobby({ onJoin, error }) {
           theme: 'outline',
           size: 'large',
           shape: 'pill',
-          width: 260,
+          width: 280,
           text: 'signin_with',
         });
       }
     };
 
-    if (window.google.accounts) {
+    if (window.google?.accounts) {
       init();
     } else {
-      window.addEventListener('load', init, { once: true });
+      const script = document.querySelector('script[src*="accounts.google.com/gsi"]');
+      if (script) script.addEventListener('load', init, { once: true });
     }
   }, []);
 
@@ -64,14 +74,16 @@ export default function Lobby({ onJoin, error }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ token: credential }),
       });
-      if (!res.ok) throw new Error('Auth failed');
+      if (!res.ok) throw new Error();
       const user = await res.json();
+      const name = user.name?.split(' ')[0] || user.name || '';
+      const av = loadSaved()?.avatarId || AVATARS[0].id;
+      savePref({ sub: user.sub, email: user.email, googleName: user.name, picture: user.picture, name, avatarId: av });
       setGoogleUser(user);
-      const displayName = user.name?.split(' ')[0] || user.name || '';
-      setPlayerName(prev => prev || displayName);
-      savePref({ sub: user.sub, email: user.email, googleName: user.name });
+      setPlayerName(name);
+      setPendingJoin({ name, av });
     } catch {
-      setAuthError('Google sign-in failed. Try again.');
+      setAuthError('Sign-in failed. Try again.');
     }
   }
 
@@ -81,20 +93,19 @@ export default function Lobby({ onJoin, error }) {
     localStorage.removeItem(STORAGE_KEY);
     setPlayerName('');
     setAvatarId(AVATARS[0].id);
-    setDeckStyle('regular');
   }
 
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!canSubmit) return;
-    savePref({ name: playerName.trim(), avatarId, deckStyle });
-    onJoin(playerName.trim(), avatarId, deckStyle);
+    savePref({ name: playerName.trim(), avatarId });
+    onJoin(playerName.trim(), avatarId, 'regular');
   };
 
   return (
-    <form onSubmit={handleSubmit} className="lobby h-full flex flex-col">
+    <div className="lobby h-full flex flex-col items-center justify-between overflow-y-auto">
       {/* Header */}
-      <div className="flex-shrink-0 pt-10 pb-4 px-6 text-center">
+      <div className="flex-shrink-0 pt-10 pb-4 px-6 text-center w-full">
         <h1 className="text-3xl font-black tracking-wide text-[color:var(--gold-light)] drop-shadow-[0_2px_8px_rgba(0,0,0,0.7)]">
           ♠ Poker Monkey ♣
         </h1>
@@ -103,36 +114,43 @@ export default function Lobby({ onJoin, error }) {
         </p>
       </div>
 
-      {/* Form card */}
-      <div className="flex-1 flex flex-col items-stretch justify-center gap-4 px-6">
+      {/* Form — max width on desktop, full width on mobile */}
+      <form
+        onSubmit={handleSubmit}
+        className="flex-1 flex flex-col justify-center w-full max-w-sm px-4"
+      >
         <div className="bg-black/55 backdrop-blur-sm rounded-2xl p-5 border border-white/10 shadow-xl">
 
-          {/* Google auth row */}
-          <div className="mb-5">
-            {googleUser ? (
-              <div className="flex items-center justify-between gap-3 bg-white/5 rounded-xl px-3 py-2 border border-white/10">
-                <div className="flex items-center gap-2 min-w-0">
-                  {googleUser.picture && (
-                    <img src={googleUser.picture} alt="" className="w-7 h-7 rounded-full flex-shrink-0" referrerPolicy="no-referrer" />
-                  )}
-                  <span className="text-xs text-gray-300 truncate">{googleUser.email}</span>
-                </div>
-                <button
-                  type="button"
-                  onClick={handleSignOut}
-                  className="text-xs text-gray-400 hover:text-white flex-shrink-0 transition-colors"
-                >
-                  Sign out
-                </button>
+          {/* Google SSO */}
+          {googleUser ? (
+            <div className="flex items-center justify-between gap-3 bg-white/5 rounded-xl px-3 py-2 border border-white/10 mb-5">
+              <div className="flex items-center gap-2 min-w-0">
+                {googleUser.picture && (
+                  <img src={googleUser.picture} alt="" className="w-7 h-7 rounded-full flex-shrink-0" referrerPolicy="no-referrer" />
+                )}
+                <span className="text-xs text-gray-300 truncate">{googleUser.email}</span>
               </div>
-            ) : (
-              <div className="flex flex-col items-center gap-2">
-                <div ref={btnRef} />
-                {authError && <p className="text-red-400 text-xs">{authError}</p>}
-              </div>
-            )}
+              <button type="button" onClick={handleSignOut} className="text-xs text-gray-400 hover:text-white flex-shrink-0 transition-colors">
+                Sign out
+              </button>
+            </div>
+          ) : (
+            <div className="flex flex-col items-center mb-5">
+              <div ref={btnRef} />
+              {authError && <p className="text-red-400 text-xs mt-2">{authError}</p>}
+            </div>
+          )}
+
+          {/* Divider */}
+          <div className="flex items-center gap-3 mb-5">
+            <div className="flex-1 h-px bg-white/15" />
+            <span className="text-xs text-white/40 whitespace-nowrap">
+              {googleUser ? 'or update below' : 'or play as a guest'}
+            </span>
+            <div className="flex-1 h-px bg-white/15" />
           </div>
 
+          {/* Name */}
           <label className="block text-xs uppercase tracking-widest text-gray-300 mb-2 font-semibold">
             Your Name
           </label>
@@ -146,6 +164,7 @@ export default function Lobby({ onJoin, error }) {
             className="w-full h-12 px-4 text-base rounded-xl bg-white/10 text-white placeholder-white/40 border border-white/15 focus:border-[color:var(--gold)] outline-none"
           />
 
+          {/* Avatar */}
           <label className="block text-xs uppercase tracking-widest text-gray-300 mt-5 mb-3 font-semibold">
             Choose Your Avatar
           </label>
@@ -157,7 +176,7 @@ export default function Lobby({ onJoin, error }) {
                 onClick={() => setAvatarId(av.id)}
                 aria-label={av.label}
                 aria-pressed={avatarId === av.id}
-                className={`avatar-option w-16 h-16 rounded-full overflow-hidden border-[3px] transition-all duration-200 ${
+                className={`w-16 h-16 rounded-full overflow-hidden border-[3px] transition-all duration-200 ${
                   avatarId === av.id
                     ? 'border-[color:var(--gold)] shadow-[0_0_14px_rgba(212,160,23,0.6)]'
                     : 'border-white/20 active:scale-95'
@@ -167,36 +186,26 @@ export default function Lobby({ onJoin, error }) {
               </button>
             ))}
           </div>
-
-          <label className="flex items-center gap-2.5 mt-5 cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={deckStyle === 'four-color'}
-              onChange={e => setDeckStyle(e.target.checked ? 'four-color' : 'regular')}
-              className="deck-checkbox"
-            />
-            <span className="text-xs uppercase tracking-widest text-gray-300 font-semibold">4-Color Deck</span>
-          </label>
         </div>
 
         {error && (
-          <div className="text-center bg-red-500/25 border border-red-500/45 text-red-300 px-4 py-3 rounded-xl text-sm">
+          <div className="mt-3 text-center bg-red-500/25 border border-red-500/45 text-red-300 px-4 py-3 rounded-xl text-sm">
             {error}
           </div>
         )}
-      </div>
 
-      {/* CTA */}
-      <div className="flex-shrink-0 px-4 pb-[max(28px,env(safe-area-inset-bottom))] pt-3">
-        <button
-          type="submit"
-          disabled={!canSubmit}
-          className="w-full h-14 rounded-2xl text-black font-extrabold text-lg tracking-wide shadow-[0_6px_16px_rgba(0,0,0,0.45)] transition-all duration-150 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed"
-          style={{ background: 'linear-gradient(135deg, var(--gold), #b8860b)' }}
-        >
-          Take a Seat
-        </button>
-      </div>
-    </form>
+        {/* CTA */}
+        <div className="mt-4 pb-[max(28px,env(safe-area-inset-bottom))]">
+          <button
+            type="submit"
+            disabled={!canSubmit}
+            className="w-full h-14 rounded-2xl text-black font-extrabold text-lg tracking-wide shadow-[0_6px_16px_rgba(0,0,0,0.45)] transition-all duration-150 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed"
+            style={{ background: 'linear-gradient(135deg, var(--gold), #b8860b)' }}
+          >
+            Take a Seat
+          </button>
+        </div>
+      </form>
+    </div>
   );
 }

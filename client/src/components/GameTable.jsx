@@ -5,6 +5,19 @@ import BettingControls from './BettingControls.jsx';
 import { ChipStack } from './PokerChip.jsx';
 import { useActionFlash } from './PlayerSeat.jsx';
 
+const AVATARS = [
+  { id: 'alfie', label: 'Alfie', src: '/assets/alfie.png' },
+  { id: 'jazz',  label: 'Jazz',  src: '/assets/jazz.png' },
+];
+
+function loadSaved() {
+  try { return JSON.parse(localStorage.getItem('poker_user')) || {}; }
+  catch { return {}; }
+}
+function patchSaved(patch) {
+  localStorage.setItem('poker_user', JSON.stringify({ ...loadSaved(), ...patch }));
+}
+
 const TURN_DURATION_MS = 20000;
 
 /* Currency visual — set to 'chips' to revert. */
@@ -130,6 +143,27 @@ function HoleCardsRow({ player, deckStyle }) {
 }
 
 export default function GameTable({ gameState, myId, onAction, onLeave, onRematchVote, deckStyle = 'regular' }) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [menuView, setMenuView] = useState('main');
+  const [localDeckStyle, setLocalDeckStyle] = useState(() => loadSaved().deckStyle || deckStyle);
+  const [localAvatarId, setLocalAvatarId] = useState(() => loadSaved().avatarId || 'alfie');
+
+  function handleDeckToggle(on) {
+    const style = on ? 'four-color' : 'regular';
+    setLocalDeckStyle(style);
+    patchSaved({ deckStyle: style });
+  }
+  function handleAvatarChange(id) {
+    setLocalAvatarId(id);
+    patchSaved({ avatarId: id });
+  }
+  function handleLogout() {
+    window.google?.accounts.id.disableAutoSelect();
+    localStorage.removeItem('poker_user');
+    onLeave();
+  }
+  function openMenu() { setMenuView('main'); setMenuOpen(true); }
+
   const me = gameState?.players?.find(p => p.id === myId);
   const others = gameState?.players?.filter(p => p.id !== myId) || [];
   const opponent = others[0];
@@ -282,20 +316,84 @@ export default function GameTable({ gameState, myId, onAction, onLeave, onRematc
           </span>
         )}
       </div>
-      <div className="absolute top-2 right-2 z-50 flex items-center gap-2">
+
+      {/* Hamburger button */}
+      <div className="absolute top-2 right-2 z-50">
         <button
-          className="h-9 min-w-[44px] px-3 rounded-lg bg-black/55 border border-white/20 text-white/90 text-xs font-semibold active:scale-95 transition-transform"
-          onClick={onLeave}
+          className="w-10 h-10 rounded-lg bg-black/55 border border-white/20 text-white/90 text-lg font-bold flex items-center justify-center active:scale-95 transition-transform"
+          onClick={openMenu}
+          aria-label="Menu"
         >
-          Leave
-        </button>
-        <button
-          className="h-9 min-w-[44px] px-3 rounded-lg bg-black/55 border border-red-500/40 text-red-300 text-xs font-semibold active:scale-95 transition-transform"
-          onClick={() => fetch('/admin/reset', { method: 'POST' }).then(() => window.location.href = '/')}
-        >
-          Reset
+          ☰
         </button>
       </div>
+
+      {/* Menu overlay */}
+      {menuOpen && (
+        <>
+          <div className="absolute inset-0 z-40" onClick={() => setMenuOpen(false)} />
+          <div className="absolute top-12 right-2 z-50 w-52 rounded-2xl bg-[#111] border border-white/15 shadow-2xl overflow-hidden">
+            {menuView === 'main' ? (
+              <div className="flex flex-col">
+                <button
+                  className="px-4 py-3 text-left text-sm text-white/90 hover:bg-white/10 transition-colors border-b border-white/10"
+                  onClick={() => setMenuView('settings')}
+                >
+                  ⚙️ Settings
+                </button>
+                <button
+                  className="px-4 py-3 text-left text-sm text-white/90 hover:bg-white/10 transition-colors border-b border-white/10"
+                  onClick={() => { setMenuOpen(false); onLeave(); }}
+                >
+                  🪑 Stand Up
+                </button>
+                <button
+                  className="px-4 py-3 text-left text-sm text-white/90 hover:bg-white/10 transition-colors border-b border-white/10"
+                  onClick={() => { setMenuOpen(false); handleLogout(); }}
+                >
+                  🚪 Log Out
+                </button>
+                <button
+                  className="px-4 py-3 text-left text-sm text-red-400 hover:bg-white/10 transition-colors"
+                  onClick={() => { setMenuOpen(false); fetch('/admin/reset', { method: 'POST' }).then(() => window.location.href = '/'); }}
+                >
+                  🔄 Reset Table
+                </button>
+              </div>
+            ) : (
+              <div className="flex flex-col">
+                <div className="flex items-center gap-2 px-4 py-3 border-b border-white/10">
+                  <button onClick={() => setMenuView('main')} className="text-white/50 hover:text-white text-xs">←</button>
+                  <span className="text-sm font-semibold text-white/90">Settings</span>
+                </div>
+                <div className="px-4 py-3 border-b border-white/10">
+                  <p className="text-xs uppercase tracking-widest text-white/40 mb-2">Avatar</p>
+                  <div className="flex gap-3">
+                    {AVATARS.map(av => (
+                      <button
+                        key={av.id}
+                        onClick={() => handleAvatarChange(av.id)}
+                        className={`w-12 h-12 rounded-full overflow-hidden border-2 transition-all ${localAvatarId === av.id ? 'border-[color:var(--gold)]' : 'border-white/20'}`}
+                      >
+                        <img src={av.src} alt={av.label} className="w-full h-full object-cover object-[center_20%]" />
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <label className="flex items-center justify-between px-4 py-3 cursor-pointer">
+                  <span className="text-sm text-white/90">4-Color Deck</span>
+                  <div
+                    onClick={() => handleDeckToggle(localDeckStyle !== 'four-color')}
+                    className={`w-10 h-6 rounded-full transition-colors flex items-center px-1 ${localDeckStyle === 'four-color' ? 'bg-[color:var(--gold)]' : 'bg-white/20'}`}
+                  >
+                    <div className={`w-4 h-4 rounded-full bg-white shadow transition-transform ${localDeckStyle === 'four-color' ? 'translate-x-4' : 'translate-x-0'}`} />
+                  </div>
+                </label>
+              </div>
+            )}
+          </div>
+        </>
+      )}
 
       {/* PLAY AREA: oval with nameplates at edges, opponent's cards above the nameplate */}
       <div className="flex-1 relative min-h-0 px-3 flex items-center justify-center" style={{ paddingTop: 130, paddingBottom: 28 }}>
@@ -332,7 +430,7 @@ export default function GameTable({ gameState, myId, onAction, onLeave, onRematc
           {/* Opponent hole cards — closer to the left avatar, ~6 px gap from frame */}
           <div className="absolute z-10" style={{ top: -58, left: '50%', transform: 'translateX(calc(-50% + 18px))' }}>
             {opponent ? (
-              <HoleCardsRow player={opponent} deckStyle={deckStyle} />
+              <HoleCardsRow player={opponent} deckStyle={localDeckStyle} />
             ) : (
               <div className="text-white/60 text-sm bg-black/40 rounded-lg px-3 py-1 whitespace-nowrap">Waiting for opponent…</div>
             )}
@@ -366,7 +464,7 @@ export default function GameTable({ gameState, myId, onAction, onLeave, onRematc
                     key={i}
                     card={cardData}
                     size="md"
-                    deckStyle={deckStyle}
+                    deckStyle={localDeckStyle}
                     faceDown={false}
                   />
                 );
@@ -404,7 +502,7 @@ export default function GameTable({ gameState, myId, onAction, onLeave, onRematc
 
           {/* My hole cards — closer still to the avatar */}
           <div className="absolute z-10" style={{ bottom: 48, left: '50%', transform: 'translateX(calc(-50% - 8px))' }}>
-            {me && <HoleCardsRow player={me} deckStyle={deckStyle} />}
+            {me && <HoleCardsRow player={me} deckStyle={localDeckStyle} />}
           </div>
 
           {/* Opponent nameplate AT top edge of oval */}
