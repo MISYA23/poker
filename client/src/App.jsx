@@ -9,6 +9,7 @@ export default function App() {
   const [myId, setMyId] = useState(null);
   const [gameState, setGameState] = useState(null);
   const [error, setError] = useState(null);
+  const [deckStyle, setDeckStyle] = useState('regular');
 
   const emit = useSocket({
     joined: ({ playerId, atTable }) => {
@@ -34,13 +35,18 @@ export default function App() {
     },
   });
 
-  const handleJoin = useCallback((playerName, avatarId) => {
+  const handleJoin = useCallback((playerName, avatarId, ds) => {
     setError(null);
+    if (ds) setDeckStyle(ds);
     emit('join', { playerName, avatarId });
   }, [emit]);
 
   const handleAction = useCallback((action, amount) => {
     emit('player-action', { action, amount });
+  }, [emit]);
+
+  const handleRematchVote = useCallback((vote) => {
+    emit('rematch-vote', { vote });
   }, [emit]);
 
   const handleLeave = useCallback(() => {
@@ -70,6 +76,8 @@ export default function App() {
       myId={myId}
       onAction={handleAction}
       onLeave={handleLeave}
+      onRematchVote={handleRematchVote}
+      deckStyle={deckStyle}
     />
   );
 }

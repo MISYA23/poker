@@ -78,9 +78,11 @@ function startTurnTimer(t) {
     t.timerPlayerId = null;
     t.turnDeadline = null;
     try {
-      t.game.handleAction(pid, 'fold');
+      const player = t.game.players.find(p => p.id === pid);
+      const canCheck = player && player.roundBet >= t.game.currentBet;
+      t.game.handleAction(pid, canCheck ? 'check' : 'fold');
       broadcastTableState(t);
-      if (t.game.phase === 'showdown') scheduleNextHand(t, 5000);
+      if (t.game.phase === 'showdown') scheduleNextHand(t, 8000);
     } catch (e) {}
   }, TURN_SECONDS * 1000);
 }
@@ -116,7 +118,7 @@ function tryAutoStart(t) {
   }
 }
 
-function scheduleNextHand(t, delay = 5000) {
+function scheduleNextHand(t, delay = 8000) {
   if (t.nextHandTimer) { clearTimeout(t.nextHandTimer); }
   t.nextHandTimer = setTimeout(() => {
     t.nextHandTimer = null;
@@ -145,7 +147,7 @@ io.on('connection', (socket) => {
     }
     console.log('[server] join from', socket.id, { playerName, avatarId });
     const name = (playerName || 'Player').trim().slice(0, 20);
-    const safeAvatarId = ['dk', 'diddy'].includes(avatarId) ? avatarId : 'dk';
+    const safeAvatarId = ['alfie', 'jazz'].includes(avatarId) ? avatarId : 'alfie';
     const playerId = uuidv4();
 
     let t = findAvailableTable();
@@ -168,7 +170,7 @@ io.on('connection', (socket) => {
     try {
       t.game.handleAction(player.id, action, amount);
       broadcastTableState(t);
-      if (t.game.phase === 'showdown') scheduleNextHand(t, 5000);
+      if (t.game.phase === 'showdown') scheduleNextHand(t, 8000);
     } catch (err) {
       socket.emit('error', { message: err.message });
     }
@@ -193,7 +195,7 @@ io.on('connection', (socket) => {
     broadcastTableState(t);
 
     if (t.game.phase === 'showdown') {
-      scheduleNextHand(t, 5000);
+      scheduleNextHand(t, 8000);
     } else if (t.game.phase === 'waiting') {
       tryAutoStart(t);
     }

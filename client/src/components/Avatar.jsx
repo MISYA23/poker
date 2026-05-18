@@ -1,8 +1,8 @@
 import React from 'react';
 
 const AVATAR_SRC = {
-  dk: '/assets/dk.png',
-  diddy: '/assets/diddy.webp',
+  alfie: '/assets/alfie.png',
+  jazz: '/assets/jazz.png',
 };
 
 export default function Avatar({ size = 22, avatarId = null }) {
