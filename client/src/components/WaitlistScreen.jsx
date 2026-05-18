@@ -1,4 +1,6 @@
 import React from 'react';
+
+const VERSION = 'v1.01';
 import Card from './Card.jsx';
 
 export default function WaitlistScreen({ gameState, position, onLeave }) {
@@ -44,6 +46,7 @@ export default function WaitlistScreen({ gameState, position, onLeave }) {
           <div className="wt-pot">Pot: ${gameState.pot.toLocaleString()}</div>
         )}
       </div>
+      <p className="text-white/25 text-xs mt-4">{VERSION}</p>
     </div>
   );
 }

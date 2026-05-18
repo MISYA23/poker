@@ -19,6 +19,7 @@ function patchSaved(patch) {
 }
 
 const TURN_DURATION_MS = 20000;
+const VERSION = 'v1.01';
 
 /* Currency visual — set to 'chips' to revert. */
 const CURRENCY = 'bananas';
@@ -584,6 +585,7 @@ export default function GameTable({ gameState, myId, onAction, onLeave, onRematc
         className="flex-shrink-0 relative px-3 pt-2 bg-black/55 border-t border-white/10"
         style={{ paddingBottom: 'max(12px, env(safe-area-inset-bottom))' }}
       >
+        <p className="text-center text-white/20 text-[10px] mb-1">{VERSION}</p>
         <div
           className="flex items-center gap-3 mb-2"
           style={{ visibility: canRaise ? 'visible' : 'hidden' }}

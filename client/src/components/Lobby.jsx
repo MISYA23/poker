@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 
+const VERSION = 'v1.01';
+
 const AVATARS = [
   { id: 'alfie', label: 'Alfie', src: '/assets/alfie.png' },
   { id: 'jazz',  label: 'Jazz',  src: '/assets/jazz.png' },
@@ -197,7 +199,8 @@ export default function Lobby({ onJoin, error }) {
         )}
 
         {/* CTA */}
-        <div className="mt-4 pb-[max(28px,env(safe-area-inset-bottom))]">
+        <div className="mt-4 pb-[max(28px,env(safe-area-inset-bottom))] flex flex-col gap-2">
+          <p className="text-center text-white/25 text-xs">{VERSION}</p>
           <button
             type="submit"
             disabled={!canSubmit}
