@@ -7,6 +7,7 @@ const { v4: uuidv4 } = require('uuid');
 const path = require('path');
 const { OAuth2Client } = require('google-auth-library');
 const { PokerGame } = require('./game/PokerGame');
+const db = require('./db');
 
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
@@ -32,7 +33,7 @@ const tables = new Map();
 // socketId -> { id, name, avatarId, tableId }
 const socketPlayers = new Map();
 
-function createTable() {
+async function createTable() {
   const id = uuidv4();
   const t = {
     id,
@@ -42,9 +43,14 @@ function createTable() {
     turnTimer: null,
     timerPlayerId: null,
     turnDeadline: null,
+    dbTableId: null,
+    dbHandId: null,
+    handNumber: 0,
+    actionSeq: 0,
   };
   tables.set(id, t);
   console.log('[server] table created:', id, '| total tables:', tables.size);
+  try { t.dbTableId = await db.createTable(id); } catch (e) { console.error('[db] createTable:', e.message); }
   return t;
 }
 
@@ -55,7 +61,44 @@ function destroyTable(tableId) {
   clearTimeout(t.nextHandTimer);
   clearTimeout(t.turnTimer);
   tables.delete(tableId);
+  if (t.dbTableId) db.completeTable(t.id).catch(console.error);
   console.log('[server] table destroyed:', tableId, '| total tables:', tables.size);
+}
+
+function dbLog(t, opts) {
+  if (!t.dbTableId) return;
+  db.logAction(t.dbTableId, t.dbHandId, ++t.actionSeq, opts).catch(console.error);
+}
+
+async function dbStartHand(t) {
+  if (!t.dbTableId) return;
+  t.handNumber += 1;
+  t.actionSeq = 0;
+  try {
+    t.dbHandId = await db.startHand(t.dbTableId, t.handNumber);
+    // Log blind posts
+    const g = t.game;
+    for (const p of g.players) {
+      if (p.roundBet > 0) {
+        const role = p.isSmallBlind ? 'post_small_blind' : 'post_big_blind';
+        dbLog(t, { playerName: p.name, actionType: role, amount: p.roundBet, phase: 'preflop' });
+      }
+    }
+  } catch (e) { console.error('[db] startHand:', e.message); }
+}
+
+async function dbCompleteHand(t) {
+  if (!t.dbHandId) return;
+  const g = t.game;
+  const winner = g.winners?.[0];
+  try {
+    await db.completeHand(t.dbHandId, {
+      pot: g.pot,
+      communityCards: g.communityCards,
+      winnerName: winner ? g.players.find(p => p.id === winner.playerId)?.name : null,
+      winningHand: winner?.handName || null,
+    });
+  } catch (e) { console.error('[db] completeHand:', e.message); }
 }
 
 function findAvailableTable() {
@@ -84,9 +127,13 @@ function startTurnTimer(t) {
     try {
       const player = t.game.players.find(p => p.id === pid);
       const canCheck = player && player.roundBet >= t.game.currentBet;
-      t.game.handleAction(pid, canCheck ? 'check' : 'fold');
+      const action = canCheck ? 'check' : 'fold';
+      const phaseBefore = t.game.phase;
+      t.game.handleAction(pid, action);
+      const sp = [...socketPlayers.values()].find(s => s.id === pid);
+      dbLog(t, { playerName: player?.name, googleSub: sp?.googleSub, actionType: action, phase: phaseBefore });
+      if (t.game.phase === 'showdown') { dbCompleteHand(t).catch(console.error); scheduleNextHand(t, 8000); }
       broadcastTableState(t);
-      if (t.game.phase === 'showdown') scheduleNextHand(t, 8000);
     } catch (e) {}
   }, TURN_SECONDS * 1000);
 }
@@ -112,10 +159,11 @@ function tryAutoStart(t) {
   if (t.autoStartTimer) return;
   const ready = t.game.players.filter(p => p.isActive && p.chips > 0);
   if (ready.length >= 2 && t.game.phase === 'waiting') {
-    t.autoStartTimer = setTimeout(() => {
+    t.autoStartTimer = setTimeout(async () => {
       t.autoStartTimer = null;
       if (t.game.phase === 'waiting' && t.game.canStart()) {
         t.game.startHand();
+        await dbStartHand(t);
         broadcastTableState(t);
       }
     }, 3000);
@@ -124,12 +172,13 @@ function tryAutoStart(t) {
 
 function scheduleNextHand(t, delay = 8000) {
   if (t.nextHandTimer) { clearTimeout(t.nextHandTimer); }
-  t.nextHandTimer = setTimeout(() => {
+  t.nextHandTimer = setTimeout(async () => {
     t.nextHandTimer = null;
     const ready = t.game.players.filter(p => p.isActive && p.chips > 0);
     if (ready.length >= 2 && t.game.canStart()) {
       try {
         t.game.startHand();
+        await dbStartHand(t);
       } catch (err) {
         console.error('[server] startHand failed:', err.message);
         t.game.phase = 'waiting';
@@ -144,7 +193,7 @@ function scheduleNextHand(t, delay = 8000) {
 io.on('connection', (socket) => {
   console.log('[server] socket connected:', socket.id);
 
-  socket.on('join', ({ playerName, avatarId }) => {
+  socket.on('join', async ({ playerName, avatarId, googleSub }) => {
     if (socketPlayers.has(socket.id)) {
       console.log('[server] duplicate join ignored from', socket.id);
       return;
@@ -155,10 +204,19 @@ io.on('connection', (socket) => {
     const playerId = uuidv4();
 
     let t = findAvailableTable();
-    if (!t) t = createTable();
+    if (!t) t = await createTable();
 
-    socketPlayers.set(socket.id, { id: playerId, name, avatarId: safeAvatarId, tableId: t.id });
+    socketPlayers.set(socket.id, { id: playerId, name, avatarId: safeAvatarId, tableId: t.id, googleSub: googleSub || null });
     t.game.addPlayer(playerId, name, safeAvatarId);
+
+    if (t.dbTableId) {
+      db.addPlayer(t.dbTableId, {
+        googleSub: googleSub || null,
+        name,
+        avatarId: safeAvatarId,
+        startingChips: GAME_OPTIONS.startingChips,
+      }).catch(console.error);
+    }
 
     console.log('[server] player seated at table', t.id, '| seats:', t.game.players.length, '/', TABLE_MAX);
     socket.emit('joined', { playerId, atTable: true });
@@ -166,15 +224,20 @@ io.on('connection', (socket) => {
     tryAutoStart(t);
   });
 
-  socket.on('player-action', ({ action, amount }) => {
+  socket.on('player-action', async ({ action, amount }) => {
     const player = socketPlayers.get(socket.id);
     if (!player) return;
     const t = tables.get(player.tableId);
     if (!t) return;
     try {
+      const phaseBefore = t.game.phase;
       t.game.handleAction(player.id, action, amount);
+      dbLog(t, { playerName: player.name, googleSub: player.googleSub, actionType: action, amount: amount || null, phase: phaseBefore });
+      if (t.game.phase === 'showdown') {
+        await dbCompleteHand(t);
+        scheduleNextHand(t, 8000);
+      }
       broadcastTableState(t);
-      if (t.game.phase === 'showdown') scheduleNextHand(t, 8000);
     } catch (err) {
       socket.emit('error', { message: err.message });
     }
@@ -189,7 +252,12 @@ io.on('connection', (socket) => {
     const t = tables.get(player.tableId);
     if (!t) return;
 
+    const finalChips = t.game.players.find(p => p.id === player.id)?.chips ?? 0;
     t.game.removePlayer(player.id);
+
+    if (t.dbTableId) {
+      db.updatePlayerFinal(t.dbTableId, player.name, finalChips).catch(console.error);
+    }
 
     if (t.game.players.length === 0) {
       destroyTable(t.id);
@@ -239,4 +307,7 @@ app.post('/admin/reset', (req, res) => { doReset(); res.json({ ok: true }); });
 app.get('*', (_, res) => res.sendFile(path.join(clientBuild, 'index.html')));
 
 const PORT = process.env.PORT || 3843;
-server.listen(PORT, () => console.log(`Poker server on port ${PORT}`));
+server.listen(PORT, () => {
+  console.log(`Poker server on port ${PORT}`);
+  db.migrate().catch(e => console.error('[db] migrate failed:', e.message));
+});

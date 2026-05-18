@@ -74,12 +74,9 @@ html, body {
     linear-gradient(160deg, #0a2e1a 0%, #0d3b22 50%, #0a2e1a 100%);
 }
 
-/* ─── Game table — jungle background ────────────────────────── */
+/* ─── Game table ─────────────────────────────────────────────── */
 .game-table {
-  background:
-    linear-gradient(rgba(0,0,0,0.45), rgba(0,0,0,0.45)),
-    url('/assets/jungle.png') center / cover no-repeat,
-    radial-gradient(ellipse at center, #1a1a1a 0%, #0a0a0a 100%);
+  background: radial-gradient(ellipse at center, #1a1a1a 0%, #0a0a0a 100%);
 }
 
 /* ─── Felt oval (mobile poker table) ────────────────────────── */

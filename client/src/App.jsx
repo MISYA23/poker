@@ -38,7 +38,12 @@ export default function App() {
   const handleJoin = useCallback((playerName, avatarId, ds) => {
     setError(null);
     if (ds) setDeckStyle(ds);
-    emit('join', { playerName, avatarId });
+    try {
+      const saved = JSON.parse(localStorage.getItem('poker_user') || '{}');
+      emit('join', { playerName, avatarId, googleSub: saved.sub || null });
+    } catch {
+      emit('join', { playerName, avatarId, googleSub: null });
+    }
   }, [emit]);
 
   const handleAction = useCallback((action, amount) => {
