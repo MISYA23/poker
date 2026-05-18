@@ -22,7 +22,7 @@ const io = new Server(server, {
   cors: { origin: '*', methods: ['GET', 'POST'] },
 });
 
-const TABLE_MAX = 2;
+const TABLE_MAX = 6;
 const GAME_OPTIONS = { startingChips: 1000, bigBlind: 20, smallBlind: 10 };
 const TURN_SECONDS = 20;
 

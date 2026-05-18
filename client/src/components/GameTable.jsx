@@ -66,79 +66,76 @@ function useCountdown(deadline) {
   return timeLeft;
 }
 
-/* Nameplate (no cards) — sits at the oval edge */
-function NameplateOnly({ player, isMe, turnDeadline, lastAction, win, winFlightDone, displayChips }) {
+// Seat positions around the oval for up to 5 opponents
+const SEAT_POS = {
+  top:        { top: -60,   left: '50%', transform: 'translateX(-50%)' },
+  'top-left': { top: 16,    left: -6 },
+  'top-right':{ top: 16,    right: -6 },
+  left:       { top: '40%', left: -6,   transform: 'translateY(-50%)' },
+  right:      { top: '40%', right: -6,  transform: 'translateY(-50%)' },
+  bottom:     { bottom: -60, left: '50%', transform: 'translateX(-50%)' },
+};
+
+const OPP_SLOTS = {
+  1: ['top'],
+  2: ['top-left', 'top-right'],
+  3: ['top-left', 'top', 'top-right'],
+  4: ['left', 'top-left', 'top-right', 'right'],
+  5: ['left', 'top-left', 'top', 'top-right', 'right'],
+};
+
+function SeatView({ player, isMe, turnDeadline, lastAction, win, winFlightDone, displayChips, deckStyle }) {
   const timeLeft = useCountdown(turnDeadline);
   const actionLabel = useActionFlash(player, lastAction);
   if (!player) return null;
-  // Once the win-flight has finished delivering bananas, swap WINNER label for the new chip count
+
   const showWinLabel = win && !winFlightDone;
-  const chipsToShow = displayChips ?? player.chips;
-
-  const elapsedMs = turnDeadline
-    ? Math.min(TURN_DURATION_MS, TURN_DURATION_MS - Math.max(0, turnDeadline - Date.now()))
-    : 0;
+  const isActive = player.isCurrentPlayer && !player.folded;
   const showCountdown = timeLeft !== null && timeLeft <= 10;
-  const folded = player.folded;
-  const isActive = player.isCurrentPlayer && !folded;
+  const hasCards = player.holeCards?.length > 0;
 
-  return (
-    <div className={`nameplate-row flex items-center justify-center gap-2 ${isActive ? 'seat-active' : ''} ${folded ? 'seat-folded' : ''}`}>
-      <div className={`seat-timer-left ${showCountdown ? 'visible' : ''} ${timeLeft <= 5 ? 'urgent' : ''}`}>
-        {showCountdown ? `${timeLeft}s` : ''}
-      </div>
-
-      <div className="nameplate-stack">
-        <div className={`nameplate ${isMe ? 'nameplate-me' : 'nameplate-opp'}`}>
-          <div className="np-text">
-            <span className="np-name">
-              {player.name}
-              {player.isSmallBlind && <span className="badge badge-sb">SB</span>}
-              {player.isBigBlind && <span className="badge badge-bb">BB</span>}
-            </span>
-            <span className={`np-chips ${actionLabel ? 'np-chips-action' : ''} ${showWinLabel ? 'np-chips-winner' : ''}`}>
-              {showWinLabel ? 'Winner' : (actionLabel || chipsToShow.toLocaleString())}
-            </span>
-          </div>
-          <div className="np-avatar np-avatar-big">
-            <Avatar size={138} avatarId={player.avatarId} />
-          </div>
-        </div>
-
-        <div className="turn-bar" aria-hidden="true">
-          <div
-            className="turn-bar-fill"
-            key={turnDeadline || 'idle'}
-            style={turnDeadline ? {
-              animation: `turn-countdown ${TURN_DURATION_MS}ms linear forwards`,
-              animationDelay: `-${elapsedMs}ms`,
-            } : { clipPath: 'inset(0 0 0 0%)' }}
-          />
-        </div>
-      </div>
-
-      <div className="np-phantom" aria-hidden="true" />
+  const cards = (
+    <div className="flex gap-0.5 justify-center"
+         style={{ visibility: hasCards && !player.folded ? 'visible' : 'hidden', minHeight: 34 }}>
+      {[0, 1].map(i => (
+        <Card key={i} card={player.holeCards?.[i]} size="sm" deckStyle={deckStyle}
+              faceDown={!player.holeCards?.[i] || player.holeCards[i]?.hidden} />
+      ))}
     </div>
   );
-}
 
-function HoleCardsRow({ player, deckStyle }) {
-  const folded = player?.folded;
-  const hasCards = player?.holeCards?.length > 0;
   return (
-    <div
-      className="seat-cards seat-cards-fan flex gap-1.5 justify-center"
-      style={{ visibility: (hasCards && !folded) ? 'visible' : 'hidden' }}
-    >
-      {[0, 1].map(i => (
-        <Card
-          key={i}
-          card={player?.holeCards?.[i]}
-          size="md"
-          deckStyle={deckStyle}
-          faceDown={!player?.holeCards?.[i] || player.holeCards[i]?.hidden}
-        />
-      ))}
+    <div className={`flex flex-col items-center gap-0.5 ${player.folded ? 'opacity-40' : ''}`}>
+      {cards}
+      <div className={`flex items-center gap-1.5 px-2 py-1 rounded-full transition-all duration-200
+        ${isActive
+          ? 'bg-black/90 border border-[color:var(--gold)] shadow-[0_0_10px_rgba(212,160,23,0.5)]'
+          : 'bg-black/65 border border-white/20'}`}
+        style={{ minWidth: 88 }}>
+        <Avatar size={28} avatarId={player.avatarId} />
+        <div className="min-w-0 flex-1">
+          <div className="text-[10px] font-bold text-white truncate leading-tight" style={{ maxWidth: 58 }}>
+            {player.name}
+            {player.isDealer     && <span className="ml-0.5 text-[8px] bg-white/20 px-0.5 rounded">D</span>}
+            {player.isSmallBlind && <span className="ml-0.5 text-[8px] bg-blue-500/70 px-0.5 rounded">SB</span>}
+            {player.isBigBlind   && <span className="ml-0.5 text-[8px] bg-purple-500/70 px-0.5 rounded">BB</span>}
+          </div>
+          <div className="text-[10px] font-bold text-[color:var(--gold-light)] leading-tight">
+            {showWinLabel ? 'Winner!' : (actionLabel || (displayChips ?? player.chips).toLocaleString())}
+          </div>
+        </div>
+        {showCountdown && (
+          <span className={`text-[10px] font-black flex-shrink-0 ${timeLeft <= 5 ? 'text-red-400' : 'text-white/60'}`}>
+            {timeLeft}s
+          </span>
+        )}
+      </div>
+      {(player.roundBet > 0 || player.allIn) && (
+        <div className="flex items-center gap-1 text-[10px] font-bold text-[color:var(--gold-light)] bg-black/50 rounded px-1.5 py-0.5">
+          {player.roundBet > 0 && player.roundBet.toLocaleString()}
+          {player.allIn && <span className="text-red-400">ALL IN</span>}
+        </div>
+      )}
     </div>
   );
 }
@@ -166,8 +163,7 @@ export default function GameTable({ gameState, myId, onAction, onLeave, onRematc
   function openMenu() { setMenuView('main'); setMenuOpen(true); }
 
   const me = gameState?.players?.find(p => p.id === myId);
-  const others = gameState?.players?.filter(p => p.id !== myId) || [];
-  const opponent = others[0];
+  const opponents = gameState?.players?.filter(p => p.id !== myId) || [];
   const waitlistCount = gameState?.waitlistCount || 0;
 
   // Server's `pot` already includes all committed chips (round bets are accounted for at
@@ -229,7 +225,6 @@ export default function GameTable({ gameState, myId, onAction, onLeave, onRematc
     !['waiting', 'showdown'].includes(gameState?.phase);
 
   const myTurnDeadline = isMyTurn ? gameState?.turnDeadline : null;
-  const opponentTurnDeadline = opponent?.isCurrentPlayer ? gameState?.turnDeadline : null;
 
   const showdownHandDisplay = (() => {
     if (!showWinners || !gameState?.winners?.length) return null;
@@ -390,135 +385,71 @@ export default function GameTable({ gameState, myId, onAction, onLeave, onRematc
         </>
       )}
 
-      {/* PLAY AREA: oval with nameplates at edges, opponent's cards above the nameplate */}
-      <div className="flex-1 relative min-h-0 px-3 flex items-center justify-center" style={{ paddingTop: 130, paddingBottom: 28 }}>
-        <div className="oval-stage relative w-full max-w-[340px] h-full flex items-center justify-center" style={{ maxHeight: 600 }}>
+      {/* PLAY AREA */}
+      <div className="flex-1 relative min-h-0 px-6 flex items-center justify-center" style={{ paddingTop: 80, paddingBottom: 24 }}>
+        <div className="oval-stage relative w-full max-w-[340px] h-full flex items-center justify-center" style={{ maxHeight: 560 }}>
 
           {/* Felt oval */}
           <div className="felt-oval absolute inset-0" />
 
-          {/* Win-flight cinematic — bananas fly from pot to winner's nameplate */}
+          {/* Win-flight cinematic */}
           {showdownWinner && (
             <div key={winFlightKey} className={`win-flight win-flight-${winnerIsMe ? 'down' : 'up'}`}>
-              <Bananas amount={winFlightAmount} size={28} />
+              <Bananas amount={winFlightAmount} size={24} />
             </div>
           )}
 
-          {/* Dealer button on the felt (top-right next to opponent's cards) */}
-          {opponent?.isDealer && (
-            <div
-              className="dealer-button-felt absolute z-10"
-              style={{ top: 70, right: 'calc(50% - 105px)' }}
-              title="Dealer"
-            >D</div>
-          )}
-
-          {/* Dealer button on the felt (bottom player → top-left of player area, spaced from cards) */}
-          {me?.isDealer && (
-            <div
-              className="dealer-button-felt absolute z-10"
-              style={{ bottom: 100, left: 'calc(50% - 120px)' }}
-              title="Dealer"
-            >D</div>
-          )}
-
-          {/* Opponent hole cards — closer to the left avatar, ~6 px gap from frame */}
-          <div className="absolute z-10" style={{ top: -58, left: '50%', transform: 'translateX(calc(-50% + 18px))' }}>
-            {opponent ? (
-              <HoleCardsRow player={opponent} deckStyle={localDeckStyle} />
-            ) : (
-              <div className="text-white/60 text-sm bg-black/40 rounded-lg px-3 py-1 whitespace-nowrap">Waiting for opponent…</div>
-            )}
-          </div>
-
-          {/* Opponent bet — close to opponent's nameplate */}
-          <div
-            className="absolute left-1/2 -translate-x-1/2 z-10 flex items-center gap-1.5 whitespace-nowrap"
-            style={{ top: 70, visibility: (opponent?.roundBet > 0 || opponent?.allIn) ? 'visible' : 'hidden' }}
-          >
-            {opponent?.roundBet > 0 && (
-              <>
-                <CurrencyStack amount={opponent?.roundBet || 0} size={20} />
-                <span className="felt-bet-amount text-sm">{(opponent?.roundBet || 0).toLocaleString()}</span>
-              </>
-            )}
-            {opponent?.allIn && <span className="all-in-triangle" aria-label="All In"><span>ALL</span><span>IN</span></span>}
-          </div>
-
-          {/* Community + pot + hand name (center) */}
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-10 flex flex-col items-center gap-2">
-            <div className="flex gap-1.5">
+          {/* Community cards + pot + hand name (center) */}
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-10 flex flex-col items-center gap-1.5">
+            <div className="flex gap-1">
               {[0, 1, 2, 3, 4].map(i => {
                 const cardData = i < revealedCount ? gameState?.communityCards?.[i] : null;
-                if (!cardData) {
-                  // Empty slot — reserve space but show nothing (no card back)
-                  return <div key={i} style={{ width: 56, height: 60 }} aria-hidden="true" />;
-                }
-                return (
-                  <Card
-                    key={i}
-                    card={cardData}
-                    size="md"
-                    deckStyle={localDeckStyle}
-                    faceDown={false}
-                  />
-                );
+                if (!cardData) return <div key={i} style={{ width: 40, height: 56 }} aria-hidden="true" />;
+                return <Card key={i} card={cardData} size="sm" deckStyle={localDeckStyle} faceDown={false} />;
               })}
             </div>
-
-            <div
-              className="flex items-center gap-2 bg-black/45 border border-white/10 rounded-lg px-3 py-1 whitespace-nowrap"
-              style={{ visibility: showPotInMiddle ? 'visible' : 'hidden', minHeight: 30 }}
-            >
-              <CurrencyStack amount={displayedPot || 0} size={20} />
-              <span className="text-sm font-extrabold text-[color:var(--gold-light)]">
+            <div className="flex items-center gap-1.5 bg-black/45 border border-white/10 rounded-lg px-2 py-0.5 whitespace-nowrap"
+                 style={{ visibility: showPotInMiddle ? 'visible' : 'hidden', minHeight: 24 }}>
+              <CurrencyStack amount={displayedPot || 0} size={16} />
+              <span className="text-xs font-extrabold text-[color:var(--gold-light)]">
                 {(displayedPot || 0).toLocaleString()}
               </span>
             </div>
-
-            <div className="hand-name-display text-[12px] whitespace-nowrap" style={{ minHeight: 14 }}>
+            <div className="hand-name-display text-[11px] whitespace-nowrap" style={{ minHeight: 12 }}>
               {showdownHandDisplay || ' '}
             </div>
           </div>
 
-          {/* My bet — close to my cards */}
-          <div
-            className="absolute left-1/2 -translate-x-1/2 z-10 flex items-center gap-1.5 whitespace-nowrap"
-            style={{ bottom: 125, visibility: ((me?.roundBet > 0 || me?.allIn) && !myWin) ? 'visible' : 'hidden' }}
-          >
-            {me?.roundBet > 0 && (
-              <>
-                <CurrencyStack amount={me?.roundBet || 0} size={20} />
-                <span className="felt-bet-amount text-sm">{(me?.roundBet || 0).toLocaleString()}</span>
-              </>
-            )}
-            {me?.allIn && <span className="all-in-triangle" aria-label="All In"><span>ALL</span><span>IN</span></span>}
-          </div>
+          {/* Opponent seats — dynamic positions */}
+          {opponents.length === 0 && (
+            <div className="absolute z-10" style={SEAT_POS['top']}>
+              <div className="text-white/60 text-xs bg-black/40 rounded-lg px-3 py-1 whitespace-nowrap">Waiting for players…</div>
+            </div>
+          )}
+          {opponents.map((opp, i) => {
+            const slots = OPP_SLOTS[Math.min(opponents.length, 5)] || OPP_SLOTS[1];
+            const posKey = slots[i] || 'top';
+            const oppTurnDeadline = opp.isCurrentPlayer ? gameState?.turnDeadline : null;
+            return (
+              <div key={opp.id} className="absolute z-20" style={{ position: 'absolute', ...SEAT_POS[posKey] }}>
+                <SeatView
+                  player={opp}
+                  isMe={false}
+                  turnDeadline={oppTurnDeadline}
+                  lastAction={gameState?.lastAction}
+                  win={winnerMap[opp.id]}
+                  winFlightDone={winFlightDone}
+                  displayChips={chipsFor(opp)}
+                  deckStyle={localDeckStyle}
+                />
+              </div>
+            );
+          })}
 
-          {/* My hole cards — closer still to the avatar */}
-          <div className="absolute z-10" style={{ bottom: 48, left: '50%', transform: 'translateX(calc(-50% - 8px))' }}>
-            {me && <HoleCardsRow player={me} deckStyle={localDeckStyle} />}
-          </div>
-
-          {/* Opponent nameplate AT top edge of oval */}
-          <div className="absolute -top-3 left-1/2 -translate-x-1/2 z-20">
-            {opponent && (
-              <NameplateOnly
-                player={opponent}
-                isMe={false}
-                turnDeadline={opponentTurnDeadline}
-                lastAction={gameState?.lastAction}
-                win={winnerMap[opponent.id]}
-                winFlightDone={winFlightDone}
-                displayChips={chipsFor(opponent)}
-              />
-            )}
-          </div>
-
-          {/* My nameplate AT bottom edge of oval */}
-          <div className="absolute -bottom-3 left-1/2 -translate-x-1/2 z-20">
-            {me && (
-              <NameplateOnly
+          {/* My seat — always bottom */}
+          {me && (
+            <div className="absolute z-20" style={{ position: 'absolute', ...SEAT_POS['bottom'] }}>
+              <SeatView
                 player={me}
                 isMe={true}
                 turnDeadline={myTurnDeadline}
@@ -526,9 +457,10 @@ export default function GameTable({ gameState, myId, onAction, onLeave, onRematc
                 win={myWin}
                 winFlightDone={winFlightDone}
                 displayChips={chipsFor(me)}
+                deckStyle={localDeckStyle}
               />
-            )}
-          </div>
+            </div>
+          )}
         </div>
       </div>
 
