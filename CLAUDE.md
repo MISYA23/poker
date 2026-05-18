@@ -1,7 +1,7 @@
 # Poker — Claude Context
 
 ## What this is
-Multiplayer Texas Hold'em. One table, up to 9 players, overflow goes to a waitlist. Real-time via Socket.IO. No auth, no persistence — all state is in-memory on the server.
+Multiplayer Texas Hold'em heads-up (2 players per table, multi-table). Real-time via Socket.IO. Google SSO for identity — preferences (name, avatar, deck style) persisted in localStorage.
 
 **Live:** https://poker-production-d726.up.railway.app  
 **Repo:** https://github.com/briandanilo/poker.git
@@ -9,9 +9,15 @@ Multiplayer Texas Hold'em. One table, up to 9 players, overflow goes to a waitli
 ---
 
 ## Stack
-- **Server:** Node/Express + Socket.IO (`server/index.js`)
-- **Client:** React + Vite (`client/src/`)
+- **Server:** Node/Express + Socket.IO (`server/index.js`) + google-auth-library
+- **Client:** React + Vite + Tailwind CSS (`client/src/`)
+- **Auth:** Google Identity Services (GSI) — token verified server-side at `POST /auth/google`. Preferences (name, avatar, deck) saved to localStorage under key `poker_user`.
 - **Deploy:** Railway — auto-deploys on every push to `main`
+
+## Env vars (never commit)
+- `server/.env` → `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`
+- `client/.env` → `VITE_GOOGLE_CLIENT_ID`
+- On Railway: add `GOOGLE_CLIENT_ID` to the service env vars dashboard
 
 ---
 

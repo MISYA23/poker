@@ -1,10 +1,14 @@
+require('dotenv').config();
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const cors = require('cors');
 const { v4: uuidv4 } = require('uuid');
 const path = require('path');
+const { OAuth2Client } = require('google-auth-library');
 const { PokerGame } = require('./game/PokerGame');
+
+const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
 const app = express();
 app.use(cors());
@@ -200,6 +204,20 @@ io.on('connection', (socket) => {
       tryAutoStart(t);
     }
   });
+});
+
+app.post('/auth/google', async (req, res) => {
+  try {
+    const { token } = req.body;
+    const ticket = await googleClient.verifyIdToken({
+      idToken: token,
+      audience: process.env.GOOGLE_CLIENT_ID,
+    });
+    const { sub, email, name, picture } = ticket.getPayload();
+    res.json({ sub, email, name, picture });
+  } catch (err) {
+    res.status(401).json({ error: 'Invalid token' });
+  }
 });
 
 app.get('/health', (_, res) => res.json({
