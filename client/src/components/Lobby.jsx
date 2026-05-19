@@ -1,11 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { AVATARS } from './Avatar.jsx';
 
 const VERSION = 'v1.01';
-
-const AVATARS = [
-  { id: 'alfie', label: 'Alfie', src: '/assets/alfie.png' },
-  { id: 'jazz',  label: 'Jazz',  src: '/assets/jazz.png' },
-];
 
 const STORAGE_KEY = 'poker_user';
 
@@ -172,7 +168,7 @@ export default function Lobby({ onJoin, error }) {
           <label className="block text-xs uppercase tracking-widest text-gray-300 mt-5 mb-3 font-semibold">
             Choose Your Avatar
           </label>
-          <div className="flex gap-4 justify-center">
+          <div className="flex flex-wrap gap-3 justify-center">
             {AVATARS.map(av => (
               <button
                 key={av.id}
@@ -180,13 +176,13 @@ export default function Lobby({ onJoin, error }) {
                 onClick={() => setAvatarId(av.id)}
                 aria-label={av.label}
                 aria-pressed={avatarId === av.id}
-                className={`w-16 h-16 rounded-full overflow-hidden border-[3px] transition-all duration-200 ${
+                className={`w-14 h-14 rounded-full flex items-center justify-center text-3xl border-[3px] transition-all duration-200 bg-black/40 ${
                   avatarId === av.id
                     ? 'border-[color:var(--gold)] shadow-[0_0_14px_rgba(212,160,23,0.6)]'
                     : 'border-white/20 active:scale-95'
                 }`}
               >
-                <img src={av.src} alt="" draggable={false} className="w-full h-full object-cover object-[center_20%]" />
+                {av.emoji}
               </button>
             ))}
           </div>

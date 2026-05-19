@@ -1,29 +1,26 @@
 import React from 'react';
 
-const AVATAR_SRC = {
-  alfie: '/assets/alfie.png',
-  jazz: '/assets/jazz.png',
-};
+export const AVATARS = [
+  { id: 'fox',     label: 'Fox',     emoji: '🦊' },
+  { id: 'frog',    label: 'Frog',    emoji: '🐸' },
+  { id: 'lion',    label: 'Lion',    emoji: '🦁' },
+  { id: 'penguin', label: 'Penguin', emoji: '🐧' },
+  { id: 'shark',   label: 'Shark',   emoji: '🦈' },
+  { id: 'tiger',   label: 'Tiger',   emoji: '🐯' },
+  { id: 'octopus', label: 'Octopus', emoji: '🐙' },
+  { id: 'unicorn', label: 'Unicorn', emoji: '🦄' },
+];
 
 export default function Avatar({ size = 22, avatarId = null }) {
-  const src = avatarId && AVATAR_SRC[avatarId];
+  const av = AVATARS.find(a => a.id === avatarId) ?? AVATARS[0];
 
   return (
-    <span className="avatar-frame" style={{ width: size, height: size }}>
-      {src ? (
-        <img
-          src={src}
-          alt=""
-          className="avatar-img"
-          draggable={false}
-        />
-      ) : (
-        <svg viewBox="0 0 32 32" width="100%" height="100%" aria-hidden="true">
-          <circle cx="16" cy="16" r="16" fill="#141414" />
-          <circle cx="16" cy="13" r="4.8" fill="#3a3a3a" />
-          <path d="M5 30 Q5 20.5 16 20.5 Q27 20.5 27 30 Z" fill="#3a3a3a" />
-        </svg>
-      )}
+    <span
+      style={{ fontSize: size, lineHeight: 1, display: 'inline-block' }}
+      aria-label={av.label}
+      role="img"
+    >
+      {av.emoji}
     </span>
   );
 }

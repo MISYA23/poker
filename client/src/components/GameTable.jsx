@@ -1,14 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import Card from './Card.jsx';
-import Avatar from './Avatar.jsx';
+import Avatar, { AVATARS } from './Avatar.jsx';
 import BettingControls from './BettingControls.jsx';
 import { ChipStack } from './PokerChip.jsx';
 import { useActionFlash } from './PlayerSeat.jsx';
 
-const AVATARS = [
-  { id: 'alfie', label: 'Alfie', src: '/assets/alfie.png' },
-  { id: 'jazz',  label: 'Jazz',  src: '/assets/jazz.png' },
-];
 
 function loadSaved() {
   try { return JSON.parse(localStorage.getItem('poker_user')) || {}; }
@@ -66,14 +62,32 @@ function useCountdown(deadline) {
   return timeLeft;
 }
 
-// Seat positions around the oval for up to 5 opponents
+// Seat positions around the oval for up to 8 opponents
 const SEAT_POS = {
-  top:        { top: -60,   left: '50%', transform: 'translateX(-50%)' },
-  'top-left': { top: 16,    left: -6 },
-  'top-right':{ top: 16,    right: -6 },
-  left:       { top: '40%', left: -6,   transform: 'translateY(-50%)' },
-  right:      { top: '40%', right: -6,  transform: 'translateY(-50%)' },
-  bottom:     { bottom: -60, left: '50%', transform: 'translateX(-50%)' },
+  'top-cl':    { top: -60,    left: '32%',  transform: 'translateX(-50%)' },
+  'top-cr':    { top: -60,    left: '68%',  transform: 'translateX(-50%)' },
+  top:         { top: -60,    left: '50%',  transform: 'translateX(-50%)' },
+  'top-left':  { top: 16,     left: -6 },
+  'top-right': { top: 16,     right: -6 },
+  left:        { top: '32%',  left: -6,     transform: 'translateY(-50%)' },
+  right:       { top: '32%',  right: -6,    transform: 'translateY(-50%)' },
+  'bot-left':  { bottom: 48,  left: -6 },
+  'bot-right': { bottom: 48,  right: -6 },
+  bottom:      { bottom: -60, left: '50%',  transform: 'translateX(-50%)' },
+};
+
+// Where each player's bet chip appears on the felt (inside the oval, toward center)
+const BET_POS = {
+  'top':       { top: 58,     left: '50%',  transform: 'translateX(-50%)' },
+  'top-cl':    { top: 58,     left: '30%',  transform: 'translateX(-50%)' },
+  'top-cr':    { top: 58,     left: '70%',  transform: 'translateX(-50%)' },
+  'top-left':  { top: 82,     left: 72 },
+  'top-right': { top: 82,     right: 72 },
+  'left':      { top: '32%',  left: 90,     transform: 'translateY(-50%)' },
+  'right':     { top: '32%',  right: 90,    transform: 'translateY(-50%)' },
+  'bot-left':  { bottom: 110, left: 72 },
+  'bot-right': { bottom: 110, right: 72 },
+  'bottom':    { bottom: 40,  left: '50%',  transform: 'translateX(-50%)' },
 };
 
 const OPP_SLOTS = {
@@ -82,7 +96,20 @@ const OPP_SLOTS = {
   3: ['top-left', 'top', 'top-right'],
   4: ['left', 'top-left', 'top-right', 'right'],
   5: ['left', 'top-left', 'top', 'top-right', 'right'],
+  6: ['left', 'top-left', 'top', 'top-right', 'right', 'bot-right'],
+  7: ['bot-left', 'left', 'top-left', 'top', 'top-right', 'right', 'bot-right'],
+  8: ['bot-left', 'left', 'top-left', 'top-cl', 'top-cr', 'top-right', 'right', 'bot-right'],
 };
+
+function BetChip({ player }) {
+  if (!player || (player.roundBet <= 0 && !player.allIn)) return null;
+  return (
+    <div className="flex items-center gap-1 text-[10px] font-bold text-[color:var(--gold-light)] bg-black/65 border border-white/15 rounded-lg px-2 py-0.5 whitespace-nowrap shadow">
+      {player.roundBet > 0 && player.roundBet.toLocaleString()}
+      {player.allIn && <span className="text-red-400 ml-0.5">ALL IN</span>}
+    </div>
+  );
+}
 
 function SeatView({ player, isMe, turnDeadline, lastAction, win, winFlightDone, displayChips, deckStyle }) {
   const timeLeft = useCountdown(turnDeadline);
@@ -94,11 +121,12 @@ function SeatView({ player, isMe, turnDeadline, lastAction, win, winFlightDone, 
   const showCountdown = timeLeft !== null && timeLeft <= 10;
   const hasCards = player.holeCards?.length > 0;
 
+  const cardSize = isMe ? 'sm' : 'xs';
   const cards = (
     <div className="flex gap-0.5 justify-center"
-         style={{ visibility: hasCards && !player.folded ? 'visible' : 'hidden', minHeight: 34 }}>
+         style={{ visibility: hasCards && !player.folded ? 'visible' : 'hidden', minHeight: isMe ? 34 : 28 }}>
       {[0, 1].map(i => (
-        <Card key={i} card={player.holeCards?.[i]} size="sm" deckStyle={deckStyle}
+        <Card key={i} card={player.holeCards?.[i]} size={cardSize} deckStyle={deckStyle}
               faceDown={!player.holeCards?.[i] || player.holeCards[i]?.hidden} />
       ))}
     </div>
@@ -112,7 +140,7 @@ function SeatView({ player, isMe, turnDeadline, lastAction, win, winFlightDone, 
           ? 'bg-black/90 border border-[color:var(--gold)] shadow-[0_0_10px_rgba(212,160,23,0.5)]'
           : 'bg-black/65 border border-white/20'}`}
         style={{ minWidth: 88 }}>
-        <Avatar size={28} avatarId={player.avatarId} />
+        <Avatar size={36} avatarId={player.avatarId} />
         <div className="min-w-0 flex-1">
           <div className="text-[10px] font-bold text-white truncate leading-tight" style={{ maxWidth: 58 }}>
             {player.name}
@@ -130,12 +158,6 @@ function SeatView({ player, isMe, turnDeadline, lastAction, win, winFlightDone, 
           </span>
         )}
       </div>
-      {(player.roundBet > 0 || player.allIn) && (
-        <div className="flex items-center gap-1 text-[10px] font-bold text-[color:var(--gold-light)] bg-black/50 rounded px-1.5 py-0.5">
-          {player.roundBet > 0 && player.roundBet.toLocaleString()}
-          {player.allIn && <span className="text-red-400">ALL IN</span>}
-        </div>
-      )}
     </div>
   );
 }
@@ -144,7 +166,7 @@ export default function GameTable({ gameState, myId, onAction, onLeave, onRematc
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuView, setMenuView] = useState('main');
   const [localDeckStyle, setLocalDeckStyle] = useState(() => loadSaved().deckStyle || deckStyle);
-  const [localAvatarId, setLocalAvatarId] = useState(() => loadSaved().avatarId || 'alfie');
+  const [localAvatarId, setLocalAvatarId] = useState(() => loadSaved().avatarId || AVATARS[0].id);
 
   function handleDeckToggle(on) {
     const style = on ? 'four-color' : 'regular';
@@ -363,9 +385,10 @@ export default function GameTable({ gameState, myId, onAction, onLeave, onRematc
                       <button
                         key={av.id}
                         onClick={() => handleAvatarChange(av.id)}
-                        className={`w-12 h-12 rounded-full overflow-hidden border-2 transition-all ${localAvatarId === av.id ? 'border-[color:var(--gold)]' : 'border-white/20'}`}
+                        aria-label={av.label}
+                        className={`w-12 h-12 rounded-full flex items-center justify-center text-2xl border-2 transition-all bg-black/40 ${localAvatarId === av.id ? 'border-[color:var(--gold)]' : 'border-white/20'}`}
                       >
-                        <img src={av.src} alt={av.label} className="w-full h-full object-cover object-[center_20%]" />
+                        {av.emoji}
                       </button>
                     ))}
                   </div>
@@ -400,7 +423,7 @@ export default function GameTable({ gameState, myId, onAction, onLeave, onRematc
           )}
 
           {/* Community cards + pot + hand name (center) */}
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-10 flex flex-col items-center gap-1.5">
+          <div className="absolute left-1/2 -translate-x-1/2 -translate-y-1/2 z-10 flex flex-col items-center gap-1.5" style={{ top: '58%' }}>
             <div className="flex gap-1">
               {[0, 1, 2, 3, 4].map(i => {
                 const cardData = i < revealedCount ? gameState?.communityCards?.[i] : null;
@@ -427,22 +450,29 @@ export default function GameTable({ gameState, myId, onAction, onLeave, onRematc
             </div>
           )}
           {opponents.map((opp, i) => {
-            const slots = OPP_SLOTS[Math.min(opponents.length, 5)] || OPP_SLOTS[1];
+            const slots = OPP_SLOTS[Math.min(opponents.length, 8)] || OPP_SLOTS[1];
             const posKey = slots[i] || 'top';
             const oppTurnDeadline = opp.isCurrentPlayer ? gameState?.turnDeadline : null;
             return (
-              <div key={opp.id} className="absolute z-20" style={{ position: 'absolute', ...SEAT_POS[posKey] }}>
-                <SeatView
-                  player={opp}
-                  isMe={false}
-                  turnDeadline={oppTurnDeadline}
-                  lastAction={gameState?.lastAction}
-                  win={winnerMap[opp.id]}
-                  winFlightDone={winFlightDone}
-                  displayChips={chipsFor(opp)}
-                  deckStyle={localDeckStyle}
-                />
-              </div>
+              <React.Fragment key={opp.id}>
+                <div className="absolute z-20" style={{ position: 'absolute', ...SEAT_POS[posKey] }}>
+                  <SeatView
+                    player={opp}
+                    isMe={false}
+                    turnDeadline={oppTurnDeadline}
+                    lastAction={gameState?.lastAction}
+                    win={winnerMap[opp.id]}
+                    winFlightDone={winFlightDone}
+                    displayChips={chipsFor(opp)}
+                    deckStyle={localDeckStyle}
+                  />
+                </div>
+                {BET_POS[posKey] && (
+                  <div className="absolute z-10" style={{ position: 'absolute', ...BET_POS[posKey] }}>
+                    <BetChip player={opp} />
+                  </div>
+                )}
+              </React.Fragment>
             );
           })}
 
@@ -459,6 +489,13 @@ export default function GameTable({ gameState, myId, onAction, onLeave, onRematc
                 displayChips={chipsFor(me)}
                 deckStyle={localDeckStyle}
               />
+            </div>
+          )}
+
+          {/* My bet chip on the felt */}
+          {me && (
+            <div className="absolute z-10" style={{ position: 'absolute', ...BET_POS['bottom'] }}>
+              <BetChip player={me} />
             </div>
           )}
         </div>
@@ -517,7 +554,13 @@ export default function GameTable({ gameState, myId, onAction, onLeave, onRematc
         className="flex-shrink-0 relative px-3 pt-2 bg-black/55 border-t border-white/10"
         style={{ paddingBottom: 'max(12px, env(safe-area-inset-bottom))' }}
       >
-        <p className="text-center text-white/20 text-[10px] mb-1">{VERSION}</p>
+        <p className="text-center text-white/20 text-[10px] mb-1">
+          {gameState?.tableNumber ? `Table #${gameState.tableNumber}` : '—'}
+          {' · '}
+          {gameState?.handNumber ? `Hand #${gameState.handNumber}` : '—'}
+          {' · '}
+          {VERSION}
+        </p>
         <div
           className="flex items-center gap-3 mb-2"
           style={{ visibility: canRaise ? 'visible' : 'hidden' }}

@@ -23,9 +23,17 @@ const io = new Server(server, {
   cors: { origin: '*', methods: ['GET', 'POST'] },
 });
 
-const TABLE_MAX = 6;
+const SEAT_MAX = 9;
 const GAME_OPTIONS = { startingChips: 1000, bigBlind: 20, smallBlind: 10 };
 const TURN_SECONDS = 20;
+
+const BOT_NAMES = [
+  'Alex', 'Blake', 'Casey', 'Dana', 'Eli', 'Fran', 'Gray', 'Harper',
+  'Indie', 'Jamie', 'Kai', 'Lee', 'Morgan', 'Noel', 'Quinn', 'Remy',
+  'Sage', 'Tatum', 'Uri', 'Val',
+];
+const BOT_AVATARS = ['fox', 'frog', 'lion', 'penguin', 'shark', 'tiger', 'octopus', 'unicorn'];
+const VALID_AVATARS = BOT_AVATARS;
 
 // tableId -> { id, game, autoStartTimer, nextHandTimer, turnTimer, timerPlayerId, turnDeadline }
 const tables = new Map();
@@ -43,6 +51,8 @@ async function createTable() {
     turnTimer: null,
     timerPlayerId: null,
     turnDeadline: null,
+    botTimer: null,
+    botIds: new Set(),
     dbTableId: null,
     dbHandId: null,
     handNumber: 0,
@@ -60,6 +70,7 @@ function destroyTable(tableId) {
   clearTimeout(t.autoStartTimer);
   clearTimeout(t.nextHandTimer);
   clearTimeout(t.turnTimer);
+  clearTimeout(t.botTimer);
   tables.delete(tableId);
   if (t.dbTableId) db.completeTable(t.id).catch(console.error);
   console.log('[server] table destroyed:', tableId, '| total tables:', tables.size);
@@ -101,9 +112,89 @@ async function dbCompleteHand(t) {
   } catch (e) { console.error('[db] completeHand:', e.message); }
 }
 
+// ── Bot helpers ───────────────────────────────────────────────────────────────
+
+function addBotsToFill(t) {
+  // During an active betting phase, newly added players have no cards — mark
+  // them inactive so they sit out until the next hand (startHand reactivates).
+  const midHand = !['waiting', 'showdown'].includes(t.game.phase);
+
+  // Between hands: evict busted bots so their seats can be refilled.
+  if (!midHand) {
+    for (const botId of [...t.botIds]) {
+      const p = t.game.players.find(pl => pl.id === botId);
+      if (p && p.chips === 0) {
+        t.botIds.delete(botId);
+        const idx = t.game.players.indexOf(p);
+        if (idx !== -1) t.game.players.splice(idx, 1);
+      }
+    }
+  }
+
+  let nameIdx = t.botIds.size;
+  while (t.game.players.length < SEAT_MAX) {
+    const botId = `bot-${uuidv4()}`;
+    t.botIds.add(botId);
+    try {
+      t.game.addPlayer(botId, BOT_NAMES[nameIdx % BOT_NAMES.length], BOT_AVATARS[nameIdx % BOT_AVATARS.length]);
+      if (midHand) {
+        const p = t.game.players.find(pl => pl.id === botId);
+        if (p) p.isActive = false;
+      }
+    } catch (e) { t.botIds.delete(botId); break; }
+    nameIdx++;
+  }
+}
+
+function bumpBot(t) {
+  const [botId] = t.botIds;
+  if (!botId) return;
+  t.botIds.delete(botId);
+  t.game.removePlayer(botId);
+}
+
+function getBotAction(game, botId) {
+  const player = game.players.find(p => p.id === botId);
+  const canCheck = player.roundBet >= game.currentBet;
+  const roll = Math.random();
+  if (canCheck) {
+    if (roll < 0.60) return { action: 'check' };
+    const raiseTotal = game.currentBet + game.minRaise;
+    if (roll < 0.85) {
+      if (raiseTotal <= player.chips + player.roundBet) return { action: 'raise', amount: raiseTotal };
+      return { action: 'all-in' };
+    }
+    return { action: 'fold' };
+  } else {
+    if (roll < 0.80) return { action: 'fold' };
+    if (roll < 0.95) return { action: 'call' };
+    const raiseTotal = game.currentBet + game.minRaise;
+    if (raiseTotal <= player.chips + player.roundBet) return { action: 'raise', amount: raiseTotal };
+    return { action: 'all-in' };
+  }
+}
+
+function scheduleBotAction(t) {
+  if (t.botTimer) { clearTimeout(t.botTimer); t.botTimer = null; }
+  const pid = t.game.currentPlayerId;
+  if (!pid || !t.botIds.has(pid)) return;
+  t.botTimer = setTimeout(async () => {
+    t.botTimer = null;
+    if (t.game.currentPlayerId !== pid) return;
+    try {
+      const { action, amount } = getBotAction(t.game, pid);
+      t.game.handleAction(pid, action, amount);
+      if (t.game.phase === 'showdown') { await dbCompleteHand(t); scheduleNextHand(t, 3000); }
+      broadcastTableState(t);
+    } catch (e) { console.error('[bot] action error:', e.message); }
+  }, 800 + Math.random() * 700);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 function findAvailableTable() {
   for (const t of tables.values()) {
-    if (t.game.players.length < TABLE_MAX) return t;
+    if (t.botIds.size > 0 || t.game.players.length < SEAT_MAX) return t;
   }
   return null;
 }
@@ -140,6 +231,7 @@ function startTurnTimer(t) {
 
 function broadcastTableState(t) {
   startTurnTimer(t);
+  scheduleBotAction(t);
   for (const [socketId, player] of socketPlayers) {
     if (player.tableId !== t.id) continue;
     const atTable = t.game.players.some(p => p.id === player.id);
@@ -151,12 +243,15 @@ function broadcastTableState(t) {
       waitlistCount: 0,
       tableCount: t.game.players.length,
       turnDeadline: t.turnDeadline,
+      tableNumber: t.dbTableId,
+      handNumber: t.handNumber,
     });
   }
 }
 
 function tryAutoStart(t) {
   if (t.autoStartTimer) return;
+  addBotsToFill(t);
   const ready = t.game.players.filter(p => p.isActive && p.chips > 0);
   if (ready.length >= 2 && t.game.phase === 'waiting') {
     t.autoStartTimer = setTimeout(async () => {
@@ -174,6 +269,7 @@ function scheduleNextHand(t, delay = 8000) {
   if (t.nextHandTimer) { clearTimeout(t.nextHandTimer); }
   t.nextHandTimer = setTimeout(async () => {
     t.nextHandTimer = null;
+    addBotsToFill(t);
     const ready = t.game.players.filter(p => p.isActive && p.chips > 0);
     if (ready.length >= 2 && t.game.canStart()) {
       try {
@@ -200,11 +296,13 @@ io.on('connection', (socket) => {
     }
     console.log('[server] join from', socket.id, { playerName, avatarId });
     const name = (playerName || 'Player').trim().slice(0, 20);
-    const safeAvatarId = ['alfie', 'jazz'].includes(avatarId) ? avatarId : 'alfie';
+    const safeAvatarId = VALID_AVATARS.includes(avatarId) ? avatarId : VALID_AVATARS[0];
     const playerId = uuidv4();
 
     let t = findAvailableTable();
     if (!t) t = await createTable();
+
+    if (t.game.players.length >= SEAT_MAX) bumpBot(t);
 
     socketPlayers.set(socket.id, { id: playerId, name, avatarId: safeAvatarId, tableId: t.id, googleSub: googleSub || null });
     t.game.addPlayer(playerId, name, safeAvatarId);
@@ -218,9 +316,10 @@ io.on('connection', (socket) => {
       }).catch(console.error);
     }
 
-    console.log('[server] player seated at table', t.id, '| seats:', t.game.players.length, '/', TABLE_MAX);
+    console.log('[server] player seated at table', t.id, '| seats:', t.game.players.length, '/', SEAT_MAX);
     socket.emit('joined', { playerId, atTable: true });
     broadcastTableState(t);
+    if (t.game.phase === 'waiting') addBotsToFill(t);
     tryAutoStart(t);
   });
 
@@ -269,6 +368,7 @@ io.on('connection', (socket) => {
     if (t.game.phase === 'showdown') {
       scheduleNextHand(t, 8000);
     } else if (t.game.phase === 'waiting') {
+      addBotsToFill(t);
       tryAutoStart(t);
     }
   });
