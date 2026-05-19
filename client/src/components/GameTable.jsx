@@ -4,6 +4,7 @@ import Avatar, { AVATARS } from './Avatar.jsx';
 import BettingControls from './BettingControls.jsx';
 import { ChipStack } from './PokerChip.jsx';
 import { useActionFlash } from './PlayerSeat.jsx';
+import HandHistory from './HandHistory.jsx';
 
 
 function loadSaved() {
@@ -162,7 +163,7 @@ function SeatView({ player, isMe, turnDeadline, lastAction, win, winFlightDone, 
   );
 }
 
-export default function GameTable({ gameState, myId, onAction, onLeave, onRematchVote, deckStyle = 'regular' }) {
+export default function GameTable({ gameState, myId, onAction, onLeave, onRematchVote, onSetBots, deckStyle = 'regular' }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuView, setMenuView] = useState('main');
   const [localDeckStyle, setLocalDeckStyle] = useState(() => loadSaved().deckStyle || deckStyle);
@@ -183,6 +184,7 @@ export default function GameTable({ gameState, myId, onAction, onLeave, onRematc
     onLeave();
   }
   function openMenu() { setMenuView('main'); setMenuOpen(true); }
+  const [showHistory, setShowHistory] = useState(false);
 
   const me = gameState?.players?.find(p => p.id === myId);
   const opponents = gameState?.players?.filter(p => p.id !== myId) || [];
@@ -326,8 +328,26 @@ export default function GameTable({ gameState, myId, onAction, onLeave, onRematc
 
   return (
     <div className="game-table h-full flex flex-col relative overflow-hidden">
+      {/* Hand history overlay */}
+      {showHistory && (
+        <HandHistory
+          tableNumber={gameState?.tableNumber}
+          onClose={() => setShowHistory(false)}
+        />
+      )}
+
       {/* Floating utilities */}
       <div className="absolute top-2 left-2 z-50 flex items-center gap-2">
+        {gameState?.tableNumber && (
+          <button
+            onClick={() => setShowHistory(true)}
+            className="w-10 h-10 rounded-lg bg-black/55 border border-white/20 text-white/70 text-base flex items-center justify-center active:scale-95 transition-transform"
+            aria-label="Hand history"
+            title="Hand history"
+          >
+            ⏮
+          </button>
+        )}
         {waitlistCount > 0 && (
           <span className="text-xs px-2 py-1 rounded bg-black/55 text-white/90 border border-white/15">
             {waitlistCount} waiting
@@ -393,6 +413,15 @@ export default function GameTable({ gameState, myId, onAction, onLeave, onRematc
                     ))}
                   </div>
                 </div>
+                <label className="flex items-center justify-between px-4 py-3 border-b border-white/10 cursor-pointer">
+                  <span className="text-sm text-white/90">Fill with Bots</span>
+                  <div
+                    onClick={() => onSetBots?.(!gameState?.botsEnabled)}
+                    className={`w-10 h-6 rounded-full transition-colors flex items-center px-1 ${gameState?.botsEnabled ? 'bg-[color:var(--gold)]' : 'bg-white/20'}`}
+                  >
+                    <div className={`w-4 h-4 rounded-full bg-white shadow transition-transform ${gameState?.botsEnabled ? 'translate-x-4' : 'translate-x-0'}`} />
+                  </div>
+                </label>
                 <label className="flex items-center justify-between px-4 py-3 cursor-pointer">
                   <span className="text-sm text-white/90">4-Color Deck</span>
                   <div

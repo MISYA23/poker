@@ -128,4 +128,24 @@ async function logAction(tableId, handId, seq, {
   );
 }
 
-module.exports = { migrate, createTable, completeTable, addPlayer, updatePlayerFinal, startHand, completeHand, logAction };
+// ── Hand history queries ───────────────────────────────────────────────────────
+
+async function getHandsForTable(tableId) {
+  const { rows } = await pool.query(
+    `SELECT id, hand_number, started_at, ended_at, pot, community_cards, winner_name, winning_hand
+     FROM hands WHERE table_id = $1 ORDER BY hand_number ASC`,
+    [tableId]
+  );
+  return rows;
+}
+
+async function getActionsForHand(handId) {
+  const { rows } = await pool.query(
+    `SELECT id, sequence_number, action_type, player_name, google_sub, amount, phase, timestamp, metadata
+     FROM actions WHERE hand_id = $1 ORDER BY sequence_number ASC`,
+    [handId]
+  );
+  return rows;
+}
+
+module.exports = { migrate, createTable, completeTable, addPlayer, updatePlayerFinal, startHand, completeHand, logAction, getHandsForTable, getActionsForHand };

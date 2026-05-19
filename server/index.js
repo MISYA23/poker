@@ -53,6 +53,7 @@ async function createTable() {
     turnDeadline: null,
     botTimer: null,
     botIds: new Set(),
+    botsEnabled: false,
     dbTableId: null,
     dbHandId: null,
     handNumber: 0,
@@ -76,9 +77,38 @@ function destroyTable(tableId) {
   console.log('[server] table destroyed:', tableId, '| total tables:', tables.size);
 }
 
+function getSnapshot(t) {
+  const g = t.game;
+  return {
+    phase: g.phase,
+    pot: g.pot,
+    currentBet: g.currentBet,
+    communityCards: g.communityCards || [],
+    currentPlayerId: g.currentPlayerId,
+    winners: g.winners || null,
+    players: g.players.map(p => ({
+      id: p.id,
+      name: p.name,
+      chips: p.chips,
+      roundBet: p.roundBet || 0,
+      totalBet: p.totalBet || 0,
+      folded: p.folded || false,
+      allIn: p.allIn || false,
+      holeCards: p.holeCards || [],
+      isDealer: p.isDealer || false,
+      isSmallBlind: p.isSmallBlind || false,
+      isBigBlind: p.isBigBlind || false,
+      isActive: p.isActive || false,
+    })),
+  };
+}
+
 function dbLog(t, opts) {
   if (!t.dbTableId) return;
-  db.logAction(t.dbTableId, t.dbHandId, ++t.actionSeq, opts).catch(console.error);
+  db.logAction(t.dbTableId, t.dbHandId, ++t.actionSeq, {
+    ...opts,
+    metadata: { snapshot: getSnapshot(t), ...opts.metadata },
+  }).catch(console.error);
 }
 
 async function dbStartHand(t) {
@@ -87,7 +117,8 @@ async function dbStartHand(t) {
   t.actionSeq = 0;
   try {
     t.dbHandId = await db.startHand(t.dbTableId, t.handNumber);
-    // Log blind posts
+    // Log deal (captures hole cards) then blind posts
+    dbLog(t, { actionType: 'deal', phase: 'preflop' });
     const g = t.game;
     for (const p of g.players) {
       if (p.roundBet > 0) {
@@ -114,7 +145,17 @@ async function dbCompleteHand(t) {
 
 // ── Bot helpers ───────────────────────────────────────────────────────────────
 
+function removeAllBots(t) {
+  for (const botId of [...t.botIds]) {
+    t.game.removePlayer(botId);
+    const idx = t.game.players.findIndex(p => p.id === botId);
+    if (idx !== -1) t.game.players.splice(idx, 1);
+  }
+  t.botIds.clear();
+}
+
 function addBotsToFill(t) {
+  if (!t.botsEnabled) return;
   // During an active betting phase, newly added players have no cards — mark
   // them inactive so they sit out until the next hand (startHand reactivates).
   const midHand = !['waiting', 'showdown'].includes(t.game.phase);
@@ -151,6 +192,9 @@ function bumpBot(t) {
   if (!botId) return;
   t.botIds.delete(botId);
   t.game.removePlayer(botId);
+  // removePlayer only marks inactive mid-hand; force-splice so the seat is actually free
+  const idx = t.game.players.findIndex(p => p.id === botId);
+  if (idx !== -1) t.game.players.splice(idx, 1);
 }
 
 function getBotAction(game, botId) {
@@ -243,6 +287,7 @@ function broadcastTableState(t) {
       waitlistCount: 0,
       tableCount: t.game.players.length,
       turnDeadline: t.turnDeadline,
+      botsEnabled: t.botsEnabled,
       tableNumber: t.dbTableId,
       handNumber: t.handNumber,
     });
@@ -342,6 +387,21 @@ io.on('connection', (socket) => {
     }
   });
 
+  socket.on('set-bots', ({ enabled }) => {
+    const player = socketPlayers.get(socket.id);
+    if (!player) return;
+    const t = tables.get(player.tableId);
+    if (!t) return;
+    t.botsEnabled = !!enabled;
+    if (t.botsEnabled) {
+      addBotsToFill(t);
+      tryAutoStart(t);
+    } else {
+      removeAllBots(t);
+    }
+    broadcastTableState(t);
+  });
+
   socket.on('disconnect', () => {
     const player = socketPlayers.get(socket.id);
     if (!player) return;
@@ -386,6 +446,20 @@ app.post('/auth/google', async (req, res) => {
   } catch (err) {
     res.status(401).json({ error: 'Invalid token' });
   }
+});
+
+app.get('/api/table/:tableId/hands', async (req, res) => {
+  try {
+    const hands = await db.getHandsForTable(parseInt(req.params.tableId));
+    res.json(hands);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get('/api/hand/:handId/actions', async (req, res) => {
+  try {
+    const actions = await db.getActionsForHand(parseInt(req.params.handId));
+    res.json(actions);
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 app.get('/health', (_, res) => res.json({

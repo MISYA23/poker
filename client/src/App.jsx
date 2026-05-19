@@ -54,6 +54,10 @@ export default function App() {
     emit('rematch-vote', { vote });
   }, [emit]);
 
+  const handleSetBots = useCallback((enabled) => {
+    emit('set-bots', { enabled });
+  }, [emit]);
+
   const handleLeave = useCallback(() => {
     setScreen('lobby');
     setMyId(null);
@@ -82,6 +86,7 @@ export default function App() {
       onAction={handleAction}
       onLeave={handleLeave}
       onRematchVote={handleRematchVote}
+      onSetBots={handleSetBots}
       deckStyle={deckStyle}
     />
   );
