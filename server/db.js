@@ -1,5 +1,6 @@
 require('dotenv').config({ path: require('path').join(__dirname, '.env') });
 const { Pool } = require('pg');
+const { randomUUID } = require('crypto');
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
@@ -8,6 +9,14 @@ const pool = new Pool({
 
 async function migrate() {
   await pool.query(`
+    CREATE TABLE IF NOT EXISTS users (
+      id           TEXT PRIMARY KEY,
+      google_sub   TEXT UNIQUE,
+      display_name TEXT,
+      avatar_id    TEXT,
+      created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
     CREATE TABLE IF NOT EXISTS tables (
       id        SERIAL PRIMARY KEY,
       uuid      TEXT UNIQUE NOT NULL,
@@ -55,6 +64,21 @@ async function migrate() {
     );
   `);
   console.log('[db] schema ready');
+}
+
+// ── Users (permanent player identity) ────────────────────────────────────────
+
+async function findOrCreateUser(googleSub, { name, avatarId } = {}) {
+  const { rows } = await pool.query(
+    `SELECT id FROM users WHERE google_sub = $1`, [googleSub]
+  );
+  if (rows.length) return rows[0].id;
+  const id = randomUUID();
+  await pool.query(
+    `INSERT INTO users (id, google_sub, display_name, avatar_id) VALUES ($1, $2, $3, $4)`,
+    [id, googleSub, name || null, avatarId || null]
+  );
+  return id;
 }
 
 // ── Tables ────────────────────────────────────────────────────────────────────
@@ -148,4 +172,4 @@ async function getActionsForHand(handId) {
   return rows;
 }
 
-module.exports = { migrate, createTable, completeTable, addPlayer, updatePlayerFinal, startHand, completeHand, logAction, getHandsForTable, getActionsForHand };
+module.exports = { migrate, findOrCreateUser, createTable, completeTable, addPlayer, updatePlayerFinal, startHand, completeHand, logAction, getHandsForTable, getActionsForHand };

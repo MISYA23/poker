@@ -38,13 +38,24 @@ const VALID_AVATARS = BOT_AVATARS;
 // tableId -> { id, game, autoStartTimer, nextHandTimer, turnTimer, timerPlayerId, turnDeadline }
 const tables = new Map();
 
-// socketId -> { id, name, avatarId, tableId }
+// socketId -> { id, name, avatarId, tableId, identityKey, ... }
 const socketPlayers = new Map();
 
-async function createTable() {
+// identityKey -> { player, timer } — grace period after disconnect before evicting
+const disconnectedPlayers = new Map();
+const RECONNECT_GRACE_MS = 15000;
+
+// socketId -> true, for sockets sitting in the lobby (not yet at a table)
+const lobbySockets = new Set();
+
+const NAMED_TABLES = ['California', 'Paris', 'Dublin'];
+
+async function createTable(name = null) {
   const id = uuidv4();
   const t = {
     id,
+    name,
+    permanent: !!name,
     game: new PokerGame(id, GAME_OPTIONS),
     autoStartTimer: null,
     nextHandTimer: null,
@@ -60,14 +71,30 @@ async function createTable() {
     actionSeq: 0,
   };
   tables.set(id, t);
-  console.log('[server] table created:', id, '| total tables:', tables.size);
+  console.log('[server] table created:', name || id);
   try { t.dbTableId = await db.createTable(id); } catch (e) { console.error('[db] createTable:', e.message); }
   return t;
 }
 
+function getLobbyState() {
+  return {
+    tables: [...tables.values()].map(t => ({
+      id: t.id,
+      name: t.name || t.id.slice(0, 8),
+      playerCount: t.game.players.filter(p => !t.botIds.has(p.id)).length,
+      phase: t.game.phase,
+    })),
+  };
+}
+
+function broadcastLobbyState() {
+  const state = getLobbyState();
+  for (const sid of lobbySockets) io.to(sid).emit('lobby-state', state);
+}
+
 function destroyTable(tableId) {
   const t = tables.get(tableId);
-  if (!t) return;
+  if (!t || t.permanent) return;
   clearTimeout(t.autoStartTimer);
   clearTimeout(t.nextHandTimer);
   clearTimeout(t.turnTimer);
@@ -236,12 +263,6 @@ function scheduleBotAction(t) {
 
 // ─────────────────────────────────────────────────────────────────────────────
 
-function findAvailableTable() {
-  for (const t of tables.values()) {
-    if (t.botIds.size > 0 || t.game.players.length < SEAT_MAX) return t;
-  }
-  return null;
-}
 
 function startTurnTimer(t) {
   const pid = t.game.currentPlayerId;
@@ -334,52 +355,96 @@ function scheduleNextHand(t, delay = 8000) {
 io.on('connection', (socket) => {
   console.log('[server] socket connected:', socket.id);
 
-  socket.on('join', async ({ playerName, avatarId, googleSub, clientId }) => {
-    if (socketPlayers.has(socket.id)) {
-      console.log('[server] duplicate join ignored from', socket.id);
-      return;
-    }
-    console.log('[server] join from', socket.id, { playerName, avatarId });
-    const name = (playerName || 'Player').trim().slice(0, 20);
-    const safeAvatarId = VALID_AVATARS.includes(avatarId) ? avatarId : VALID_AVATARS[0];
-    const identityKey = googleSub || clientId || null;
+  socket.on('enter-lobby', ({ playerId } = {}) => {
+    // Always show the lobby — never auto-reconnect.
+    // Report which tables this player currently has an active seat at
+    // so the client can show "TAKE YOUR SEAT" banners.
+    lobbySockets.add(socket.id);
 
-    // Reconnect: reclaim existing seat if this identity is already seated
-    if (identityKey) {
-      for (const [oldSid, sp] of socketPlayers) {
-        if (sp.identityKey === identityKey) {
-          socketPlayers.delete(oldSid);
-          socketPlayers.set(socket.id, sp);
+    const activeSeats = [];
+    if (playerId) {
+      // Check live seats
+      for (const sp of socketPlayers.values()) {
+        if (sp.id === playerId) {
           const t = tables.get(sp.tableId);
-          socket.emit('joined', { playerId: sp.id, atTable: true });
-          if (t) broadcastTableState(t);
-          console.log('[server] reconnected:', sp.name, '— reclaimed seat');
-          return;
+          if (t) activeSeats.push({ tableId: t.id, tableName: t.name || t.id.slice(0, 8) });
+        }
+      }
+      // Check grace-period seats
+      if (disconnectedPlayers.has(playerId)) {
+        const { player: sp } = disconnectedPlayers.get(playerId);
+        const t = tables.get(sp.tableId);
+        if (t && !activeSeats.find(s => s.tableId === sp.tableId)) {
+          activeSeats.push({ tableId: t.id, tableName: t.name || t.id.slice(0, 8) });
         }
       }
     }
 
-    const playerId = uuidv4();
-    let t = findAvailableTable();
-    if (!t) t = await createTable();
+    socket.emit('lobby-state', { ...getLobbyState(), activeSeats });
+  });
 
+  socket.on('rejoin', ({ playerId, tableId }) => {
+    if (!playerId || !tableId) return;
+
+    // Clear grace period timer if any
+    if (disconnectedPlayers.has(playerId)) {
+      clearTimeout(disconnectedPlayers.get(playerId).timer);
+      disconnectedPlayers.delete(playerId);
+    }
+
+    const t = tables.get(tableId);
+    if (!t) { socket.emit('rejoin-failed', { reason: 'Table no longer exists.' }); return; }
+
+    const gamePlayer = t.game.players.find(p => p.id === playerId);
+    if (!gamePlayer) { socket.emit('rejoin-failed', { reason: 'Seat no longer held.' }); return; }
+
+    // Remove any stale socket mapping for this player
+    for (const [sid, sp] of socketPlayers) {
+      if (sp.id === playerId) { socketPlayers.delete(sid); break; }
+    }
+
+    lobbySockets.delete(socket.id);
+    const sp = { id: playerId, name: gamePlayer.name, avatarId: gamePlayer.avatarId, tableId: t.id };
+    socketPlayers.set(socket.id, sp);
+    socket.emit('joined', { playerId, tableId: t.id, atTable: true });
+    broadcastTableState(t);
+    console.log('[server] rejoined:', gamePlayer.name, '→', t.name || t.id);
+  });
+
+  socket.on('join', async ({ playerId, playerName, avatarId, tableId }) => {
+    if (socketPlayers.has(socket.id)) {
+      console.log('[server] duplicate join ignored from', socket.id);
+      return;
+    }
+    if (!playerId) { socket.emit('error', { message: 'Missing player ID.' }); return; }
+
+    const t = tables.get(tableId);
+    if (!t) { socket.emit('error', { message: 'Table not found.' }); return; }
+
+    // Prevent sitting twice at the same table
+    if (t.game.players.some(p => p.id === playerId)) {
+      socket.emit('error', { message: 'You are already seated at this table.' });
+      return;
+    }
+
+    console.log('[server] join from', socket.id, { playerName, table: t.name });
+    const name = (playerName || 'Player').trim().slice(0, 20);
+    const safeAvatarId = VALID_AVATARS.includes(avatarId) ? avatarId : VALID_AVATARS[0];
+
+    lobbySockets.delete(socket.id);
     if (t.game.players.length >= SEAT_MAX) bumpBot(t);
 
-    socketPlayers.set(socket.id, { id: playerId, name, avatarId: safeAvatarId, tableId: t.id, googleSub: googleSub || null, clientId: clientId || null, identityKey });
+    socketPlayers.set(socket.id, { id: playerId, name, avatarId: safeAvatarId, tableId: t.id });
     t.game.addPlayer(playerId, name, safeAvatarId);
 
     if (t.dbTableId) {
-      db.addPlayer(t.dbTableId, {
-        googleSub: googleSub || null,
-        name,
-        avatarId: safeAvatarId,
-        startingChips: GAME_OPTIONS.startingChips,
-      }).catch(console.error);
+      db.addPlayer(t.dbTableId, { name, avatarId: safeAvatarId, startingChips: GAME_OPTIONS.startingChips }).catch(console.error);
     }
 
-    console.log('[server] player seated at table', t.id, '| seats:', t.game.players.length, '/', SEAT_MAX);
-    socket.emit('joined', { playerId, atTable: true });
+    console.log('[server] player seated at', t.name, '| seats:', t.game.players.length, '/', SEAT_MAX);
+    socket.emit('joined', { playerId, tableId: t.id, atTable: true });
     broadcastTableState(t);
+    broadcastLobbyState();
     if (t.game.phase === 'waiting') addBotsToFill(t);
     tryAutoStart(t);
   });
@@ -403,22 +468,47 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on('set-bots', ({ enabled }) => {
+  socket.on('leave-table', () => {
+    const player = socketPlayers.get(socket.id);
+    if (!player) return;
+    socketPlayers.delete(socket.id);
+    const t = tables.get(player.tableId);
+    if (t) evictPlayer(player, t);
+    lobbySockets.add(socket.id);
+    socket.emit('lobby-state', getLobbyState());
+    console.log('[server] player left table:', player.name);
+  });
+
+  socket.on('add-bot', () => {
     const player = socketPlayers.get(socket.id);
     if (!player) return;
     const t = tables.get(player.tableId);
-    if (!t) return;
-    t.botsEnabled = !!enabled;
-    if (t.botsEnabled) {
-      addBotsToFill(t);
-      tryAutoStart(t);
-    } else {
-      removeAllBots(t);
-    }
+    if (!t || t.game.players.length >= SEAT_MAX) return;
+    const midHand = !['waiting', 'showdown'].includes(t.game.phase);
+    const botId = `bot-${uuidv4()}`;
+    t.botIds.add(botId);
+    try {
+      t.game.addPlayer(botId, BOT_NAMES[t.botIds.size % BOT_NAMES.length], BOT_AVATARS[t.botIds.size % BOT_AVATARS.length]);
+      if (midHand) { const p = t.game.players.find(pl => pl.id === botId); if (p) p.isActive = false; }
+    } catch { t.botIds.delete(botId); return; }
+    tryAutoStart(t);
     broadcastTableState(t);
+    broadcastLobbyState();
+  });
+
+  socket.on('remove-bot', () => {
+    const player = socketPlayers.get(socket.id);
+    if (!player) return;
+    const t = tables.get(player.tableId);
+    if (!t || t.botIds.size === 0) return;
+    bumpBot(t);
+    if (t.botIds.size === 0) t.botsEnabled = false;
+    broadcastTableState(t);
+    broadcastLobbyState();
   });
 
   socket.on('disconnect', () => {
+    lobbySockets.delete(socket.id);
     const player = socketPlayers.get(socket.id);
     if (!player) return;
     socketPlayers.delete(socket.id);
@@ -427,28 +517,40 @@ io.on('connection', (socket) => {
     const t = tables.get(player.tableId);
     if (!t) return;
 
-    const finalChips = t.game.players.find(p => p.id === player.id)?.chips ?? 0;
-    t.game.removePlayer(player.id);
-
-    if (t.dbTableId) {
-      db.updatePlayerFinal(t.dbTableId, player.name, finalChips).catch(console.error);
-    }
-
-    if (t.game.players.length === 0) {
-      destroyTable(t.id);
-      return;
-    }
-
-    broadcastTableState(t);
-
-    if (t.game.phase === 'showdown') {
-      scheduleNextHand(t, 8000);
-    } else if (t.game.phase === 'waiting') {
-      addBotsToFill(t);
-      tryAutoStart(t);
-    }
+    // Grace period: hold the seat for RECONNECT_GRACE_MS before evicting
+    const timer = setTimeout(() => {
+      disconnectedPlayers.delete(player.id);
+      evictPlayer(player, t);
+    }, RECONNECT_GRACE_MS);
+    disconnectedPlayers.set(player.id, { player, timer });
   });
 });
+
+function evictPlayer(player, t) {
+  const finalChips = t.game.players.find(p => p.id === player.id)?.chips ?? 0;
+  t.game.removePlayer(player.id);
+
+  if (t.dbTableId) {
+    db.updatePlayerFinal(t.dbTableId, player.name, finalChips).catch(console.error);
+  }
+
+  if (t.game.players.length === 0) {
+    if (!t.permanent) { destroyTable(t.id); }
+    else { t.game.phase = 'waiting'; broadcastTableState(t); }
+    broadcastLobbyState();
+    return;
+  }
+
+  broadcastTableState(t);
+  broadcastLobbyState();
+
+  if (t.game.phase === 'showdown') {
+    scheduleNextHand(t, 8000);
+  } else if (t.game.phase === 'waiting') {
+    addBotsToFill(t);
+    tryAutoStart(t);
+  }
+}
 
 app.post('/auth/google', async (req, res) => {
   try {
@@ -458,7 +560,8 @@ app.post('/auth/google', async (req, res) => {
       audience: process.env.GOOGLE_CLIENT_ID,
     });
     const { sub, email, name, picture } = ticket.getPayload();
-    res.json({ sub, email, name, picture });
+    const playerId = await db.findOrCreateUser(sub, { name });
+    res.json({ playerId, sub, email, name, picture });
   } catch (err) {
     res.status(401).json({ error: 'Invalid token' });
   }
@@ -487,6 +590,8 @@ function doReset() {
   for (const t of tables.values()) destroyTable(t.id);
   tables.clear();
   socketPlayers.clear();
+  for (const { timer } of disconnectedPlayers.values()) clearTimeout(timer);
+  disconnectedPlayers.clear();
   io.emit('reset');
   console.log('[server] full reset');
 }
@@ -497,7 +602,9 @@ app.post('/admin/reset', (req, res) => { doReset(); res.json({ ok: true }); });
 app.get('*', (_, res) => res.sendFile(path.join(clientBuild, 'index.html')));
 
 const PORT = process.env.PORT || 3843;
-server.listen(PORT, () => {
+server.listen(PORT, async () => {
   console.log(`Poker server on port ${PORT}`);
-  db.migrate().catch(e => console.error('[db] migrate failed:', e.message));
+  await db.migrate().catch(e => console.error('[db] migrate failed:', e.message));
+  for (const name of NAMED_TABLES) await createTable(name);
+  console.log('[server] tables ready:', NAMED_TABLES.join(', '));
 });

@@ -1,224 +1,144 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState } from 'react';
 import { AVATARS } from './Avatar.jsx';
 
-const VERSION = 'v1.01';
-
-const STORAGE_KEY = 'poker_user';
+const TABLE_EMOJI = { California: '🌴', Paris: '🗼', Dublin: '🍀' };
 
 function loadSaved() {
-  try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || null; }
-  catch { return null; }
+  try { return JSON.parse(localStorage.getItem('poker_user')) || {}; }
+  catch { return {}; }
+}
+function patchSaved(patch) {
+  localStorage.setItem('poker_user', JSON.stringify({ ...loadSaved(), ...patch }));
 }
 
-function savePref(patch) {
-  const prev = loadSaved() || {};
-  localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...prev, ...patch }));
-}
+export default function Lobby({ playerName, tables = [], activeSeats = [], onJoinTable, onRejoin, onLogout, error }) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [menuView, setMenuView] = useState('main');
+  const [localAvatarId, setLocalAvatarId] = useState(() => loadSaved().avatarId || AVATARS[0].id);
 
-function ensureClientId() {
-  const saved = loadSaved() || {};
-  if (!saved.clientId) {
-    const id = crypto.randomUUID();
-    savePref({ clientId: id });
-    return id;
+  function handleAvatarChange(id) {
+    setLocalAvatarId(id);
+    patchSaved({ avatarId: id });
   }
-  return saved.clientId;
-}
-
-export default function Lobby({ onJoin, error }) {
-  // Ensure a persistent guest identity exists before anything else
-  ensureClientId();
-  const saved = loadSaved();
-  const [playerName, setPlayerName] = useState(saved?.name || '');
-  const [avatarId, setAvatarId]     = useState(saved?.avatarId || null);
-  const [googleUser, setGoogleUser] = useState(saved?.sub ? saved : null);
-  const [authError, setAuthError]   = useState(null);
-  const [pendingJoin, setPendingJoin] = useState(() =>
-    saved?.name && saved?.avatarId ? { name: saved.name, av: saved.avatarId } : null
-  );
-  const btnRef = useRef(null);
-  const gsiReady = useRef(false);
-
-  useEffect(() => {
-    if (!pendingJoin) return;
-    onJoin(pendingJoin.name, pendingJoin.av, 'regular');
-    setPendingJoin(null);
-  }, [pendingJoin]);
-
-  const canSubmit = playerName.trim().length > 0 && avatarId !== null;
-
-  useEffect(() => {
-    const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
-    if (!clientId || gsiReady.current) return;
-
-    const init = () => {
-      if (!window.google?.accounts || gsiReady.current) return;
-      gsiReady.current = true;
-      window.google.accounts.id.initialize({
-        client_id: clientId,
-        callback: handleCredential,
-        auto_select: !!saved?.sub,
-      });
-      if (btnRef.current) {
-        window.google.accounts.id.renderButton(btnRef.current, {
-          theme: 'outline',
-          size: 'large',
-          shape: 'pill',
-          width: 280,
-          text: 'signin_with',
-        });
-      }
-    };
-
-    if (window.google?.accounts) {
-      init();
-    } else {
-      const script = document.querySelector('script[src*="accounts.google.com/gsi"]');
-      if (script) script.addEventListener('load', init, { once: true });
-    }
-  }, []);
-
-  async function handleCredential({ credential }) {
-    setAuthError(null);
-    try {
-      const res = await fetch('/auth/google', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token: credential }),
-      });
-      if (!res.ok) throw new Error();
-      const user = await res.json();
-      const name = user.name?.split(' ')[0] || user.name || '';
-      const av = loadSaved()?.avatarId || AVATARS[0].id;
-      savePref({ sub: user.sub, email: user.email, googleName: user.name, picture: user.picture, name, avatarId: av });
-      setGoogleUser(user);
-      setPlayerName(name);
-      setPendingJoin({ name, av });
-    } catch {
-      setAuthError('Sign-in failed. Try again.');
-    }
-  }
-
-  function handleSignOut() {
-    window.google?.accounts.id.disableAutoSelect();
-    setGoogleUser(null);
-    localStorage.removeItem(STORAGE_KEY);
-    setPlayerName('');
-    setAvatarId(AVATARS[0].id);
-  }
-
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    if (!canSubmit) return;
-    savePref({ name: playerName.trim(), avatarId });
-    onJoin(playerName.trim(), avatarId, 'regular');
-  };
 
   return (
-    <div className="lobby h-full flex flex-col items-center justify-between overflow-y-auto">
-      {/* Header */}
-      <div className="flex-shrink-0 pt-10 pb-4 px-6 text-center w-full">
-        <h1 className="text-3xl font-black tracking-wide text-[color:var(--gold-light)] drop-shadow-[0_2px_8px_rgba(0,0,0,0.7)]">
-          ♠ Poker Monkey ♣
-        </h1>
-        <p className="text-[15px] text-gray-200 mt-2 tracking-wider drop-shadow-[0_1px_4px_rgba(0,0,0,0.7)]">
-          NL Hold'em Heads-up Bananza
-        </p>
+    <div className="lobby h-full flex flex-col items-center justify-between overflow-y-auto relative">
+
+      {/* Hamburger */}
+      <div className="absolute top-2 right-2 z-50">
+        <button
+          className="w-10 h-10 rounded-lg bg-black/55 border border-white/20 text-white/90 text-lg font-bold flex items-center justify-center active:scale-95 transition-transform"
+          onClick={() => { setMenuView('main'); setMenuOpen(true); }}
+          aria-label="Menu"
+        >
+          ☰
+        </button>
       </div>
 
-      {/* Form — max width on desktop, full width on mobile */}
-      <form
-        onSubmit={handleSubmit}
-        className="flex-1 flex flex-col justify-center w-full max-w-sm px-4"
-      >
-        <div className="bg-black/55 backdrop-blur-sm rounded-2xl p-5 border border-white/10 shadow-xl">
-
-          {/* Google SSO */}
-          {googleUser ? (
-            <div className="flex items-center justify-between gap-3 bg-white/5 rounded-xl px-3 py-2 border border-white/10 mb-5">
-              <div className="flex items-center gap-2 min-w-0">
-                {googleUser.picture && (
-                  <img src={googleUser.picture} alt="" className="w-7 h-7 rounded-full flex-shrink-0" referrerPolicy="no-referrer" />
-                )}
-                <span className="text-xs text-gray-300 truncate">{googleUser.email}</span>
+      {/* Menu overlay */}
+      {menuOpen && (
+        <>
+          <div className="absolute inset-0 z-40" onClick={() => setMenuOpen(false)} />
+          <div className="absolute top-12 right-2 z-50 w-52 rounded-2xl bg-[#111] border border-white/15 shadow-2xl overflow-hidden">
+            {menuView === 'main' ? (
+              <div className="flex flex-col">
+                <button
+                  className="px-4 py-3 text-left text-sm text-white/90 hover:bg-white/10 transition-colors border-b border-white/10"
+                  onClick={() => setMenuView('settings')}
+                >
+                  ⚙️ Settings
+                </button>
+                <button
+                  className="px-4 py-3 text-left text-sm text-white/90 hover:bg-white/10 transition-colors"
+                  onClick={() => { setMenuOpen(false); onLogout?.(); }}
+                >
+                  🚪 Log Out
+                </button>
               </div>
-              <button type="button" onClick={handleSignOut} className="text-xs text-gray-400 hover:text-white flex-shrink-0 transition-colors">
-                Sign out
-              </button>
-            </div>
-          ) : (
-            <div className="flex flex-col items-center mb-5">
-              <div ref={btnRef} />
-              {authError && <p className="text-red-400 text-xs mt-2">{authError}</p>}
-            </div>
-          )}
-
-          {/* Divider */}
-          <div className="flex items-center gap-3 mb-5">
-            <div className="flex-1 h-px bg-white/15" />
-            <span className="text-xs text-white/40 whitespace-nowrap">
-              {googleUser ? 'or update below' : 'or play as a guest'}
-            </span>
-            <div className="flex-1 h-px bg-white/15" />
+            ) : (
+              <div className="flex flex-col">
+                <div className="flex items-center gap-2 px-4 py-3 border-b border-white/10">
+                  <button onClick={() => setMenuView('main')} className="text-white/50 hover:text-white text-xs">←</button>
+                  <span className="text-sm font-semibold text-white/90">Settings</span>
+                </div>
+                <div className="px-4 py-3">
+                  <p className="text-xs uppercase tracking-widest text-white/40 mb-2">Avatar</p>
+                  <div className="flex flex-wrap gap-2">
+                    {AVATARS.map(av => (
+                      <button
+                        key={av.id}
+                        onClick={() => handleAvatarChange(av.id)}
+                        aria-label={av.label}
+                        className={`w-10 h-10 rounded-full flex items-center justify-center text-xl border-2 transition-all bg-black/40 ${localAvatarId === av.id ? 'border-[color:var(--gold)]' : 'border-white/20'}`}
+                      >
+                        {av.emoji}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
+        </>
+      )}
 
-          {/* Name */}
-          <label className="block text-xs uppercase tracking-widest text-gray-300 mb-2 font-semibold">
-            Your Name
-          </label>
-          <input
-            type="text"
-            placeholder="Enter your name"
-            value={playerName}
-            onChange={e => setPlayerName(e.target.value)}
-            maxLength={20}
-            autoFocus={!googleUser}
-            className="w-full h-12 px-4 text-base rounded-xl bg-white/10 text-white placeholder-white/40 border border-white/15 focus:border-[color:var(--gold)] outline-none"
-          />
+      <div className="flex-shrink-0 pt-10 pb-4 px-6 text-center w-full">
+        <h1 className="text-3xl font-black tracking-wide text-[color:var(--gold-light)]">
+          ♠ Poker Monkey ♣
+        </h1>
+        <p className="text-sm text-white/50 mt-1">Welcome, {playerName}</p>
+      </div>
 
-          {/* Avatar */}
-          <label className="block text-xs uppercase tracking-widest text-gray-300 mt-5 mb-3 font-semibold">
-            Choose Your Avatar
-          </label>
-          <div className="flex flex-wrap gap-3 justify-center">
-            {AVATARS.map(av => (
-              <button
-                key={av.id}
-                type="button"
-                onClick={() => setAvatarId(av.id)}
-                aria-label={av.label}
-                aria-pressed={avatarId === av.id}
-                className={`w-14 h-14 rounded-full flex items-center justify-center text-3xl border-[3px] transition-all duration-200 bg-black/40 ${
-                  avatarId === av.id
-                    ? 'border-[color:var(--gold)] shadow-[0_0_14px_rgba(212,160,23,0.6)]'
-                    : 'border-white/20 active:scale-95'
-                }`}
-              >
-                {av.emoji}
-              </button>
-            ))}
-          </div>
-        </div>
+      <div className="flex-1 flex flex-col justify-center w-full max-w-sm px-4 gap-4">
+
+        {/* Active seat banners */}
+        {activeSeats.map(seat => (
+          <button
+            key={seat.tableId}
+            onClick={() => onRejoin?.(seat.tableId)}
+            className="w-full rounded-2xl p-4 text-center font-extrabold text-base text-black active:scale-[0.98] transition-all shadow-[0_0_20px_rgba(212,160,23,0.4)]"
+            style={{ background: 'linear-gradient(135deg, var(--gold-light), var(--gold))' }}
+          >
+            ♠ TAKE YOUR SEAT — {seat.tableName} ♠
+          </button>
+        ))}
 
         {error && (
-          <div className="mt-3 text-center bg-red-500/25 border border-red-500/45 text-red-300 px-4 py-3 rounded-xl text-sm">
+          <div className="text-center bg-red-500/25 border border-red-500/45 text-red-300 px-4 py-3 rounded-xl text-sm">
             {error}
           </div>
         )}
 
-        {/* CTA */}
-        <div className="mt-4 pb-[max(28px,env(safe-area-inset-bottom))] flex flex-col gap-2">
-          <p className="text-center text-white/25 text-xs">{VERSION}</p>
+        <p className="text-xs uppercase tracking-widest text-white/40 text-center font-semibold">Choose a Table</p>
+
+        {tables.map(t => (
           <button
-            type="submit"
-            disabled={!canSubmit}
-            className="w-full h-14 rounded-2xl text-black font-extrabold text-lg tracking-wide shadow-[0_6px_16px_rgba(0,0,0,0.45)] transition-all duration-150 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed"
-            style={{ background: 'linear-gradient(135deg, var(--gold), #b8860b)' }}
+            key={t.id}
+            onClick={() => onJoinTable(t.id)}
+            className="w-full rounded-2xl bg-black/55 border border-white/10 p-5 text-left active:scale-[0.98] transition-all hover:border-white/25 hover:bg-black/70"
           >
-            Take a Seat
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-3">
+                <span className="text-4xl">{TABLE_EMOJI[t.name] || '🎰'}</span>
+                <div>
+                  <div className="text-lg font-black text-white">{t.name}</div>
+                  <div className="text-xs text-white/40">No Limit Hold'em</div>
+                </div>
+              </div>
+              <div className="text-right">
+                <div className="text-xl font-bold text-[color:var(--gold-light)]">{t.playerCount}</div>
+                <div className="text-[10px] text-white/40">players</div>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className={`w-2 h-2 rounded-full ${t.phase === 'waiting' ? 'bg-yellow-400' : 'bg-green-400'}`} />
+              <span className="text-xs text-white/50">{t.phase === 'waiting' ? 'Waiting for players' : 'Hand in progress'}</span>
+            </div>
           </button>
-        </div>
-      </form>
+        ))}
+      </div>
+
+      <div className="pb-[max(28px,env(safe-area-inset-bottom))] pt-4" />
     </div>
   );
 }

@@ -15,7 +15,7 @@ function patchSaved(patch) {
 }
 
 const TURN_DURATION_MS = 20000;
-const VERSION = 'v1.01';
+const VERSION = 'v1.03';
 
 /* Currency visual — set to 'chips' to revert. */
 const CURRENCY = 'bananas';
@@ -111,9 +111,22 @@ function BetChip({ player }) {
   );
 }
 
-function SeatView({ player, isMe, turnDeadline, lastAction, win, winFlightDone, displayChips, deckStyle }) {
+// Renders the action flash label on the felt for a single player.
+// Lives in its own component so useActionFlash can be called legally inside a map.
+function ActionOnFelt({ player, lastAction, posStyle }) {
+  const label = useActionFlash(player, lastAction);
+  if (!label || !posStyle) return null;
+  return (
+    <div className="absolute z-30 pointer-events-none" style={{ position: 'absolute', ...posStyle }}>
+      <div className="text-[10px] font-bold text-white bg-black/75 border border-white/20 rounded-lg px-2 py-0.5 whitespace-nowrap shadow">
+        {label}
+      </div>
+    </div>
+  );
+}
+
+function SeatView({ player, isMe, turnDeadline, win, winFlightDone, displayChips, deckStyle }) {
   const timeLeft = useCountdown(turnDeadline);
-  const actionLabel = useActionFlash(player, lastAction);
   if (!player) return null;
 
   const showWinLabel = win && !winFlightDone;
@@ -149,7 +162,7 @@ function SeatView({ player, isMe, turnDeadline, lastAction, win, winFlightDone, 
             {player.isBigBlind   && <span className="ml-0.5 text-[8px] bg-purple-500/70 px-0.5 rounded">BB</span>}
           </div>
           <div className="text-[10px] font-bold text-[color:var(--gold-light)] leading-tight">
-            {showWinLabel ? 'Winner!' : (actionLabel || (displayChips ?? player.chips).toLocaleString())}
+            {showWinLabel ? 'Winner!' : (displayChips ?? player.chips).toLocaleString()}
           </div>
         </div>
         {showCountdown && (
@@ -162,7 +175,7 @@ function SeatView({ player, isMe, turnDeadline, lastAction, win, winFlightDone, 
   );
 }
 
-export default function GameTable({ gameState, myId, onAction, onLeave, onRematchVote, onSetBots, deckStyle = 'regular' }) {
+export default function GameTable({ gameState, myId, onAction, onLeave, onLogout, onRematchVote, onAddBot, onRemoveBot, deckStyle = 'regular' }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuView, setMenuView] = useState('main');
   const [localDeckStyle, setLocalDeckStyle] = useState(() => loadSaved().deckStyle || deckStyle);
@@ -176,11 +189,6 @@ export default function GameTable({ gameState, myId, onAction, onLeave, onRematc
   function handleAvatarChange(id) {
     setLocalAvatarId(id);
     patchSaved({ avatarId: id });
-  }
-  function handleLogout() {
-    window.google?.accounts.id.disableAutoSelect();
-    localStorage.removeItem('poker_user');
-    onLeave();
   }
   function openMenu() { setMenuView('main'); setMenuOpen(true); }
   function openHistory() {
@@ -378,9 +386,27 @@ export default function GameTable({ gameState, myId, onAction, onLeave, onRematc
                 </button>
                 <button
                   className="px-4 py-3 text-left text-sm text-white/90 hover:bg-white/10 transition-colors border-b border-white/10"
-                  onClick={() => { setMenuOpen(false); handleLogout(); }}
+                  onClick={() => { setMenuOpen(false); onLeave(); }}
+                >
+                  🪑 Leave Table
+                </button>
+                <button
+                  className="px-4 py-3 text-left text-sm text-white/90 hover:bg-white/10 transition-colors border-b border-white/10"
+                  onClick={() => { setMenuOpen(false); onLogout?.(); }}
                 >
                   🚪 Log Out
+                </button>
+                <button
+                  className="px-4 py-3 text-left text-sm text-white/90 hover:bg-white/10 transition-colors border-b border-white/10"
+                  onClick={() => { setMenuOpen(false); onAddBot?.(); }}
+                >
+                  🤖 Add Bot
+                </button>
+                <button
+                  className="px-4 py-3 text-left text-sm text-white/90 hover:bg-white/10 transition-colors border-b border-white/10"
+                  onClick={() => { setMenuOpen(false); onRemoveBot?.(); }}
+                >
+                  ➖ Remove Bot
                 </button>
                 <button
                   className="px-4 py-3 text-left text-sm text-red-400 hover:bg-white/10 transition-colors"
@@ -410,15 +436,6 @@ export default function GameTable({ gameState, myId, onAction, onLeave, onRematc
                     ))}
                   </div>
                 </div>
-                <label className="flex items-center justify-between px-4 py-3 border-b border-white/10 cursor-pointer">
-                  <span className="text-sm text-white/90">Fill with Bots</span>
-                  <div
-                    onClick={() => onSetBots?.(!gameState?.botsEnabled)}
-                    className={`w-10 h-6 rounded-full transition-colors flex items-center px-1 ${gameState?.botsEnabled ? 'bg-[color:var(--gold)]' : 'bg-white/20'}`}
-                  >
-                    <div className={`w-4 h-4 rounded-full bg-white shadow transition-transform ${gameState?.botsEnabled ? 'translate-x-4' : 'translate-x-0'}`} />
-                  </div>
-                </label>
                 <label className="flex items-center justify-between px-4 py-3 cursor-pointer">
                   <span className="text-sm text-white/90">4-Color Deck</span>
                   <div
@@ -493,7 +510,6 @@ export default function GameTable({ gameState, myId, onAction, onLeave, onRematc
                     player={opp}
                     isMe={false}
                     turnDeadline={oppTurnDeadline}
-                    lastAction={gameState?.lastAction}
                     win={winnerMap[opp.id]}
                     winFlightDone={winFlightDone}
                     displayChips={chipsFor(opp)}
@@ -505,6 +521,7 @@ export default function GameTable({ gameState, myId, onAction, onLeave, onRematc
                     <BetChip player={opp} />
                   </div>
                 )}
+                <ActionOnFelt player={opp} lastAction={gameState?.lastAction} posStyle={BET_POS[posKey]} />
               </React.Fragment>
             );
           })}
@@ -516,7 +533,6 @@ export default function GameTable({ gameState, myId, onAction, onLeave, onRematc
                 player={me}
                 isMe={true}
                 turnDeadline={myTurnDeadline}
-                lastAction={gameState?.lastAction}
                 win={myWin}
                 winFlightDone={winFlightDone}
                 displayChips={chipsFor(me)}
@@ -525,12 +541,13 @@ export default function GameTable({ gameState, myId, onAction, onLeave, onRematc
             </div>
           )}
 
-          {/* My bet chip on the felt */}
+          {/* My bet chip + action label on the felt */}
           {me && (
             <div className="absolute z-10" style={{ position: 'absolute', ...BET_POS['bottom'] }}>
               <BetChip player={me} />
             </div>
           )}
+          <ActionOnFelt player={me} lastAction={gameState?.lastAction} posStyle={BET_POS['bottom']} />
         </div>
       </div>
 
