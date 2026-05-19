@@ -50,6 +50,45 @@ function CurrencyStack({ amount, size = 22 }) {
     : <ChipStack amount={amount} size={size} />;
 }
 
+function NameEditor() {
+  const [name, setName] = React.useState(() => loadSaved().name || '');
+  const [saved, setSaved] = React.useState(true);
+
+  function handleChange(e) {
+    setName(e.target.value);
+    setSaved(false);
+  }
+
+  function handleSave() {
+    const trimmed = name.trim().slice(0, 20);
+    if (!trimmed) return;
+    setName(trimmed);
+    patchSaved({ name: trimmed });
+    setSaved(true);
+  }
+
+  return (
+    <div className="flex gap-2 items-center">
+      <input
+        type="text"
+        value={name}
+        onChange={handleChange}
+        onBlur={handleSave}
+        maxLength={20}
+        className="flex-1 h-8 px-2 text-xs rounded-lg bg-white/10 text-white border border-white/15 focus:border-[color:var(--gold)] outline-none"
+      />
+      {!saved && (
+        <button
+          onClick={handleSave}
+          className="text-[10px] font-bold text-[color:var(--gold)] px-2 py-1 rounded bg-white/10"
+        >
+          Save
+        </button>
+      )}
+    </div>
+  );
+}
+
 function useCountdown(deadline) {
   const [timeLeft, setTimeLeft] = useState(null);
   useEffect(() => {
@@ -422,14 +461,18 @@ export default function GameTable({ gameState, myId, onAction, onLeave, onLogout
                   <span className="text-sm font-semibold text-white/90">Settings</span>
                 </div>
                 <div className="px-4 py-3 border-b border-white/10">
+                  <p className="text-xs uppercase tracking-widest text-white/40 mb-2">Name</p>
+                  <NameEditor />
+                </div>
+                <div className="px-4 py-3 border-b border-white/10">
                   <p className="text-xs uppercase tracking-widest text-white/40 mb-2">Avatar</p>
-                  <div className="flex gap-3">
+                  <div className="flex flex-wrap gap-2">
                     {AVATARS.map(av => (
                       <button
                         key={av.id}
                         onClick={() => handleAvatarChange(av.id)}
                         aria-label={av.label}
-                        className={`w-12 h-12 rounded-full flex items-center justify-center text-2xl border-2 transition-all bg-black/40 ${localAvatarId === av.id ? 'border-[color:var(--gold)]' : 'border-white/20'}`}
+                        className={`w-10 h-10 rounded-full flex items-center justify-center text-xl border-2 transition-all bg-black/40 ${localAvatarId === av.id ? 'border-[color:var(--gold)]' : 'border-white/20'}`}
                       >
                         {av.emoji}
                       </button>
