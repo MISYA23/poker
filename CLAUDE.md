@@ -1,7 +1,9 @@
 # Poker — Claude Context
 
 ## What this is
-Multiplayer Texas Hold'em heads-up (2 players per table, multi-table). Real-time via Socket.IO. Google SSO for identity — preferences (name, avatar, deck style) persisted in localStorage.
+Multiplayer Texas Hold'em, up to 6 players per table. Bots fill empty seats. Real-time via Socket.IO. Google SSO for identity. Full action log persisted to Postgres — every hand, every action, sequential table/hand numbers.
+
+**Branches:** `main` = heads-up image-avatar version. `generic` = 6-player emoji-avatar version with bots + DB (this branch).
 
 **Live:** https://poker-production-d726.up.railway.app  
 **Repo:** https://github.com/briandanilo/poker.git
@@ -9,25 +11,27 @@ Multiplayer Texas Hold'em heads-up (2 players per table, multi-table). Real-time
 ---
 
 ## Stack
-- **Server:** Node/Express + Socket.IO (`server/index.js`) + google-auth-library
+- **Server:** Node/Express + Socket.IO (`server/index.js`) + google-auth-library + pg
 - **Client:** React + Vite + Tailwind CSS (`client/src/`)
-- **Auth:** Google Identity Services (GSI) — token verified server-side at `POST /auth/google`. Preferences (name, avatar, deck) saved to localStorage under key `poker_user`.
+- **Auth:** Google Identity Services (GSI) — token verified server-side at `POST /auth/google`. Preferences saved to localStorage under key `poker_user`.
+- **DB:** Railway Postgres — `server/db.js` owns schema + all queries. Runs `migrate()` on startup (idempotent).
 - **Deploy:** Railway — auto-deploys on every push to `main`
 
 ## Env vars (never commit)
-- `server/.env` → `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`
+- `server/.env` → `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `DATABASE_URL`
 - `client/.env` → `VITE_GOOGLE_CLIENT_ID`
-- On Railway: add `GOOGLE_CLIENT_ID` to the service env vars dashboard
+- Railway service vars: `GOOGLE_CLIENT_ID`, `VITE_GOOGLE_CLIENT_ID`, `DATABASE_URL` (auto-injected by Postgres plugin)
+
+## Dev ports
+- Run `npm run dev` from root — `dev.js` picks two random free ports and prints them.
+- Do NOT hardcode ports; `dev.js` handles it.
 
 ---
 
-## Dev ports
-- Client (Vite): **5843** — `cd client && npm run dev`
-- Server (Express): **3843** — `cd server && npm run dev`
-
-Open http://localhost:5843. Vite proxies `/socket.io` to 3843.
-
-Start both: `npm start` from root (uses concurrently).
+## Starting dev servers
+```bash
+npm run dev   # from repo root — dev.js picks random free ports, prints client URL
+```
 
 ---
 
