@@ -11,14 +11,36 @@ function patchSaved(patch) {
   localStorage.setItem('poker_user', JSON.stringify({ ...loadSaved(), ...patch }));
 }
 
+function saveProfileToDb(patch) {
+  const playerId = loadSaved().playerId;
+  if (!playerId) return;
+  fetch('/api/player/profile', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ playerId, ...patch }),
+  }).catch(() => {});
+}
+
 export default function Lobby({ playerName, tables = [], activeSeats = [], onJoinTable, onRejoin, onLogout, error }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuView, setMenuView] = useState('main');
   const [localAvatarId, setLocalAvatarId] = useState(() => loadSaved().avatarId || AVATARS[0].id);
+  const [localName, setLocalName] = useState(() => loadSaved().name || playerName || '');
+  const [nameSaved, setNameSaved] = useState(true);
 
   function handleAvatarChange(id) {
     setLocalAvatarId(id);
     patchSaved({ avatarId: id });
+    saveProfileToDb({ avatarId: id });
+  }
+
+  function handleNameSave() {
+    const trimmed = localName.trim().slice(0, 20);
+    if (!trimmed) return;
+    setLocalName(trimmed);
+    patchSaved({ name: trimmed });
+    saveProfileToDb({ name: trimmed });
+    setNameSaved(true);
   }
 
   return (
@@ -60,6 +82,22 @@ export default function Lobby({ playerName, tables = [], activeSeats = [], onJoi
                 <div className="flex items-center gap-2 px-4 py-3 border-b border-white/10">
                   <button onClick={() => setMenuView('main')} className="text-white/50 hover:text-white text-xs">←</button>
                   <span className="text-sm font-semibold text-white/90">Settings</span>
+                </div>
+                <div className="px-4 py-3 border-b border-white/10">
+                  <p className="text-xs uppercase tracking-widest text-white/40 mb-2">Name</p>
+                  <div className="flex gap-2 items-center">
+                    <input
+                      type="text"
+                      value={localName}
+                      onChange={e => { setLocalName(e.target.value); setNameSaved(false); }}
+                      onBlur={handleNameSave}
+                      maxLength={20}
+                      className="flex-1 h-8 px-2 text-xs rounded-lg bg-white/10 text-white border border-white/15 focus:border-[color:var(--gold)] outline-none"
+                    />
+                    {!nameSaved && (
+                      <button onClick={handleNameSave} className="text-[10px] font-bold text-[color:var(--gold)] px-2 py-1 rounded bg-white/10">Save</button>
+                    )}
+                  </div>
                 </div>
                 <div className="px-4 py-3">
                   <p className="text-xs uppercase tracking-widest text-white/40 mb-2">Avatar</p>

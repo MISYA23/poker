@@ -14,6 +14,16 @@ function patchSaved(patch) {
   localStorage.setItem('poker_user', JSON.stringify({ ...loadSaved(), ...patch }));
 }
 
+function saveProfileToDb(patch) {
+  const playerId = loadSaved().playerId;
+  if (!playerId) return;
+  fetch('/api/player/profile', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ playerId, ...patch }),
+  }).catch(() => {});
+}
+
 const TURN_DURATION_MS = 20000;
 const VERSION = 'v1.03';
 
@@ -64,6 +74,7 @@ function NameEditor() {
     if (!trimmed) return;
     setName(trimmed);
     patchSaved({ name: trimmed });
+    saveProfileToDb({ name: trimmed });
     setSaved(true);
   }
 
@@ -224,10 +235,12 @@ export default function GameTable({ gameState, myId, onAction, onLeave, onLogout
     const style = on ? 'four-color' : 'regular';
     setLocalDeckStyle(style);
     patchSaved({ deckStyle: style });
+    saveProfileToDb({ deckStyle: style });
   }
   function handleAvatarChange(id) {
     setLocalAvatarId(id);
     patchSaved({ avatarId: id });
+    saveProfileToDb({ avatarId: id });
   }
   function openMenu() { setMenuView('main'); setMenuOpen(true); }
   function openHistory() {

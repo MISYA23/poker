@@ -14,8 +14,11 @@ async function migrate() {
       google_sub   TEXT UNIQUE,
       display_name TEXT,
       avatar_id    TEXT,
+      deck_style   TEXT NOT NULL DEFAULT 'regular',
       created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
+
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS deck_style TEXT NOT NULL DEFAULT 'regular';
 
     CREATE TABLE IF NOT EXISTS tables (
       id        SERIAL PRIMARY KEY,
@@ -70,15 +73,48 @@ async function migrate() {
 
 async function findOrCreateUser(googleSub, { name, avatarId } = {}) {
   const { rows } = await pool.query(
-    `SELECT id FROM users WHERE google_sub = $1`, [googleSub]
+    `SELECT id, display_name, avatar_id, deck_style FROM users WHERE google_sub = $1`,
+    [googleSub]
   );
-  if (rows.length) return rows[0].id;
+  if (rows.length) {
+    // Return stored profile — DB is source of truth
+    return {
+      id: rows[0].id,
+      name: rows[0].display_name,
+      avatarId: rows[0].avatar_id,
+      deckStyle: rows[0].deck_style || 'regular',
+    };
+  }
+  // First time — create with Google-provided name
   const id = randomUUID();
   await pool.query(
     `INSERT INTO users (id, google_sub, display_name, avatar_id) VALUES ($1, $2, $3, $4)`,
     [id, googleSub, name || null, avatarId || null]
   );
-  return id;
+  return { id, name: name || null, avatarId: avatarId || null, deckStyle: 'regular' };
+}
+
+async function upsertGuestUser(playerId, { name, avatarId }) {
+  await pool.query(
+    `INSERT INTO users (id, display_name, avatar_id)
+     VALUES ($1, $2, $3)
+     ON CONFLICT (id) DO UPDATE
+       SET display_name = EXCLUDED.display_name,
+           avatar_id    = EXCLUDED.avatar_id`,
+    [playerId, name || null, avatarId || null]
+  );
+}
+
+async function updateUserProfile(playerId, { name, avatarId, deckStyle }) {
+  const sets = [];
+  const vals = [];
+  let i = 1;
+  if (name      !== undefined) { sets.push(`display_name = $${i++}`); vals.push(name); }
+  if (avatarId  !== undefined) { sets.push(`avatar_id    = $${i++}`); vals.push(avatarId); }
+  if (deckStyle !== undefined) { sets.push(`deck_style   = $${i++}`); vals.push(deckStyle); }
+  if (!sets.length) return;
+  vals.push(playerId);
+  await pool.query(`UPDATE users SET ${sets.join(', ')} WHERE id = $${i}`, vals);
 }
 
 // ── Tables ────────────────────────────────────────────────────────────────────
@@ -98,11 +134,11 @@ async function completeTable(uuid) {
 
 // ── Players ───────────────────────────────────────────────────────────────────
 
-async function addPlayer(tableId, { googleSub, name, avatarId, startingChips }) {
+async function addPlayer(tableId, { name, avatarId, startingChips }) {
   const { rows } = await pool.query(
-    `INSERT INTO players (table_id, google_sub, display_name, avatar_id, starting_chips)
-     VALUES ($1, $2, $3, $4, $5) RETURNING id`,
-    [tableId, googleSub || null, name, avatarId || null, startingChips]
+    `INSERT INTO players (table_id, display_name, avatar_id, starting_chips)
+     VALUES ($1, $2, $3, $4) RETURNING id`,
+    [tableId, name, avatarId || null, startingChips]
   );
   return rows[0].id;
 }
@@ -136,15 +172,15 @@ async function completeHand(handId, { pot, communityCards, winnerName, winningHa
 // ── Actions ───────────────────────────────────────────────────────────────────
 
 async function logAction(tableId, handId, seq, {
-  playerName, googleSub, actionType, amount, phase, metadata,
+  playerName, actionType, amount, phase, metadata,
 }) {
   await pool.query(
     `INSERT INTO actions
-       (table_id, hand_id, player_name, google_sub, action_type, amount, phase, sequence_number, metadata)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+       (table_id, hand_id, player_name, action_type, amount, phase, sequence_number, metadata)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
     [
       tableId, handId,
-      playerName || null, googleSub || null,
+      playerName || null,
       actionType, amount || null, phase || null,
       seq,
       metadata ? JSON.stringify(metadata) : null,
@@ -165,11 +201,18 @@ async function getHandsForTable(tableId) {
 
 async function getActionsForHand(handId) {
   const { rows } = await pool.query(
-    `SELECT id, sequence_number, action_type, player_name, google_sub, amount, phase, timestamp, metadata
+    `SELECT id, sequence_number, action_type, player_name, amount, phase, timestamp, metadata
      FROM actions WHERE hand_id = $1 ORDER BY sequence_number ASC`,
     [handId]
   );
   return rows;
 }
 
-module.exports = { migrate, findOrCreateUser, createTable, completeTable, addPlayer, updatePlayerFinal, startHand, completeHand, logAction, getHandsForTable, getActionsForHand };
+module.exports = {
+  migrate,
+  findOrCreateUser, upsertGuestUser, updateUserProfile,
+  createTable, completeTable,
+  addPlayer, updatePlayerFinal,
+  startHand, completeHand, logAction,
+  getHandsForTable, getActionsForHand,
+};

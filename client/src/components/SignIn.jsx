@@ -76,12 +76,14 @@ export default function SignIn({ onReady, error }) {
       });
       if (!res.ok) throw new Error();
       const user = await res.json();
-      const name = user.name?.split(' ')[0] || user.name || '';
-      const av = loadSaved()?.avatarId || AVATARS[0].id;
-      // Save permanent playerId from DB alongside Google profile
-      savePref({ playerId: user.playerId, sub: user.sub, email: user.email, googleName: user.name, picture: user.picture, name, avatarId: av });
+      // DB is source of truth for name/avatar; fall back to Google name for first-timers
+      const name = user.name || user.name?.split(' ')[0] || '';
+      const av = user.avatarId || loadSaved()?.avatarId || AVATARS[0].id;
+      const deckStyle = user.deckStyle || 'regular';
+      savePref({ playerId: user.playerId, sub: user.sub, email: user.email, picture: user.picture, name, avatarId: av, deckStyle });
       setGoogleUser(user);
       setPlayerName(name);
+      setAvatarId(av);
       onReady(name, av);
     } catch {
       setAuthError('Sign-in failed. Try again.');
@@ -96,11 +98,19 @@ export default function SignIn({ onReady, error }) {
     setAvatarId(AVATARS[0].id);
   }
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (!canSubmit) return;
-    savePref({ name: playerName.trim(), avatarId });
-    onReady(playerName.trim(), avatarId);
+    const name = playerName.trim();
+    savePref({ name, avatarId });
+    const playerId = ensurePlayerId();
+    // Persist guest profile to DB (fire and forget — don't block join)
+    fetch('/api/player/guest', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ playerId, name, avatarId }),
+    }).catch(() => {});
+    onReady(name, avatarId);
   };
 
   return (

@@ -559,12 +559,32 @@ app.post('/auth/google', async (req, res) => {
       idToken: token,
       audience: process.env.GOOGLE_CLIENT_ID,
     });
-    const { sub, email, name, picture } = ticket.getPayload();
-    const playerId = await db.findOrCreateUser(sub, { name });
-    res.json({ playerId, sub, email, name, picture });
+    const { sub, email, name: googleName, picture } = ticket.getPayload();
+    const user = await db.findOrCreateUser(sub, { name: googleName?.split(' ')[0] || googleName });
+    res.json({ playerId: user.id, sub, email, name: user.name, avatarId: user.avatarId, deckStyle: user.deckStyle, picture });
   } catch (err) {
     res.status(401).json({ error: 'Invalid token' });
   }
+});
+
+// Create / update guest player profile
+app.post('/api/player/guest', async (req, res) => {
+  try {
+    const { playerId, name, avatarId } = req.body;
+    if (!playerId || !name) return res.status(400).json({ error: 'Missing fields' });
+    await db.upsertGuestUser(playerId, { name, avatarId });
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Update any player's profile (name, avatar, deckStyle)
+app.put('/api/player/profile', async (req, res) => {
+  try {
+    const { playerId, name, avatarId, deckStyle } = req.body;
+    if (!playerId) return res.status(400).json({ error: 'Missing playerId' });
+    await db.updateUserProfile(playerId, { name, avatarId, deckStyle });
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 app.get('/api/table/:tableId/hands', async (req, res) => {
