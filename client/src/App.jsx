@@ -105,6 +105,7 @@ export default function App() {
 
   const handleAddBot = useCallback(() => emit('add-bot'), [emit]);
   const handleRemoveBot = useCallback(() => emit('remove-bot'), [emit]);
+  const handleSetTimers = useCallback((enabled) => emit('set-timers', { enabled }), [emit]);
 
   const handleLeave = useCallback(() => {
     emit('leave-table');
@@ -158,6 +159,7 @@ export default function App() {
       onRematchVote={handleRematchVote}
       onAddBot={handleAddBot}
       onRemoveBot={handleRemoveBot}
+      onSetTimers={handleSetTimers}
       deckStyle={deckStyle}
     />
   );

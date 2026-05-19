@@ -25,7 +25,7 @@ function saveProfileToDb(patch) {
 }
 
 const TURN_DURATION_MS = 20000;
-const VERSION = 'v1.03';
+const VERSION = 'v1.04';
 
 /* Currency visual — set to 'chips' to revert. */
 const CURRENCY = 'bananas';
@@ -225,7 +225,7 @@ function SeatView({ player, isMe, turnDeadline, win, winFlightDone, displayChips
   );
 }
 
-export default function GameTable({ gameState, myId, onAction, onLeave, onLogout, onRematchVote, onAddBot, onRemoveBot, deckStyle = 'regular' }) {
+export default function GameTable({ gameState, myId, onAction, onLeave, onLogout, onRematchVote, onAddBot, onRemoveBot, onSetTimers, deckStyle = 'regular' }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuView, setMenuView] = useState('main');
   const [localDeckStyle, setLocalDeckStyle] = useState(() => loadSaved().deckStyle || deckStyle);
@@ -444,12 +444,6 @@ export default function GameTable({ gameState, myId, onAction, onLeave, onLogout
                 </button>
                 <button
                   className="px-4 py-3 text-left text-sm text-white/90 hover:bg-white/10 transition-colors border-b border-white/10"
-                  onClick={() => { setMenuOpen(false); onLogout?.(); }}
-                >
-                  🚪 Log Out
-                </button>
-                <button
-                  className="px-4 py-3 text-left text-sm text-white/90 hover:bg-white/10 transition-colors border-b border-white/10"
                   onClick={() => { setMenuOpen(false); onAddBot?.(); }}
                 >
                   🤖 Add Bot
@@ -492,7 +486,7 @@ export default function GameTable({ gameState, myId, onAction, onLeave, onLogout
                     ))}
                   </div>
                 </div>
-                <label className="flex items-center justify-between px-4 py-3 cursor-pointer">
+                <label className="flex items-center justify-between px-4 py-3 border-b border-white/10 cursor-pointer">
                   <span className="text-sm text-white/90">4-Color Deck</span>
                   <div
                     onClick={() => handleDeckToggle(localDeckStyle !== 'four-color')}
@@ -501,6 +495,21 @@ export default function GameTable({ gameState, myId, onAction, onLeave, onLogout
                     <div className={`w-4 h-4 rounded-full bg-white shadow transition-transform ${localDeckStyle === 'four-color' ? 'translate-x-4' : 'translate-x-0'}`} />
                   </div>
                 </label>
+                <label className="flex items-center justify-between px-4 py-3 border-b border-white/10 cursor-pointer">
+                  <span className="text-sm text-white/90">Turn Timer</span>
+                  <div
+                    onClick={() => onSetTimers?.(!gameState?.timersEnabled)}
+                    className={`w-10 h-6 rounded-full transition-colors flex items-center px-1 ${gameState?.timersEnabled !== false ? 'bg-[color:var(--gold)]' : 'bg-white/20'}`}
+                  >
+                    <div className={`w-4 h-4 rounded-full bg-white shadow transition-transform ${gameState?.timersEnabled !== false ? 'translate-x-4' : 'translate-x-0'}`} />
+                  </div>
+                </label>
+                <button
+                  className="w-full px-4 py-3 text-left text-sm text-white/90 hover:bg-white/10 transition-colors"
+                  onClick={() => { setMenuOpen(false); onLogout?.(); }}
+                >
+                  🚪 Log Out
+                </button>
               </div>
             )}
           </div>

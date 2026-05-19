@@ -65,6 +65,7 @@ async function createTable(name = null) {
     botTimer: null,
     botIds: new Set(),
     botsEnabled: false,
+    timersEnabled: true,
     dbTableId: null,
     dbHandId: null,
     handNumber: 0,
@@ -273,6 +274,7 @@ function startTurnTimer(t) {
   t.turnDeadline = null;
 
   if (!pid || t.game.phase === 'waiting' || t.game.phase === 'showdown') return;
+  if (!t.timersEnabled) return;
 
   t.turnDeadline = Date.now() + TURN_SECONDS * 1000;
   t.turnTimer = setTimeout(() => {
@@ -309,6 +311,7 @@ function broadcastTableState(t) {
       tableCount: t.game.players.length,
       turnDeadline: t.turnDeadline,
       botsEnabled: t.botsEnabled,
+      timersEnabled: t.timersEnabled,
       tableNumber: t.dbTableId,
       handNumber: t.handNumber,
     });
@@ -398,9 +401,13 @@ io.on('connection', (socket) => {
     const gamePlayer = t.game.players.find(p => p.id === playerId);
     if (!gamePlayer) { socket.emit('rejoin-failed', { reason: 'Seat no longer held.' }); return; }
 
-    // Remove any stale socket mapping for this player
+    // Kick any other window that holds this seat back to the lobby
     for (const [sid, sp] of socketPlayers) {
-      if (sp.id === playerId) { socketPlayers.delete(sid); break; }
+      if (sp.id === playerId) {
+        io.to(sid).emit('reset');
+        socketPlayers.delete(sid);
+        break;
+      }
     }
 
     lobbySockets.delete(socket.id);
@@ -477,6 +484,21 @@ io.on('connection', (socket) => {
     lobbySockets.add(socket.id);
     socket.emit('lobby-state', getLobbyState());
     console.log('[server] player left table:', player.name);
+  });
+
+  socket.on('set-timers', ({ enabled }) => {
+    const player = socketPlayers.get(socket.id);
+    if (!player) return;
+    const t = tables.get(player.tableId);
+    if (!t) return;
+    t.timersEnabled = !!enabled;
+    if (!t.timersEnabled) {
+      clearTimeout(t.turnTimer);
+      t.turnTimer = null;
+      t.timerPlayerId = null;
+      t.turnDeadline = null;
+    }
+    broadcastTableState(t);
   });
 
   socket.on('add-bot', () => {
