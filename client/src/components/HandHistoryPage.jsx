@@ -223,9 +223,6 @@ export default function HandHistoryPage() {
 
       {/* Action description */}
       <div className="flex-shrink-0 text-center px-6 py-2">
-        <div className="text-white/40 text-[10px] mb-0.5">
-          {snap?.phase?.toUpperCase() || ''} · Step {actionIdx + 1} of {actions.length}
-        </div>
         <div className="text-sm font-semibold text-white">
           {describeAction(current)}
         </div>
