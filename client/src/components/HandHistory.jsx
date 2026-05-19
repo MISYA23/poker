@@ -127,13 +127,18 @@ export default function HandHistory({ tableNumber, onClose }) {
   const oppSlots = OPP_SLOTS[Math.min(opponents.length, 5)] || [];
 
   if (loading) return (
-    <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center">
-      <div className="text-white/60">Loading hand history…</div>
+    <div className="fixed inset-0 z-50 flex items-center justify-center pointer-events-none">
+      <div className="bg-[#111] border border-white/15 rounded-2xl px-6 py-4 text-white/60 text-sm pointer-events-auto">
+        Loading…
+      </div>
     </div>
   );
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/90 flex flex-col">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={onClose}>
+    <div className="bg-[#0e0e0e] border border-white/15 rounded-2xl shadow-2xl flex flex-col w-full max-w-sm"
+         style={{ maxHeight: '85vh' }}
+         onClick={e => e.stopPropagation()}>
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-white/10 flex-shrink-0">
         <div className="text-xs text-white/50">
@@ -222,6 +227,7 @@ export default function HandHistory({ tableNumber, onClose }) {
           »
         </button>
       </div>
+    </div>
     </div>
   );
 }

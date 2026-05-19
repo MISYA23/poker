@@ -4,7 +4,6 @@ import Avatar, { AVATARS } from './Avatar.jsx';
 import BettingControls from './BettingControls.jsx';
 import { ChipStack } from './PokerChip.jsx';
 import { useActionFlash } from './PlayerSeat.jsx';
-import HandHistory from './HandHistory.jsx';
 
 
 function loadSaved() {
@@ -184,7 +183,13 @@ export default function GameTable({ gameState, myId, onAction, onLeave, onRematc
     onLeave();
   }
   function openMenu() { setMenuView('main'); setMenuOpen(true); }
-  const [showHistory, setShowHistory] = useState(false);
+  function openHistory() {
+    window.open(
+      `/hand-history?table=${gameState?.tableNumber}`,
+      'handhistory',
+      'width=420,height=760,resizable=yes'
+    );
+  }
 
   const me = gameState?.players?.find(p => p.id === myId);
   const opponents = gameState?.players?.filter(p => p.id !== myId) || [];
@@ -328,19 +333,11 @@ export default function GameTable({ gameState, myId, onAction, onLeave, onRematc
 
   return (
     <div className="game-table h-full flex flex-col relative overflow-hidden">
-      {/* Hand history overlay */}
-      {showHistory && (
-        <HandHistory
-          tableNumber={gameState?.tableNumber}
-          onClose={() => setShowHistory(false)}
-        />
-      )}
-
       {/* Floating utilities */}
       <div className="absolute top-2 left-2 z-50 flex items-center gap-2">
         {gameState?.tableNumber && (
           <button
-            onClick={() => setShowHistory(true)}
+            onClick={openHistory}
             className="w-10 h-10 rounded-lg bg-black/55 border border-white/20 text-white/70 text-base flex items-center justify-center active:scale-95 transition-transform"
             aria-label="Hand history"
             title="Hand history"

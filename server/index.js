@@ -334,7 +334,7 @@ function scheduleNextHand(t, delay = 8000) {
 io.on('connection', (socket) => {
   console.log('[server] socket connected:', socket.id);
 
-  socket.on('join', async ({ playerName, avatarId, googleSub }) => {
+  socket.on('join', async ({ playerName, avatarId, googleSub, clientId }) => {
     if (socketPlayers.has(socket.id)) {
       console.log('[server] duplicate join ignored from', socket.id);
       return;
@@ -342,14 +342,30 @@ io.on('connection', (socket) => {
     console.log('[server] join from', socket.id, { playerName, avatarId });
     const name = (playerName || 'Player').trim().slice(0, 20);
     const safeAvatarId = VALID_AVATARS.includes(avatarId) ? avatarId : VALID_AVATARS[0];
-    const playerId = uuidv4();
+    const identityKey = googleSub || clientId || null;
 
+    // Reconnect: reclaim existing seat if this identity is already seated
+    if (identityKey) {
+      for (const [oldSid, sp] of socketPlayers) {
+        if (sp.identityKey === identityKey) {
+          socketPlayers.delete(oldSid);
+          socketPlayers.set(socket.id, sp);
+          const t = tables.get(sp.tableId);
+          socket.emit('joined', { playerId: sp.id, atTable: true });
+          if (t) broadcastTableState(t);
+          console.log('[server] reconnected:', sp.name, '— reclaimed seat');
+          return;
+        }
+      }
+    }
+
+    const playerId = uuidv4();
     let t = findAvailableTable();
     if (!t) t = await createTable();
 
     if (t.game.players.length >= SEAT_MAX) bumpBot(t);
 
-    socketPlayers.set(socket.id, { id: playerId, name, avatarId: safeAvatarId, tableId: t.id, googleSub: googleSub || null });
+    socketPlayers.set(socket.id, { id: playerId, name, avatarId: safeAvatarId, tableId: t.id, googleSub: googleSub || null, clientId: clientId || null, identityKey });
     t.game.addPlayer(playerId, name, safeAvatarId);
 
     if (t.dbTableId) {

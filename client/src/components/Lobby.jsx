@@ -15,7 +15,19 @@ function savePref(patch) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...prev, ...patch }));
 }
 
+function ensureClientId() {
+  const saved = loadSaved() || {};
+  if (!saved.clientId) {
+    const id = crypto.randomUUID();
+    savePref({ clientId: id });
+    return id;
+  }
+  return saved.clientId;
+}
+
 export default function Lobby({ onJoin, error }) {
+  // Ensure a persistent guest identity exists before anything else
+  ensureClientId();
   const saved = loadSaved();
   const [playerName, setPlayerName] = useState(saved?.name || '');
   const [avatarId, setAvatarId]     = useState(saved?.avatarId || null);

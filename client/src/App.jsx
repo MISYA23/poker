@@ -40,9 +40,9 @@ export default function App() {
     if (ds) setDeckStyle(ds);
     try {
       const saved = JSON.parse(localStorage.getItem('poker_user') || '{}');
-      emit('join', { playerName, avatarId, googleSub: saved.sub || null });
+      emit('join', { playerName, avatarId, googleSub: saved.sub || null, clientId: saved.clientId || null });
     } catch {
-      emit('join', { playerName, avatarId, googleSub: null });
+      emit('join', { playerName, avatarId, googleSub: null, clientId: null });
     }
   }, [emit]);
 
