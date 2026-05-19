@@ -25,7 +25,7 @@ function saveProfileToDb(patch) {
 }
 
 const TURN_DURATION_MS = 20000;
-const VERSION = 'v1.04';
+const VERSION = 'v1.05';
 
 /* Currency visual — set to 'chips' to revert. */
 const CURRENCY = 'bananas';
@@ -161,18 +161,27 @@ function BetChip({ player }) {
   );
 }
 
-// Renders the action flash label on the felt for a single player.
-// Lives in its own component so useActionFlash can be called legally inside a map.
-function ActionOnFelt({ player, lastAction, posStyle }) {
-  const label = useActionFlash(player, lastAction);
-  if (!label || !posStyle) return null;
-  return (
-    <div className="absolute z-30 pointer-events-none" style={{ position: 'absolute', ...posStyle }}>
-      <div className="text-[10px] font-bold text-white bg-black/75 border border-white/20 rounded-lg px-2 py-0.5 whitespace-nowrap shadow">
-        {label}
-      </div>
-    </div>
-  );
+function useCenterAction(lastAction) {
+  const [label, setLabel] = useState(null);
+  const seenT = useRef(null);
+  useEffect(() => {
+    if (!lastAction?.t || lastAction.t === seenT.current) return;
+    seenT.current = lastAction.t;
+    const { name, action, amount } = lastAction;
+    const fmt = n => n?.toLocaleString();
+    const text = {
+      fold:    `${name} folds`,
+      check:   `${name} checks`,
+      call:    `${name} calls ${fmt(amount)}`,
+      bet:     `${name} bets ${fmt(amount)}`,
+      raise:   `${name} raises to ${fmt(amount)}`,
+      'all-in':`${name} is all in!`,
+    }[action] ?? `${name} ${action}`;
+    setLabel(text);
+    const id = setTimeout(() => setLabel(null), 3000);
+    return () => clearTimeout(id);
+  }, [lastAction?.t]);
+  return label;
 }
 
 function SeatView({ player, isMe, turnDeadline, win, winFlightDone, displayChips, deckStyle }) {
@@ -383,6 +392,8 @@ export default function GameTable({ gameState, myId, onAction, onLeave, onLogout
     ? (preShowdownSnapshot.chips[p?.id] ?? p?.chips ?? 0)
     : (p?.chips ?? 0);
 
+  const centerAction = useCenterAction(gameState?.lastAction);
+
   // Game-over modal data
   const isGameOver = gameState?.gameOver === true;
   const myVote = gameState?.myVote;
@@ -549,6 +560,9 @@ export default function GameTable({ gameState, myId, onAction, onLeave, onLogout
             <div className="hand-name-display text-[11px] whitespace-nowrap" style={{ minHeight: 12 }}>
               {showdownHandDisplay || ' '}
             </div>
+            <p className="text-white/55 text-[11px] whitespace-nowrap italic" style={{ minHeight: 14 }}>
+              {centerAction || ' '}
+            </p>
             <p className="text-white/30 text-[9px] whitespace-nowrap">
               {[
                 gameState?.tableNumber ? `T${gameState.tableNumber}` : null,
@@ -586,7 +600,6 @@ export default function GameTable({ gameState, myId, onAction, onLeave, onLogout
                     <BetChip player={opp} />
                   </div>
                 )}
-                <ActionOnFelt player={opp} lastAction={gameState?.lastAction} posStyle={BET_POS[posKey]} />
               </React.Fragment>
             );
           })}
@@ -612,7 +625,6 @@ export default function GameTable({ gameState, myId, onAction, onLeave, onLogout
               <BetChip player={me} />
             </div>
           )}
-          <ActionOnFelt player={me} lastAction={gameState?.lastAction} posStyle={BET_POS['bottom']} />
         </div>
       </div>
 

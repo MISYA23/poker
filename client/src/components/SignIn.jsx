@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { AVATARS } from './Avatar.jsx';
 
-const VERSION = 'v1.04';
+const VERSION = 'v1.05';
 const STORAGE_KEY = 'poker_user';
 
 function loadSaved() {
