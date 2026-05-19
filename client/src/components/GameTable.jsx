@@ -441,6 +441,13 @@ export default function GameTable({ gameState, myId, onAction, onLeave, onRematc
             <div className="hand-name-display text-[11px] whitespace-nowrap" style={{ minHeight: 12 }}>
               {showdownHandDisplay || ' '}
             </div>
+            <p className="text-white/30 text-[9px] whitespace-nowrap">
+              {[
+                gameState?.tableNumber ? `T${gameState.tableNumber}` : null,
+                gameState?.handNumber  ? `H${gameState.handNumber}`  : null,
+                VERSION,
+              ].filter(Boolean).join(' · ')}
+            </p>
           </div>
 
           {/* Opponent seats — dynamic positions */}
@@ -554,13 +561,6 @@ export default function GameTable({ gameState, myId, onAction, onLeave, onRematc
         className="flex-shrink-0 relative px-3 pt-2 bg-black/55 border-t border-white/10"
         style={{ paddingBottom: 'max(12px, env(safe-area-inset-bottom))' }}
       >
-        <p className="text-center text-white/20 text-[10px] mb-1">
-          {gameState?.tableNumber ? `Table #${gameState.tableNumber}` : '—'}
-          {' · '}
-          {gameState?.handNumber ? `Hand #${gameState.handNumber}` : '—'}
-          {' · '}
-          {VERSION}
-        </p>
         <div
           className="flex items-center gap-3 mb-2"
           style={{ visibility: canRaise ? 'visible' : 'hidden' }}
