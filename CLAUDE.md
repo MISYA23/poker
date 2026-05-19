@@ -1,71 +1,74 @@
 # Poker — Claude Context
 
 ## What this is
-Multiplayer Texas Hold'em, up to 6 players per table. Bots fill empty seats. Real-time via Socket.IO. Google SSO for identity. Full action log persisted to Postgres — every hand, every action, sequential table/hand numbers.
+Multiplayer Texas Hold'em, up to 9 players per table (mix of real + bots). Three named permanent tables: California, Paris, Dublin. Real-time via Socket.IO. Google SSO or guest identity (clientId in localStorage). Full action log persisted to Postgres.
 
-**Branches:** `main` = heads-up image-avatar version. `generic` = 6-player emoji-avatar version with bots + DB (this branch).
-
+**Branches:** `generic` = active development branch (multi-table, emoji avatars, bots, lobby)  
 **Live:** https://poker-production-d726.up.railway.app  
-**Repo:** https://github.com/briandanilo/poker.git
+**Repo:** https://github.com/briandanilo/poker.git  
+**Current version:** v1.04
+
+---
+
+## Deploy rules
+- **After every user command:** commit changes + push to `generic` branch on GitHub
+- **To push to prod:** `git push origin generic:main` (do NOT merge locally — just push the ref)
+- **Never merge generic → main locally** unless user explicitly says "merge"
+- Railway auto-deploys on push to `main`
 
 ---
 
 ## Stack
 - **Server:** Node/Express + Socket.IO (`server/index.js`) + google-auth-library + pg
 - **Client:** React + Vite + Tailwind CSS (`client/src/`)
-- **Auth:** Google Identity Services (GSI) — token verified server-side at `POST /auth/google`. Preferences saved to localStorage under key `poker_user`.
-- **DB:** Railway Postgres — `server/db.js` owns schema + all queries. Runs `migrate()` on startup (idempotent).
-- **Deploy:** Railway — auto-deploys on every push to `main`
+- **Auth:** Google SSO (`googleSub`) or guest (`clientId` UUID in localStorage under `poker_user`)
+- **DB:** Railway Postgres — `server/db.js` owns schema + queries. Runs `migrate()` on startup.
+- **Deploy:** Railway — auto-deploys on push to `main`
 
 ## Env vars (never commit)
 - `server/.env` → `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `DATABASE_URL`
 - `client/.env` → `VITE_GOOGLE_CLIENT_ID`
-- Railway service vars: `GOOGLE_CLIENT_ID`, `VITE_GOOGLE_CLIENT_ID`, `DATABASE_URL` (auto-injected by Postgres plugin)
+- Railway: `GOOGLE_CLIENT_ID`, `VITE_GOOGLE_CLIENT_ID`, `DATABASE_URL`
 
 ## Dev ports
-- Run `npm run dev` from root — `dev.js` picks two random free ports and prints them.
-- Do NOT hardcode ports; `dev.js` handles it.
+- Client (Vite): **5843** — fixed in `vite.config.js`
+- Server (Express): **3843** — fixed in `server/index.js`
+- Start both: `node server/index.js &` and `cd client && npm run dev`
 
 ---
 
-## Starting dev servers
-```bash
-npm run dev   # from repo root — dev.js picks random free ports, prints client URL
+## Screen flow
 ```
-
----
-
-## Deploy rule
-**Always push to GitHub after every change.** Railway is connected to `main` and redeploys automatically. Never leave changes uncommitted.
+SignIn (name + avatar) → Lobby (table picker) → GameTable
+```
+- `SignIn.jsx` — name + avatar selection; auto-advances if localStorage has saved profile
+- `Lobby.jsx` — shows California / Paris / Dublin cards with player count + phase
+- `GameTable.jsx` — full game UI
 
 ---
 
 ## Project structure
 ```
-poker-game/
-├── CLAUDE.md               ← this file, keep updated
-├── README.md               ← human-facing short doc
-├── package.json            ← root: build + start scripts for Railway
-├── client/
-│   ├── src/
-│   │   ├── App.jsx         ← top-level state: screen, myId, gameState
-│   │   ├── App.css         ← all styles (single file)
-│   │   ├── hooks/
-│   │   │   └── useSocket.js ← singleton socket, registers handlers
-│   │   └── components/
-│   │       ├── GameTable.jsx     ← main game layout, owns raiseAmount state
-│   │       ├── BettingControls.jsx ← action buttons only (no slider)
-│   │       ├── PlayerSeat.jsx    ← opponent seat card
-│   │       ├── Card.jsx          ← playing card SVG
-│   │       ├── PokerChip.jsx     ← SVG chips ($10 red, $25 green, $100 black) + ChipStack
-│   │       ├── Lobby.jsx         ← name entry screen
-│   │       ├── WaitlistScreen.jsx
-│   │       └── WinnerDisplay.jsx ← unused (winner shown inline now)
-│   └── vite.config.js      ← port 5843, proxies /socket.io → 3843
+poker/
+├── CLAUDE.md
+├── client/src/
+│   ├── App.jsx                  ← screen state machine: signin | lobby | game
+│   ├── App.css                  ← all styles
+│   ├── hooks/useSocket.js       ← singleton socket
+│   └── components/
+│       ├── SignIn.jsx           ← name + avatar entry (was Lobby.jsx)
+│       ├── Lobby.jsx            ← table picker (California / Paris / Dublin)
+│       ├── GameTable.jsx        ← game layout + hamburger menu
+│       ├── Avatar.jsx           ← exports AVATARS (8 emojis) + Avatar component
+│       ├── BettingControls.jsx
+│       ├── Card.jsx             ← sizes: xs, sm, md, lg, xl
+│       ├── PokerChip.jsx
+│       └── PlayerSeat.jsx       ← exports useActionFlash hook
 └── server/
-    ├── index.js            ← Express + Socket.IO + all game coordination
+    ├── index.js                 ← all game coordination + Socket.IO
+    ├── db.js                    ← Postgres schema + queries
     └── game/
-        ├── PokerGame.js    ← pure game logic, no I/O
+        ├── PokerGame.js         ← pure game logic
         ├── Deck.js
         └── HandEvaluator.js
 ```
@@ -74,49 +77,64 @@ poker-game/
 
 ## Key architecture decisions
 
-**Single table:** One global `PokerGame` instance on the server. No rooms/lobbies.
+**Three permanent named tables:** California, Paris, Dublin — created on startup, never destroyed even when empty. `t.permanent = true`.
 
-**State flow:** Server owns all truth. Every action emits `game-state` to all connected sockets with a per-player view (hole cards hidden for opponents except at showdown).
+**Player identity:**
+- Google users: identified by `googleSub`
+- Guests: `clientId` UUID generated once and stored in `localStorage` under `poker_user`
+- `identityKey = googleSub || clientId` — used to reconnect/reclaim seat
 
-**Turn timer:** Server enforces a 20-second auto-fold. `turnDeadline` (Unix ms timestamp) is broadcast in every `game-state` so clients can show an accurate countdown without drift.
+**Reconnect / grace period:** On disconnect, player is held in `disconnectedPlayers` map for 15 seconds. If same identity rejoins within that window, they reclaim their seat. After 15s, `evictPlayer` removes them from the game.
 
-**Raise slider:** Vertical, positioned absolute on the right edge of `.game-table` (middle 50% of screen height, `top: 25%` to `bottom: 25%`, `z-index: 10`). `raiseAmount` state lives in `GameTable`, passed down to `BettingControls` (buttons only) and rendered as a slider alongside. The `.action-bar` has `z-index: 20` to stay above the slider — without this the slider overlay eats clicks on the All In / Raise buttons.
+**Duplicate window handling:** On `rejoin`, the old socket gets `io.to(oldSid).emit('reset')` so it returns to lobby rather than staying frozen.
 
-**Winner display:** No overlay. During showdown, chips appear on the winner's seat with hand name. Next hand starts automatically after 3s.
+**Bots:** Per-table, off by default. `Add Bot` / `Remove Bot` in hamburger menu add/remove one bot at a time. Bots fold 80% when facing a bet, otherwise check or occasionally raise minimum.
 
-**Pot chips:** `ChipStack` component breaks any amount into $100/$25/$10 chips and renders them as SVG. Shown in pot center and on player bets.
+**Seat max:** 9 per table. Bots fill empty seats (when enabled). Real players can bump bots.
 
-**Reset:** `GET /reset` (browser URL bar) or `POST /admin/reset` (button). Clears all four timers (`turnTimer`, `autoStartTimer`, `nextHandTimer`, `timerPlayerId`), replaces the `PokerGame` instance, clears `socketPlayers` and `waitlist`, then `io.emit('reset')` sends all clients to the lobby. The button also does `window.location.href = '/'` to guarantee clean client state.
+**Turn timer:** 20 seconds, toggleable per-table via Settings in hamburger. When disabled, clears immediately.
 
----
+**State flow:** Server owns all truth. `game-state` broadcast on every action with per-player hole card visibility.
 
-## Timers — all must be cleared on reset
-| Variable | Purpose |
-|---|---|
-| `turnTimer` | Auto-folds current player after 20s |
-| `timerPlayerId` | Tracks who the turn timer is for |
-| `turnDeadline` | Unix ms timestamp broadcast to clients |
-| `autoStartTimer` | 3s delay before auto-starting a hand |
-| `nextHandTimer` | 3s delay between hands |
+**Bet chips on felt:** Rendered as separate absolutely-positioned elements at `BET_POS` coordinates, not inside nameplates.
+
+**Action labels on felt:** `ActionOnFelt` component renders flash labels (Fold/Call/Raise etc.) on the felt at `BET_POS`, not in nameplates. Chip count always visible in nameplate.
 
 ---
 
 ## Socket events
 | Event | Direction | Meaning |
 |---|---|---|
-| `join` | client→server | Player joins with `{ playerName }` |
-| `joined` | server→client | Confirms join with `{ playerId, atTable }` |
-| `game-state` | server→client | Full state update (every action) |
-| `player-action` | client→server | `{ action, amount }` — fold/check/call/raise/all-in |
-| `reset` | server→client | Wipe and go to lobby |
-| `error` | server→client | `{ message }` for invalid actions |
+| `enter-lobby` | client→server | Register as lobby watcher; server checks for active seats |
+| `join` | client→server | `{ playerName, avatarId, tableId, googleSub, clientId }` |
+| `rejoin` | client→server | `{ playerId, tableId }` — reclaim existing seat |
+| `leave-table` | client→server | Remove from game, go back to lobby |
+| `player-action` | client→server | `{ action, amount }` |
+| `add-bot` | client→server | Add one bot to current table |
+| `remove-bot` | client→server | Remove one bot from current table |
+| `set-timers` | client→server | `{ enabled }` — toggle turn timer |
+| `joined` | server→client | `{ playerId, atTable }` |
+| `game-state` | server→client | Full state update |
+| `lobby-state` | server→client | `{ tables: [{id, name, playerCount, phase}] }` |
+| `reset` | server→client | Go to sign-in screen |
+| `displaced` | server→client | Another window took your seat — go to lobby |
+
+---
+
+## Timers (all cleared on reset)
+| Variable | Purpose |
+|---|---|
+| `turnTimer` | Auto-folds current player after 20s (if timersEnabled) |
+| `timerPlayerId` | Tracks whose timer is running |
+| `turnDeadline` | Unix ms broadcast to clients for countdown |
+| `autoStartTimer` | 3s delay before starting first hand |
+| `nextHandTimer` | Delay between hands |
+| `botTimer` | Schedules bot action 0.8–1.5s after bot's turn |
 
 ---
 
 ## Railway build
-Railway runs:
 ```
-npm run build   → installs deps + vite build → client/dist
-npm start       → node server/index.js (serves client/dist as static)
+npm run build   → npm install in server/ and client/, vite build → client/dist
+npm start       → node server/index.js (serves client/dist + Socket.IO on Railway PORT)
 ```
-Single service — Express serves both the built React app and Socket.IO on the same port (Railway-injected `PORT` env var).
