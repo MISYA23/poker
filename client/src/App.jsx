@@ -66,9 +66,10 @@ export default function App() {
 
   // Called from SignIn when name+avatar confirmed
   const handleReady = useCallback((name, avatarId) => {
+    const playerId = getPlayerId();
+    if (!playerId) { setScreen('signin'); return; }
     setProfile({ name, avatarId });
     setError(null);
-    const playerId = getPlayerId();
     emit('enter-lobby', { playerId });
     setScreen('lobby');
   }, [emit]);
@@ -77,7 +78,7 @@ export default function App() {
   const handleJoinTable = useCallback((tableId) => {
     if (!profile) return;
     const playerId = getPlayerId();
-    if (!playerId) { setError('Missing player ID — try signing in again.'); return; }
+    if (!playerId) { setScreen('signin'); return; }
     emit('join', {
       playerId,
       playerName: profile.name,
@@ -89,7 +90,8 @@ export default function App() {
   // Called from Lobby when player clicks "TAKE YOUR SEAT"
   const handleRejoin = useCallback((tableId) => {
     const playerId = getPlayerId();
-    if (!playerId || !tableId) return;
+    if (!playerId) { setScreen('signin'); return; }
+    if (!tableId) return;
     emit('rejoin', { playerId, tableId });
   }, [emit]);
 
