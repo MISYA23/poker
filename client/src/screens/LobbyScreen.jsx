@@ -84,20 +84,24 @@ export default function LobbyScreen() {
       .finally(() => setGoogleLoading(false));
   }, [response]);
 
-  const handleJoin = useCallback(async () => {
-    if (!playerName.trim()) return;
-    const playerId = await getOrCreatePlayerId();
-    await setUser({ name: playerName.trim(), avatarId });
-    // Guest registration (fire and forget)
-    if (!googleUser) {
+  const handleJoin = useCallback(() => {
+    const name = playerName.trim();
+    if (!name) return;
+    // Use Google playerId if signed in, otherwise generate a guest UUID
+    getOrCreatePlayerId().then(playerId => {
+      setUser({ name, avatarId }).catch(() => {});
       fetch(`${SERVER_URL}/api/player/guest`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ playerId, name: playerName.trim(), avatarId }),
+        body: JSON.stringify({ playerId, name, avatarId }),
       }).catch(() => {});
-    }
-    onJoin(playerName.trim(), avatarId, playerId);
-  }, [playerName, avatarId, googleUser, onJoin]);
+      onJoin(name, avatarId, playerId);
+    }).catch(() => {
+      // Fallback: generate ID without AsyncStorage
+      const playerId = 'guest_' + Math.random().toString(36).slice(2) + Date.now().toString(36);
+      onJoin(name, avatarId, playerId);
+    });
+  }, [playerName, avatarId, onJoin]);
 
   const handleGoogleSignIn = useCallback(() => {
     setGoogleLoading(true);
