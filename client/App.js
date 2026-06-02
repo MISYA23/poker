@@ -19,12 +19,14 @@ export default function App() {
   const [myId, setMyId] = useState(null);
   const [gameState, setGameState] = useState(null);
   const [error, setError] = useState(null);
+  const [lobbyRooms, setLobbyRooms] = useState(null);
   const navigationRef = useNavigationContainerRef();
 
   // Pending player info (set on onJoin, used when onJoinTable is called)
   const playerRef = useRef(null);
 
   const emit = useSocket({
+    'lobby-state': ({ tables }) => setLobbyRooms(tables || []),
     joined: ({ playerId }) => {
       setMyId(playerId);
       setError(null);
@@ -73,7 +75,7 @@ export default function App() {
   }, [emit]);
 
   return (
-    <GameContext.Provider value={{ gameState, myId, error, emit, onJoin, onJoinTable, onAction, onLeave }}>
+    <GameContext.Provider value={{ gameState, myId, error, lobbyRooms, emit, onJoin, onJoinTable, onAction, onLeave }}>
       <GestureHandlerRootView style={{ flex: 1 }}>
         <SafeAreaProvider>
           <StatusBar style="light" />

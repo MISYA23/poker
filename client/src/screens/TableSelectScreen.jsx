@@ -1,4 +1,4 @@
-import React, { useContext, useState, useEffect, useCallback } from 'react';
+import React, { useContext, useState, useEffect } from 'react';
 import { View, Text, Pressable, ScrollView, StyleSheet, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { GameContext } from '../context/GameContext';
@@ -6,22 +6,18 @@ import { SERVER_URL } from '../config';
 import { colors } from '../theme';
 
 export default function TableSelectScreen() {
-  const { onJoinTable, onLeave, error } = useContext(GameContext);
-  const [rooms, setRooms] = useState(null);
+  const { onJoinTable, onLeave, error, lobbyRooms } = useContext(GameContext);
+  const [seedRooms, setSeedRooms] = useState(null);
 
-  const fetchRooms = useCallback(() => {
+  // One-time HTTP fetch to seed the list; after that socket lobby-state events take over
+  useEffect(() => {
     fetch(`${SERVER_URL}/api/rooms`)
       .then(r => r.json())
-      .then(setRooms)
-      .catch(() => setRooms([]));
+      .then(setSeedRooms)
+      .catch(() => setSeedRooms([]));
   }, []);
 
-  useEffect(() => {
-    fetchRooms();
-    // Refresh every 5s so player counts stay current
-    const id = setInterval(fetchRooms, 2000);
-    return () => clearInterval(id);
-  }, [fetchRooms]);
+  const rooms = lobbyRooms ?? seedRooms;
 
   return (
     <SafeAreaView style={styles.safe}>

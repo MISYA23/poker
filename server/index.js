@@ -96,6 +96,20 @@ function broadcastRoomState(r) {
       turnDeadline: r.turnDeadline,
     });
   }
+  // Push updated room counts to everyone (lobby screens update instantly)
+  broadcastAllLobbyState();
+}
+
+function broadcastAllLobbyState() {
+  const tableList = [...rooms.values()].map(r => ({
+    id: r.id,
+    name: r.name,
+    emoji: r.emoji,
+    playerCount: r.game.players.length,
+    phase: r.game.phase,
+    maxPlayers: r.maxPlayers,
+  }));
+  io.emit('lobby-state', { tables: tableList, activeSeats: [] });
 }
 
 function tryAutoStart(r) {
@@ -127,16 +141,10 @@ function scheduleNextHand(r, delay = 5000) {
 }
 
 function broadcastLobbyState(socketId) {
-  const tableList = [...rooms.values()].map(r => ({
-    id: r.id,
-    name: r.name,
-    emoji: r.emoji,
-    playerCount: r.game.players.length,
-    phase: r.game.phase,
-    maxPlayers: r.maxPlayers,
-  }));
-  const target = socketId ? io.to(socketId) : io;
-  target.emit('lobby-state', { tables: tableList, activeSeats: [] });
+  io.to(socketId).emit('lobby-state', { tables: [...rooms.values()].map(r => ({
+    id: r.id, name: r.name, emoji: r.emoji,
+    playerCount: r.game.players.length, phase: r.game.phase, maxPlayers: r.maxPlayers,
+  })), activeSeats: [] });
 }
 
 io.on('connection', (socket) => {
