@@ -9,24 +9,24 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+app.get('/', (_, res) => res.json({ status: 'ok', service: 'poker-server' }));
+
 const server = http.createServer(app);
-const io = new Server(server, {
-  cors: { origin: '*', methods: ['GET', 'POST'] },
-});
+const io = new Server(server, { cors: { origin: '*', methods: ['GET', 'POST'] } });
 
 const db = new Pool({ connectionString: process.env.DATABASE_URL || process.env.DATABASE_PUBLIC_URL });
 
-const TABLE_MAX = 2;
 const GAME_OPTIONS = { startingChips: 1000, bigBlind: 20, smallBlind: 10 };
 const TURN_SECONDS = 20;
+const VALID_AVATARS = ['dk', 'diddy', 'alfie', 'jazz'];
 
-// roomId (uuid from DB) -> { id, name, emoji, game, autoStartTimer, nextHandTimer, turnTimer, timerPlayerId, turnDeadline }
+// roomId (uuid from DB) -> { id, name, emoji, maxPlayers, game, rematchVotes,
+//                            autoStartTimer, nextHandTimer, turnTimer, timerPlayerId, turnDeadline }
 const rooms = new Map();
 
 // socketId -> { id, name, avatarId, roomId }
 const socketPlayers = new Map();
 
-// Load rooms from DB and create in-memory game state for each
 async function loadRooms() {
   const { rows } = await db.query('SELECT uuid, name, emoji, max_players FROM rooms ORDER BY id');
   for (const row of rows) {
@@ -37,15 +37,16 @@ async function loadRooms() {
       emoji: row.emoji,
       maxPlayers: row.max_players,
       game: new PokerGame(row.uuid, GAME_OPTIONS),
+      rematchVotes: new Set(),
       autoStartTimer: null,
       nextHandTimer: null,
       turnTimer: null,
       timerPlayerId: null,
       turnDeadline: null,
     });
-    console.log('[server] room loaded:', row.name, row.uuid);
+    console.log('[server] room loaded:', row.name);
   }
-  console.log('[server] rooms loaded:', rooms.size);
+  console.log('[server] rooms ready:', rooms.size);
 }
 
 function resetRoom(r) {
@@ -57,6 +58,7 @@ function resetRoom(r) {
   r.turnTimer = null;
   r.timerPlayerId = null;
   r.turnDeadline = null;
+  r.rematchVotes = new Set();
   r.game = new PokerGame(r.id, GAME_OPTIONS);
 }
 
@@ -90,32 +92,35 @@ function broadcastRoomState(r) {
     io.to(socketId).emit('game-state', {
       ...state,
       atTable,
-      waitlistPosition: null,
+      gameOver: r.game.gameOver || false,
       waitlistCount: 0,
       tableCount: r.game.players.length,
       turnDeadline: r.turnDeadline,
     });
   }
-  // Push updated room counts to everyone (lobby screens update instantly)
   broadcastAllLobbyState();
 }
 
 function broadcastAllLobbyState() {
   const tableList = [...rooms.values()].map(r => ({
-    id: r.id,
-    name: r.name,
-    emoji: r.emoji,
-    playerCount: r.game.players.length,
-    phase: r.game.phase,
-    maxPlayers: r.maxPlayers,
+    id: r.id, name: r.name, emoji: r.emoji,
+    playerCount: r.game.players.length, phase: r.game.phase, maxPlayers: r.maxPlayers,
   }));
   io.emit('lobby-state', { tables: tableList, activeSeats: [] });
+}
+
+function broadcastLobbyState(socketId) {
+  const tableList = [...rooms.values()].map(r => ({
+    id: r.id, name: r.name, emoji: r.emoji,
+    playerCount: r.game.players.length, phase: r.game.phase, maxPlayers: r.maxPlayers,
+  }));
+  io.to(socketId).emit('lobby-state', { tables: tableList, activeSeats: [] });
 }
 
 function tryAutoStart(r) {
   if (r.autoStartTimer) return;
   const ready = r.game.players.filter(p => p.isActive && p.chips > 0);
-  if (ready.length >= 2 && r.game.phase === 'waiting') {
+  if (ready.length >= 2 && r.game.phase === 'waiting' && !r.game.gameOver) {
     r.autoStartTimer = setTimeout(() => {
       r.autoStartTimer = null;
       if (r.game.phase === 'waiting' && r.game.canStart()) {
@@ -130,8 +135,17 @@ function scheduleNextHand(r, delay = 5000) {
   if (r.nextHandTimer) { clearTimeout(r.nextHandTimer); }
   r.nextHandTimer = setTimeout(() => {
     r.nextHandTimer = null;
-    const ready = r.game.players.filter(p => p.isActive && p.chips > 0);
-    if (ready.length >= 2 && r.game.canStart()) {
+    const withChips = r.game.players.filter(p => p.isActive && p.chips > 0);
+    const activePlayers = r.game.players.filter(p => p.isActive);
+    // Game over: only one player has chips left
+    if (activePlayers.length >= 2 && withChips.length === 1) {
+      r.game.phase = 'waiting';
+      r.game.gameOver = true;
+      r.rematchVotes = new Set();
+      broadcastRoomState(r);
+      return;
+    }
+    if (withChips.length >= 2 && r.game.canStart()) {
       try { r.game.startHand(); } catch (err) { r.game.phase = 'waiting'; }
     } else {
       r.game.phase = 'waiting';
@@ -140,18 +154,10 @@ function scheduleNextHand(r, delay = 5000) {
   }, delay);
 }
 
-function broadcastLobbyState(socketId) {
-  io.to(socketId).emit('lobby-state', { tables: [...rooms.values()].map(r => ({
-    id: r.id, name: r.name, emoji: r.emoji,
-    playerCount: r.game.players.length, phase: r.game.phase, maxPlayers: r.maxPlayers,
-  })), activeSeats: [] });
-}
-
 io.on('connection', (socket) => {
   console.log('[server] socket connected:', socket.id);
 
   socket.on('enter-lobby', ({ playerId } = {}) => {
-    console.log('[server] enter-lobby from', socket.id, { playerId });
     broadcastLobbyState(socket.id);
   });
 
@@ -166,14 +172,11 @@ io.on('connection', (socket) => {
     const existing = socketPlayers.get(socket.id);
     if (existing && existing.roomId !== tableId) {
       const oldRoom = rooms.get(existing.roomId);
-      if (oldRoom) {
-        oldRoom.game.removePlayer(existing.id);
-        broadcastRoomState(oldRoom);
-      }
+      if (oldRoom) { oldRoom.game.removePlayer(existing.id); broadcastRoomState(oldRoom); }
     }
 
     const name = (playerName || 'Player').trim().slice(0, 20);
-    const safeAvatarId = ['dk', 'diddy'].includes(avatarId) ? avatarId : 'dk';
+    const safeAvatarId = VALID_AVATARS.includes(avatarId) ? avatarId : VALID_AVATARS[0];
 
     socketPlayers.set(socket.id, { id: playerId, name, avatarId: safeAvatarId, roomId: tableId });
     r.game.addPlayer(playerId, name, safeAvatarId);
@@ -193,7 +196,7 @@ io.on('connection', (socket) => {
     broadcastLobbyState(socket.id);
   });
 
-  socket.on('player-action', async ({ action, amount }) => {
+  socket.on('player-action', ({ action, amount }) => {
     const player = socketPlayers.get(socket.id);
     if (!player) return;
     const r = rooms.get(player.roomId);
@@ -207,62 +210,34 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on('leave-table', () => {
+  socket.on('rematch-vote', ({ vote }) => {
     const player = socketPlayers.get(socket.id);
     if (!player) return;
-    socketPlayers.delete(socket.id);
-    const t = tables.get(player.tableId);
-    if (t) evictPlayer(player, t);
-    lobbySockets.add(socket.id);
-    socket.emit('lobby-state', getLobbyState());
-    console.log('[server] player left table:', player.name);
-  });
+    const r = rooms.get(player.roomId);
+    if (!r || !r.game.gameOver) return;
 
-  socket.on('set-timers', ({ enabled }) => {
-    const player = socketPlayers.get(socket.id);
-    if (!player) return;
-    const t = tables.get(player.tableId);
-    if (!t) return;
-    t.timersEnabled = !!enabled;
-    if (!t.timersEnabled) {
-      clearTimeout(t.turnTimer);
-      t.turnTimer = null;
-      t.timerPlayerId = null;
-      t.turnDeadline = null;
+    if (vote) {
+      r.rematchVotes.add(player.id);
+      const activePlayers = r.game.players.filter(p => p.isActive);
+      // All active players voted yes — start rematch
+      if (r.rematchVotes.size >= activePlayers.length && activePlayers.length >= 2) {
+        r.game.gameOver = false;
+        // Give everyone back starting chips
+        for (const p of r.game.players) { p.chips = GAME_OPTIONS.startingChips; p.isActive = true; }
+        r.rematchVotes = new Set();
+        tryAutoStart(r);
+        broadcastRoomState(r);
+      }
+    } else {
+      // Player said no — remove them from the table
+      r.game.removePlayer(player.id);
+      socketPlayers.delete(socket.id);
+      socket.emit('reset');
+      broadcastRoomState(r);
     }
-    broadcastTableState(t);
-  });
-
-  socket.on('add-bot', () => {
-    const player = socketPlayers.get(socket.id);
-    if (!player) return;
-    const t = tables.get(player.tableId);
-    if (!t || t.game.players.length >= SEAT_MAX) return;
-    const midHand = !['waiting', 'showdown'].includes(t.game.phase);
-    const botId = `bot-${uuidv4()}`;
-    t.botIds.add(botId);
-    try {
-      t.game.addPlayer(botId, BOT_NAMES[t.botIds.size % BOT_NAMES.length], BOT_AVATARS[t.botIds.size % BOT_AVATARS.length]);
-      if (midHand) { const p = t.game.players.find(pl => pl.id === botId); if (p) p.isActive = false; }
-    } catch { t.botIds.delete(botId); return; }
-    tryAutoStart(t);
-    broadcastTableState(t);
-    broadcastLobbyState();
-  });
-
-  socket.on('remove-bot', () => {
-    const player = socketPlayers.get(socket.id);
-    if (!player) return;
-    const t = tables.get(player.tableId);
-    if (!t || t.botIds.size === 0) return;
-    bumpBot(t);
-    if (t.botIds.size === 0) t.botsEnabled = false;
-    broadcastTableState(t);
-    broadcastLobbyState();
   });
 
   socket.on('disconnect', () => {
-    lobbySockets.delete(socket.id);
     const player = socketPlayers.get(socket.id);
     if (!player) return;
     socketPlayers.delete(socket.id);
@@ -276,25 +251,19 @@ io.on('connection', (socket) => {
   });
 });
 
-// REST: rooms list with live state (reads from DB + memory)
-app.get('/api/rooms', async (req, res) => {
+app.get('/api/rooms', async (_, res) => {
   try {
     const { rows } = await db.query('SELECT uuid, name, emoji, max_players FROM rooms ORDER BY id');
     const result = rows.map(row => {
       const r = rooms.get(row.uuid);
       return {
-        id: row.uuid,
-        name: row.name,
-        emoji: row.emoji,
-        maxPlayers: row.max_players,
+        id: row.uuid, name: row.name, emoji: row.emoji, maxPlayers: row.max_players,
         playerCount: r ? r.game.players.length : 0,
         phase: r ? r.game.phase : 'waiting',
       };
     });
     res.json(result);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 app.get('/health', (_, res) => res.json({
@@ -302,28 +271,21 @@ app.get('/health', (_, res) => res.json({
   rooms: [...rooms.values()].map(r => ({ id: r.id, name: r.name, players: r.game.players.length, phase: r.game.phase })),
 }));
 
-app.get('/', (req, res) => res.json({ status: 'ok', service: 'poker-server' }));
-
 function doReset() {
-  // Reset game state for all rooms but KEEP rooms in DB and memory
   for (const r of rooms.values()) resetRoom(r);
   socketPlayers.clear();
-  for (const { timer } of disconnectedPlayers.values()) clearTimeout(timer);
-  disconnectedPlayers.clear();
   io.emit('reset');
-  // Re-broadcast lobby state to all connected sockets
-  io.sockets.sockets.forEach((s) => broadcastLobbyState(s.id));
+  io.sockets.sockets.forEach(s => broadcastLobbyState(s.id));
   console.log('[server] full reset — rooms preserved');
 }
 
-app.get('/reset', (req, res) => { doReset(); res.json({ ok: true }); });
-app.post('/admin/reset', (req, res) => { doReset(); res.json({ ok: true }); });
+app.get('/reset', (_, res) => { doReset(); res.json({ ok: true }); });
+app.post('/admin/reset', (_, res) => { doReset(); res.json({ ok: true }); });
 
 const PORT = process.env.PORT || 3843;
-
 loadRooms()
   .then(() => server.listen(PORT, () => console.log(`Poker server on port ${PORT}`)))
   .catch(err => {
-    console.error('[server] failed to load rooms:', err.message);
-    server.listen(PORT, () => console.log(`Poker server on port ${PORT} (no DB rooms)`));
+    console.error('[server] DB load failed:', err.message, '— starting anyway');
+    server.listen(PORT, () => console.log(`Poker server on port ${PORT}`));
   });

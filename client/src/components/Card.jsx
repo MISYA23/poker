@@ -2,18 +2,18 @@ import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 
 const SUIT_SYMBOLS = { s: '♠', h: '♥', d: '♦', c: '♣' };
-const SUIT_COLORS_REGULAR  = { s: '#1a1a1a', h: '#c81e1e', d: '#c81e1e', c: '#1a1a1a' };
-const SUIT_COLORS_FOUR     = { s: '#1a1a1a', h: '#c81e1e', d: '#1f63b0', c: '#1e7a3a' };
+const SUIT_COLORS_REGULAR = { s: '#1a1a1a', h: '#c81e1e', d: '#c81e1e', c: '#1a1a1a' };
+const SUIT_COLORS_FOUR    = { s: '#1a1a1a', h: '#c81e1e', d: '#1f63b0', c: '#1e7a3a' };
 
 const SIZES = {
-  xs: { width: 32, height: 29, font: 12 },
-  sm: { width: 42, height: 36, font: 16 },
-  md: { width: 56, height: 60, font: 22 },
-  lg: { width: 68, height: 58, font: 28 },
-  xl: { width: 76, height: 73, font: 32 },
+  xs: { width: 28, height: 26, font: 11 },
+  sm: { width: 36, height: 32, font: 14 },
+  md: { width: 52, height: 56, font: 20 },
+  lg: { width: 64, height: 55, font: 26 },
+  xl: { width: 72, height: 70, font: 30 },
 };
 
-export default function Card({ card, size = 'md', faceDown = false }) {
+export default function Card({ card, size = 'md', faceDown = false, deckStyle = 'regular' }) {
   const s = SIZES[size] || SIZES.md;
 
   if (faceDown || !card || card.hidden) {
@@ -24,8 +24,9 @@ export default function Card({ card, size = 'md', faceDown = false }) {
     );
   }
 
+  const colors = deckStyle === 'four-color' ? SUIT_COLORS_FOUR : SUIT_COLORS_REGULAR;
   const symbol = SUIT_SYMBOLS[card.suit] || card.suit;
-  const color = SUIT_COLORS_REGULAR[card.suit] || '#1a1a1a';
+  const color = colors[card.suit] || '#1a1a1a';
   const rankFont = card.rank === '10' ? s.font * 0.82 : s.font;
 
   return (
@@ -38,7 +39,7 @@ export default function Card({ card, size = 'md', faceDown = false }) {
 
 const styles = StyleSheet.create({
   card: {
-    borderRadius: 6,
+    borderRadius: 5,
     overflow: 'hidden',
     shadowColor: '#000',
     shadowOpacity: 0.5,
@@ -53,30 +54,20 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     flexDirection: 'row',
     gap: 1,
-    paddingHorizontal: 3,
+    paddingHorizontal: 2,
     borderWidth: 1,
     borderColor: 'rgba(0,0,0,0.1)',
   },
-  cardBack: {
-    backgroundColor: '#d4a017',
-  },
+  cardBack: { backgroundColor: '#d4a017' },
   backPattern: {
     position: 'absolute',
-    top: 3,
-    left: 3,
-    right: 3,
-    bottom: 3,
-    borderRadius: 4,
+    top: 3, left: 3, right: 3, bottom: 3,
+    borderRadius: 3,
     borderWidth: 1,
     borderColor: 'rgba(0,0,0,0.35)',
     backgroundColor: '#f0c040',
     opacity: 0.6,
   },
-  rank: {
-    fontWeight: '900',
-    lineHeight: undefined,
-  },
-  suit: {
-    fontWeight: '900',
-  },
+  rank: { fontWeight: '900' },
+  suit: { fontWeight: '900' },
 });

@@ -8,6 +8,8 @@ export default function BettingControls({ gameState, myId, onAction, raiseAmount
   const isMyTurn = gameState?.currentPlayerId === myId &&
     !['waiting', 'showdown'].includes(gameState?.phase);
 
+  if (!isMyTurn) return null;
+
   const currentBet = gameState?.currentBet || 0;
   const myBet = me?.roundBet || 0;
   const callAmount = Math.min(currentBet - myBet, me?.chips || 0);
@@ -17,26 +19,19 @@ export default function BettingControls({ gameState, myId, onAction, raiseAmount
   const maxRaise = myBet + (me?.chips || 0);
   const effectiveMin = Math.min(minRaise, maxRaise);
   const canRaise = (me?.chips || 0) > callAmount;
-  const isOpeningWager = currentBet === 0;
+  const isOpening = currentBet === 0;
 
-  const handleRaise = () => {
-    onAction(raiseAmount >= maxRaise ? 'all-in' : 'raise', raiseAmount);
-  };
-
-  const show = isMyTurn;
-  const hasChips = (me?.chips || 0) > 0;
-  // Calling matches the bet — but if it eats all the remaining chips, it's an all-in.
-  const callIsAllIn = !canCheck && callAmount > 0 && callAmount >= (me?.chips || 0);
+  const handleRaise = () => onAction(raiseAmount >= maxRaise ? 'all-in' : 'raise', raiseAmount);
 
   return (
-    <View style={styles.container}>
+    <View style={s.wrap}>
       {canRaise && (
-        <View style={styles.raisePanel}>
-          <Text style={styles.raiseLabel}>
+        <View style={s.slider}>
+          <Text style={s.sliderLabel}>
             {raiseAmount >= maxRaise ? 'All In' : `$${raiseAmount.toLocaleString()}`}
           </Text>
           <Slider
-            style={styles.slider}
+            style={s.sliderTrack}
             minimumValue={effectiveMin}
             maximumValue={maxRaise}
             step={bigBlind}
@@ -48,36 +43,31 @@ export default function BettingControls({ gameState, myId, onAction, raiseAmount
           />
         </View>
       )}
-
-      <View style={styles.buttons}>
-        <Pressable style={[styles.btn, styles.btnFold]} onPress={() => onAction('fold')}>
-          <Text style={styles.btnText}>Fold</Text>
+      <View style={s.btns}>
+        <Pressable style={[s.btn, s.btnFold]} onPress={() => onAction('fold')}>
+          <Text style={s.btnTxt}>Fold</Text>
         </Pressable>
 
         {canCheck ? (
-          <Pressable style={[styles.btn, styles.btnCheck]} onPress={() => onAction('check')}>
-            <Text style={styles.btnText}>Check</Text>
+          <Pressable style={[s.btn, s.btnCheck]} onPress={() => onAction('check')}>
+            <Text style={s.btnTxt}>Check</Text>
           </Pressable>
         ) : (
-          <Pressable style={[styles.btn, styles.btnCall]} onPress={() => onAction('call')}>
-            <Text style={styles.btnText}>
-              Call{callAmount > 0 ? ` $${callAmount.toLocaleString()}` : ''}
-            </Text>
+          <Pressable style={[s.btn, s.btnCall]} onPress={() => onAction('call')}>
+            <Text style={s.btnTxt}>Call{callAmount > 0 ? ` $${callAmount.toLocaleString()}` : ''}</Text>
           </Pressable>
         )}
 
         {canRaise ? (
-          <Pressable style={[styles.btn, styles.btnRaise]} onPress={handleRaise}>
-            <Text style={styles.btnText}>
-              {raiseAmount >= maxRaise
-                ? 'All In'
-                : `${isOpeningWager ? 'Bet' : 'Raise'} $${raiseAmount.toLocaleString()}`}
+          <Pressable style={[s.btn, s.btnRaise]} onPress={handleRaise}>
+            <Text style={s.btnTxt}>
+              {raiseAmount >= maxRaise ? 'All In' : `${isOpening ? 'Bet' : 'Raise'} $${raiseAmount.toLocaleString()}`}
             </Text>
           </Pressable>
         ) : (
           me?.chips > 0 && (
-            <Pressable style={[styles.btn, styles.btnAllin]} onPress={() => onAction('all-in', 0)}>
-              <Text style={styles.btnText}>All In</Text>
+            <Pressable style={[s.btn, s.btnAllin]} onPress={() => onAction('all-in', 0)}>
+              <Text style={s.btnTxt}>All In</Text>
             </Pressable>
           )
         )}
@@ -86,44 +76,17 @@ export default function BettingControls({ gameState, myId, onAction, raiseAmount
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    gap: 8,
-    paddingHorizontal: 4,
-  },
-  raisePanel: {
-    gap: 4,
-  },
-  raiseLabel: {
-    color: colors.goldLight,
-    fontSize: 15,
-    fontWeight: '700',
-    textAlign: 'center',
-  },
-  slider: {
-    width: '100%',
-    height: 36,
-  },
-  buttons: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  btn: {
-    flex: 1,
-    paddingVertical: 14,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  btnText: {
-    color: '#fff',
-    fontSize: 13,
-    fontWeight: '800',
-    textAlign: 'center',
-  },
-  btnFold: { backgroundColor: '#7f1d1d' },
+const s = StyleSheet.create({
+  wrap: { gap: 8 },
+  slider: { gap: 2 },
+  sliderLabel: { color: colors.goldLight, fontSize: 13, fontWeight: '700', textAlign: 'center' },
+  sliderTrack: { width: '100%', height: 36 },
+  btns: { flexDirection: 'row', gap: 8 },
+  btn: { flex: 1, paddingVertical: 14, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  btnTxt: { color: '#fff', fontSize: 12, fontWeight: '800', textAlign: 'center' },
+  btnFold:  { backgroundColor: '#7f1d1d' },
   btnCheck: { backgroundColor: '#14532d' },
-  btnCall: { backgroundColor: '#1e40af' },
+  btnCall:  { backgroundColor: '#1e40af' },
   btnRaise: { backgroundColor: '#78350f' },
   btnAllin: { backgroundColor: '#581c87' },
 });

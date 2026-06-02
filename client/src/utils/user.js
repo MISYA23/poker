@@ -1,21 +1,13 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-
 const KEY = 'poker_user';
-
 export async function getUser() {
-  try {
-    const data = await AsyncStorage.getItem(KEY);
-    return data ? JSON.parse(data) : null;
-  } catch { return null; }
+  try { const d = await AsyncStorage.getItem(KEY); return d ? JSON.parse(d) : null; }
+  catch { return null; }
 }
-
 export async function setUser(fields) {
-  try {
-    const existing = await getUser() || {};
-    await AsyncStorage.setItem(KEY, JSON.stringify({ ...existing, ...fields }));
-  } catch {}
+  try { const e = await getUser() || {}; await AsyncStorage.setItem(KEY, JSON.stringify({ ...e, ...fields })); }
+  catch {}
 }
-
 export async function getOrCreatePlayerId() {
   const user = await getUser();
   if (user?.playerId) return user.playerId;
@@ -23,7 +15,6 @@ export async function getOrCreatePlayerId() {
   await setUser({ playerId: id });
   return id;
 }
-
 export async function clearUser() {
   try { await AsyncStorage.removeItem(KEY); } catch {}
 }
