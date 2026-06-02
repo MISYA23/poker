@@ -1,0 +1,15 @@
+export const colors = {
+  greenDark: '#0a3d1f',
+  greenFelt: '#1a6b3a',
+  greenLight: '#22883f',
+  gold: '#d4a017',
+  goldLight: '#f0c040',
+  red: '#c0392b',
+  blue: '#2980b9',
+  orange: '#e67e22',
+  white: '#fafafa',
+  grayLight: '#ecf0f1',
+  gray: '#bdc3c7',
+  dark: '#1a1a2e',
+  bg: '#0d2b1a',
+};

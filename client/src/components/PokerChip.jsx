@@ -1,9 +1,11 @@
 import React from 'react';
+import { View, Text, StyleSheet } from 'react-native';
+import Svg, { Circle, Text as SvgText } from 'react-native-svg';
 
 const CHIP_CFG = {
   100: { fill: '#1a1a1a', notch: 'rgba(180,180,180,0.7)', text: '#d4a017' },
-  25:  { fill: '#1e7a3a', notch: 'rgba(255,255,255,0.65)', text: '#fff' },
-  10:  { fill: '#b91c1c', notch: 'rgba(255,255,255,0.65)', text: '#fff' },
+  25: { fill: '#1e7a3a', notch: 'rgba(255,255,255,0.65)', text: '#fff' },
+  10: { fill: '#b91c1c', notch: 'rgba(255,255,255,0.65)', text: '#fff' },
 };
 
 export function PokerChip({ value, size = 32 }) {
@@ -19,27 +21,26 @@ export function PokerChip({ value, size = 32 }) {
   const notchW = size * 0.155;
 
   return (
-    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{ display: 'block' }}>
-      <circle cx={c} cy={c} r={outerR} fill={cfg.fill} stroke="rgba(0,0,0,0.6)" strokeWidth="1.5" />
-      <circle
+    <Svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+      <Circle cx={c} cy={c} r={outerR} fill={cfg.fill} stroke="rgba(0,0,0,0.6)" strokeWidth="1.5" />
+      <Circle
         cx={c} cy={c} r={notchR}
         fill="none"
         stroke={cfg.notch}
         strokeWidth={notchW}
         strokeDasharray={`${dash} ${gap}`}
       />
-      <circle cx={c} cy={c} r={innerR} fill={cfg.fill} stroke={cfg.notch} strokeWidth="0.8" strokeOpacity="0.4" />
-      <text
+      <Circle cx={c} cy={c} r={innerR} fill={cfg.fill} stroke={cfg.notch} strokeWidth="0.8" strokeOpacity="0.4" />
+      <SvgText
         x={c} y={c + size * 0.115}
         textAnchor="middle"
         fill={cfg.text}
         fontSize={size * 0.295}
         fontWeight="800"
-        fontFamily="-apple-system, BlinkMacSystemFont, sans-serif"
       >
         {value}
-      </text>
-    </svg>
+      </SvgText>
+    </Svg>
   );
 }
 
@@ -60,13 +61,31 @@ export function ChipStack({ amount, size = 28 }) {
   if (chips.length === 0) return null;
 
   return (
-    <div className="chip-stack">
+    <View style={styles.stack}>
       {chips.map(({ denom, count }) => (
-        <div key={denom} className="chip-group">
+        <View key={denom} style={styles.group}>
           <PokerChip value={denom} size={size} />
-          {count > 1 && <span className="chip-count">×{count}</span>}
-        </div>
+          {count > 1 && <Text style={styles.count}>×{count}</Text>}
+        </View>
       ))}
-    </div>
+    </View>
   );
 }
+
+const styles = StyleSheet.create({
+  stack: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  group: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+  },
+  count: {
+    color: '#fafafa',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+});

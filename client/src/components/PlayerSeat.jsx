@@ -1,24 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import Card from './Card.jsx';
-import Avatar from './Avatar.jsx';
-import { ChipStack } from './PokerChip.jsx';
+import { View, Text, StyleSheet } from 'react-native';
+import Card from './Card';
+import Avatar from './Avatar';
+import { ChipStack } from './PokerChip';
+import TimerRing from './TimerRing';
+import { colors } from '../theme';
 
-const TURN_DURATION_MS = 20000;
 const ACTION_DISPLAY_MS = 2000;
-const RING_R = 30;
-const RING_CIRC = 2 * Math.PI * RING_R; // 188.5
-
-function useTurnTimer(turnDeadline) {
-  const [timeLeft, setTimeLeft] = useState(null);
-  useEffect(() => {
-    if (!turnDeadline) { setTimeLeft(null); return; }
-    const update = () => setTimeLeft(Math.max(0, Math.ceil((turnDeadline - Date.now()) / 1000)));
-    update();
-    const id = setInterval(update, 200);
-    return () => clearInterval(id);
-  }, [turnDeadline]);
-  return timeLeft;
-}
 
 function formatActionLabel(a) {
   if (!a) return '';
@@ -45,81 +33,153 @@ export function useActionFlash(player, lastAction) {
   return label;
 }
 
-function TimerRing({ turnDeadline, elapsedMs, timeLeft }) {
-  if (!turnDeadline) return null;
-  const urgentClass = timeLeft !== null && timeLeft <= 5 ? 'ring-urgent'
-    : timeLeft !== null && timeLeft <= 10 ? 'ring-warning' : '';
-  return (
-    <svg
-      className={`avatar-timer-ring ${urgentClass}`}
-      width={64} height={64}
-      viewBox="0 0 64 64"
-      aria-hidden="true"
-    >
-      <circle className="ring-track" cx="32" cy="32" r={RING_R} />
-      <circle
-        key={turnDeadline}
-        className="ring-fill"
-        cx="32" cy="32" r={RING_R}
-        style={{
-          animationDuration: `${TURN_DURATION_MS}ms`,
-          animationDelay: `-${elapsedMs}ms`,
-        }}
-      />
-    </svg>
-  );
-}
-
-export default function PlayerSeat({ player, isMe, win = null, turnDeadline = null, lastAction = null, actions = null }) {
-  const timeLeft = useTurnTimer(turnDeadline);
+export default function PlayerSeat({ player, isMe = false, win = null, turnDeadline = null, lastAction = null }) {
   const actionLabel = useActionFlash(player, lastAction);
-  if (!player) return <div className="player-seat player-seat-empty" />;
 
-  const elapsedMs = turnDeadline
-    ? Math.min(TURN_DURATION_MS, TURN_DURATION_MS - Math.max(0, turnDeadline - Date.now()))
-    : 0;
+  if (!player) return <View style={styles.empty} />;
+
+  const isActive = player.isCurrentPlayer;
+  const isFolded = player.folded;
 
   return (
-    <div className={`player-seat ${player.isCurrentPlayer ? 'seat-active' : ''} ${player.folded ? 'seat-folded' : ''} ${isMe ? 'seat-me' : 'seat-opponent'}`}>
-      <div className="seat-content">
-        <div
-          className="seat-cards seat-cards-fan"
-          style={{ visibility: player.holeCards?.length > 0 ? 'visible' : 'hidden' }}
-        >
-          {[0, 1].map(i => (
+    <View style={[
+      styles.seat,
+      isActive && styles.seatActive,
+      isFolded && styles.seatFolded,
+    ]}>
+      {/* Cards */}
+      <View style={[styles.cards, !player.holeCards?.length && styles.hidden]}>
+        {[0, 1].map(i => (
+          <View
+            key={i}
+            style={[
+              styles.cardWrap,
+              i === 0 ? styles.cardLeft : styles.cardRight,
+            ]}
+          >
             <Card
-              key={i}
               card={player.holeCards?.[i]}
               size="lg"
               faceDown={!player.holeCards?.[i] || player.holeCards[i]?.hidden}
             />
-          ))}
-        </div>
+          </View>
+        ))}
+      </View>
 
-        <div className="nameplate-row">
-          <div className="nameplate-stack">
-            <div className="nameplate">
-              <div className="np-text">
-                <span className="np-name">
-                  {player.name}
-                  {player.isSmallBlind && <span className="badge badge-sb">SB</span>}
-                  {player.isBigBlind && <span className="badge badge-bb">BB</span>}
-                  {player.allIn && <span className="badge badge-allin">ALL IN</span>}
-                </span>
-                <span className={`np-chips ${actionLabel ? 'np-chips-action' : ''} ${win ? 'np-chips-winner' : ''}`}>
-                  {win ? 'Winner' : (actionLabel || player.chips.toLocaleString())}
-                </span>
-              </div>
-              <div className="np-avatar">
-                <Avatar size={52} avatarId={player.avatarId} />
-                <TimerRing turnDeadline={turnDeadline} elapsedMs={elapsedMs} timeLeft={timeLeft} />
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="seat-actions">{actions}</div>
-    </div>
+      {/* Nameplate */}
+      <View style={styles.nameplate}>
+        <View style={styles.npText}>
+          <View style={styles.nameRow}>
+            <Text style={styles.npName} numberOfLines={1}>{player.name}</Text>
+            {player.isSmallBlind && <View style={[styles.badge, styles.badgeSB]}><Text style={styles.badgeText}>SB</Text></View>}
+            {player.isBigBlind && <View style={[styles.badge, styles.badgeBB]}><Text style={styles.badgeText}>BB</Text></View>}
+            {player.allIn && <View style={[styles.badge, styles.badgeAllin]}><Text style={styles.badgeText}>ALL IN</Text></View>}
+          </View>
+          <Text style={[styles.npChips, win && styles.npChipsWinner, !!actionLabel && styles.npChipsAction]}>
+            {win ? 'Winner' : (actionLabel || `$${player.chips.toLocaleString()}`)}
+          </Text>
+        </View>
+        <View style={styles.avatarWrap}>
+          <Avatar size={52} avatarId={player.avatarId} />
+          <TimerRing turnDeadline={turnDeadline} />
+        </View>
+      </View>
+    </View>
   );
 }
+
+const styles = StyleSheet.create({
+  seat: {
+    alignItems: 'center',
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  seatActive: {
+    borderColor: colors.gold,
+    backgroundColor: 'rgba(212,160,23,0.08)',
+  },
+  seatFolded: {
+    opacity: 0.45,
+  },
+  empty: {
+    height: 90,
+  },
+  cards: {
+    flexDirection: 'row',
+    marginBottom: 6,
+    height: 58,
+  },
+  hidden: {
+    opacity: 0,
+  },
+  cardWrap: {
+    position: 'relative',
+  },
+  cardLeft: {
+    transform: [{ rotate: '-4deg' }, { translateX: 4 }],
+    zIndex: 1,
+  },
+  cardRight: {
+    transform: [{ rotate: '4deg' }, { translateX: -4 }],
+  },
+  nameplate: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    gap: 8,
+    minWidth: 160,
+  },
+  npText: {
+    flex: 1,
+    gap: 2,
+  },
+  nameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    flexWrap: 'wrap',
+  },
+  npName: {
+    color: colors.white,
+    fontSize: 13,
+    fontWeight: '700',
+    flexShrink: 1,
+  },
+  npChips: {
+    color: colors.goldLight,
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  npChipsAction: {
+    color: colors.orange,
+  },
+  npChipsWinner: {
+    color: '#4ade80',
+  },
+  badge: {
+    borderRadius: 4,
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+  },
+  badgeText: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: '#fff',
+  },
+  badgeSB: { backgroundColor: colors.blue },
+  badgeBB: { backgroundColor: colors.orange },
+  badgeAllin: { backgroundColor: colors.red },
+  avatarWrap: {
+    width: 64,
+    height: 64,
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+  },
+});
