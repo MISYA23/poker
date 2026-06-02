@@ -1,13 +1,9 @@
-require('dotenv').config();
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const cors = require('cors');
 const { Pool } = require('pg');
 const { PokerGame } = require('./game/PokerGame');
-const db = require('./db');
-
-const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
 const app = express();
 app.use(cors());
