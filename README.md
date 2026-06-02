@@ -1,32 +1,59 @@
-# Poker
+# Poker Monkey
 
 Multiplayer Texas Hold'em. Live at **https://poker-production-d726.up.railway.app**
+
+---
+
+## Features
+
+- Up to 6 players per table (bots fill empty seats)
+- Google SSO or guest play — name/avatar saved across sessions
+- Full action log persisted to Postgres (every hand, every action)
+- Sequential table & hand numbering
+- Real-time via Socket.IO
 
 ---
 
 ## Running locally
 
 ```bash
-cd server && npm install
-cd ../client && npm install
+# Install deps
+npm install --prefix server
+npm install --prefix client
 
-# Two terminals:
-cd server && npm run dev     # http://localhost:3843
-cd client && npm run dev     # http://localhost:5843  ← open this
+# Start both servers (random ports chosen automatically)
+npm run dev
 ```
 
-Ports are fixed at **5843** (client) and **3843** (server) to avoid conflicts.
+The console will print the client URL — open that in your browser.
 
 ---
 
-## Resetting the game
+## Env vars
 
-Go to **/reset** in the browser. Wipes all players, clears the table, sends everyone back to the lobby instantly.
+Create `server/.env`:
+```
+GOOGLE_CLIENT_ID=...
+GOOGLE_CLIENT_SECRET=...
+DATABASE_URL=postgresql://...
+```
 
-The Reset button in the top-right of the game does the same thing.
+Create `client/.env`:
+```
+VITE_GOOGLE_CLIENT_ID=...
+```
+
+---
+
+## Branches
+
+- `main` — canonical version (heads-up, image avatars)
+- `generic` — fork (6-player, emoji avatars, bots, DB persistence)
 
 ---
 
 ## Deploying
 
 Push to `main`. Railway picks it up and redeploys automatically (~1 min).
+
+Railway env vars needed: `GOOGLE_CLIENT_ID`, `VITE_GOOGLE_CLIENT_ID`, `DATABASE_URL`

@@ -2,7 +2,8 @@ import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 
 const SUIT_SYMBOLS = { s: '♠', h: '♥', d: '♦', c: '♣' };
-const SUIT_COLORS = { s: '#1a1a1a', h: '#c81e1e', d: '#c81e1e', c: '#1a1a1a' };
+const SUIT_COLORS_REGULAR  = { s: '#1a1a1a', h: '#c81e1e', d: '#c81e1e', c: '#1a1a1a' };
+const SUIT_COLORS_FOUR     = { s: '#1a1a1a', h: '#c81e1e', d: '#1f63b0', c: '#1e7a3a' };
 
 const SIZES = {
   xs: { width: 32, height: 29, font: 12 },

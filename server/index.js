@@ -1,9 +1,13 @@
+require('dotenv').config();
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const cors = require('cors');
 const { Pool } = require('pg');
 const { PokerGame } = require('./game/PokerGame');
+const db = require('./db');
+
+const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
 const app = express();
 app.use(cors());
@@ -185,7 +189,7 @@ io.on('connection', (socket) => {
     broadcastLobbyState(socket.id);
   });
 
-  socket.on('player-action', ({ action, amount }) => {
+  socket.on('player-action', async ({ action, amount }) => {
     const player = socketPlayers.get(socket.id);
     if (!player) return;
     const r = rooms.get(player.roomId);
@@ -199,7 +203,62 @@ io.on('connection', (socket) => {
     }
   });
 
+  socket.on('leave-table', () => {
+    const player = socketPlayers.get(socket.id);
+    if (!player) return;
+    socketPlayers.delete(socket.id);
+    const t = tables.get(player.tableId);
+    if (t) evictPlayer(player, t);
+    lobbySockets.add(socket.id);
+    socket.emit('lobby-state', getLobbyState());
+    console.log('[server] player left table:', player.name);
+  });
+
+  socket.on('set-timers', ({ enabled }) => {
+    const player = socketPlayers.get(socket.id);
+    if (!player) return;
+    const t = tables.get(player.tableId);
+    if (!t) return;
+    t.timersEnabled = !!enabled;
+    if (!t.timersEnabled) {
+      clearTimeout(t.turnTimer);
+      t.turnTimer = null;
+      t.timerPlayerId = null;
+      t.turnDeadline = null;
+    }
+    broadcastTableState(t);
+  });
+
+  socket.on('add-bot', () => {
+    const player = socketPlayers.get(socket.id);
+    if (!player) return;
+    const t = tables.get(player.tableId);
+    if (!t || t.game.players.length >= SEAT_MAX) return;
+    const midHand = !['waiting', 'showdown'].includes(t.game.phase);
+    const botId = `bot-${uuidv4()}`;
+    t.botIds.add(botId);
+    try {
+      t.game.addPlayer(botId, BOT_NAMES[t.botIds.size % BOT_NAMES.length], BOT_AVATARS[t.botIds.size % BOT_AVATARS.length]);
+      if (midHand) { const p = t.game.players.find(pl => pl.id === botId); if (p) p.isActive = false; }
+    } catch { t.botIds.delete(botId); return; }
+    tryAutoStart(t);
+    broadcastTableState(t);
+    broadcastLobbyState();
+  });
+
+  socket.on('remove-bot', () => {
+    const player = socketPlayers.get(socket.id);
+    if (!player) return;
+    const t = tables.get(player.tableId);
+    if (!t || t.botIds.size === 0) return;
+    bumpBot(t);
+    if (t.botIds.size === 0) t.botsEnabled = false;
+    broadcastTableState(t);
+    broadcastLobbyState();
+  });
+
   socket.on('disconnect', () => {
+    lobbySockets.delete(socket.id);
     const player = socketPlayers.get(socket.id);
     if (!player) return;
     socketPlayers.delete(socket.id);
@@ -245,6 +304,8 @@ function doReset() {
   // Reset game state for all rooms but KEEP rooms in DB and memory
   for (const r of rooms.values()) resetRoom(r);
   socketPlayers.clear();
+  for (const { timer } of disconnectedPlayers.values()) clearTimeout(timer);
+  disconnectedPlayers.clear();
   io.emit('reset');
   // Re-broadcast lobby state to all connected sockets
   io.sockets.sockets.forEach((s) => broadcastLobbyState(s.id));

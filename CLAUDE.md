@@ -3,8 +3,10 @@
 ## What this is
 Multiplayer Texas Hold'em. Up to 9 players, overflow goes to a waitlist. Real-time via Socket.IO. No auth, no persistence — all state is in-memory on the server.
 
+**Branches:** `generic` = active development branch (multi-table, emoji avatars, bots, lobby)  
 **Live:** https://poker-production-d726.up.railway.app  
-**Repo:** https://github.com/briandanilo/poker.git
+**Repo:** https://github.com/briandanilo/poker.git  
+**Current version:** v1.04
 
 ---
 
@@ -53,8 +55,13 @@ The emulator must be running first. Expo auto-opens Expo Go and loads the app.
 
 ---
 
-## Deploy rule
-**Always push to GitHub after every change.** Railway is connected to `main` and redeploys automatically. Never leave changes uncommitted.
+## Screen flow
+```
+SignIn (name + avatar) → Lobby (table picker) → GameTable
+```
+- `SignIn.jsx` — name + avatar selection; auto-advances if localStorage has saved profile
+- `Lobby.jsx` — shows California / Paris / Dublin cards with player count + phase
+- `GameTable.jsx` — full game UI
 
 ---
 
@@ -87,9 +94,10 @@ poker/
 │           ├── WaitlistScreen.jsx ← queue position + live table view
 │           └── GameScreen.jsx     ← felt oval, community cards, pot, my seat
 └── server/
-    ├── index.js            ← Express + Socket.IO + all game coordination
+    ├── index.js                 ← all game coordination + Socket.IO
+    ├── db.js                    ← Postgres schema + queries
     └── game/
-        ├── PokerGame.js    ← pure game logic, no I/O
+        ├── PokerGame.js         ← pure game logic
         ├── Deck.js
         └── HandEvaluator.js
 ```
@@ -126,16 +134,11 @@ eas build --platform android --profile preview
 - Download link emailed when done
 - EAS project: `coinburst/poker-monkey` (ID: `8b891cf4-46a6-46b7-951b-7cc826e8a4e7`)
 
----
+**State flow:** Server owns all truth. `game-state` broadcast on every action with per-player hole card visibility.
 
-## Timers — all must be cleared on reset
-| Variable | Purpose |
-|---|---|
-| `turnTimer` | Auto-folds current player after 20s |
-| `timerPlayerId` | Tracks who the turn timer is for |
-| `turnDeadline` | Unix ms timestamp broadcast to clients |
-| `autoStartTimer` | 3s delay before auto-starting a hand |
-| `nextHandTimer` | 3s delay between hands |
+**Bet chips on felt:** Rendered as separate absolutely-positioned elements at `BET_POS` coordinates, not inside nameplates.
+
+**Action labels on felt:** `ActionOnFelt` component renders flash labels (Fold/Call/Raise etc.) on the felt at `BET_POS`, not in nameplates. Chip count always visible in nameplate.
 
 ---
 

@@ -13,9 +13,9 @@ function formatActionLabel(a) {
   switch (a.action) {
     case 'fold': return 'Fold';
     case 'check': return 'Check';
-    case 'call': return a.amount ? `Call $${a.amount.toLocaleString()}` : 'Call';
-    case 'bet': return a.amount ? `Bet $${a.amount.toLocaleString()}` : 'Bet';
-    case 'raise': return a.amount ? `Raise $${a.amount.toLocaleString()}` : 'Raise';
+    case 'call': return a.amount ? `Call ${a.amount.toLocaleString()}` : 'Call';
+    case 'bet': return a.amount ? `Bet ${a.amount.toLocaleString()}` : 'Bet';
+    case 'raise': return a.amount ? `Raise ${a.amount.toLocaleString()}` : 'Raise';
     case 'all-in': return 'All In';
     default: return a.action;
   }

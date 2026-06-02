@@ -8,8 +8,6 @@ export default function BettingControls({ gameState, myId, onAction, raiseAmount
   const isMyTurn = gameState?.currentPlayerId === myId &&
     !['waiting', 'showdown'].includes(gameState?.phase);
 
-  if (!isMyTurn) return null;
-
   const currentBet = gameState?.currentBet || 0;
   const myBet = me?.roundBet || 0;
   const callAmount = Math.min(currentBet - myBet, me?.chips || 0);
@@ -24,6 +22,11 @@ export default function BettingControls({ gameState, myId, onAction, raiseAmount
   const handleRaise = () => {
     onAction(raiseAmount >= maxRaise ? 'all-in' : 'raise', raiseAmount);
   };
+
+  const show = isMyTurn;
+  const hasChips = (me?.chips || 0) > 0;
+  // Calling matches the bet — but if it eats all the remaining chips, it's an all-in.
+  const callIsAllIn = !canCheck && callAmount > 0 && callAmount >= (me?.chips || 0);
 
   return (
     <View style={styles.container}>
