@@ -45,8 +45,8 @@ export default function App() {
 
   // Step 1: auth complete — store player info, enter lobby, go to table select
   const onJoin = useCallback((playerName, avatarId, playerId) => {
+    console.log('[app] onJoin called', { playerName, playerId });
     setError(null);
-    setTables(null);
     playerRef.current = { playerName, avatarId, playerId };
     emit('enter-lobby', { playerId });
     navigationRef.navigate('TableSelect');

@@ -86,21 +86,11 @@ export default function LobbyScreen() {
 
   const handleJoin = useCallback(() => {
     const name = playerName.trim();
-    if (!name) return;
-    // Use Google playerId if signed in, otherwise generate a guest UUID
-    getOrCreatePlayerId().then(playerId => {
-      setUser({ name, avatarId }).catch(() => {});
-      fetch(`${SERVER_URL}/api/player/guest`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ playerId, name, avatarId }),
-      }).catch(() => {});
-      onJoin(name, avatarId, playerId);
-    }).catch(() => {
-      // Fallback: generate ID without AsyncStorage
-      const playerId = 'guest_' + Math.random().toString(36).slice(2) + Date.now().toString(36);
-      onJoin(name, avatarId, playerId);
-    });
+    console.log('[lobby] handleJoin called, name:', name, 'avatarId:', avatarId);
+    if (!name) { console.log('[lobby] blocked: empty name'); return; }
+    const playerId = 'guest_' + Math.random().toString(36).slice(2) + Date.now().toString(36);
+    console.log('[lobby] calling onJoin with playerId:', playerId);
+    onJoin(name, avatarId, playerId);
   }, [playerName, avatarId, onJoin]);
 
   const handleGoogleSignIn = useCallback(() => {
