@@ -1,4 +1,6 @@
 import React from 'react';
+import { View, Text, StyleSheet } from 'react-native';
+import Svg, { Circle, Text as SvgText } from 'react-native-svg';
 
 const CHIP_CFG = {
   100: { fill: '#1a1a1a', notch: 'rgba(180,180,180,0.7)', text: '#d4a017' },
@@ -17,56 +19,45 @@ export function PokerChip({ value, size = 32 }) {
   const dash = seg * 0.52;
   const gap = seg * 0.48;
   const notchW = size * 0.155;
-
   return (
-    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{ display: 'block' }}>
-      <circle cx={c} cy={c} r={outerR} fill={cfg.fill} stroke="rgba(0,0,0,0.6)" strokeWidth="1.5" />
-      <circle
-        cx={c} cy={c} r={notchR}
-        fill="none"
-        stroke={cfg.notch}
-        strokeWidth={notchW}
-        strokeDasharray={`${dash} ${gap}`}
-      />
-      <circle cx={c} cy={c} r={innerR} fill={cfg.fill} stroke={cfg.notch} strokeWidth="0.8" strokeOpacity="0.4" />
-      <text
-        x={c} y={c + size * 0.115}
-        textAnchor="middle"
-        fill={cfg.text}
-        fontSize={size * 0.295}
-        fontWeight="800"
-        fontFamily="-apple-system, BlinkMacSystemFont, sans-serif"
-      >
-        {value}
-      </text>
-    </svg>
+    <Svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+      <Circle cx={c} cy={c} r={outerR} fill={cfg.fill} stroke="rgba(0,0,0,0.6)" strokeWidth="1.5" />
+      <Circle cx={c} cy={c} r={notchR} fill="none" stroke={cfg.notch} strokeWidth={notchW} strokeDasharray={`${dash} ${gap}`} />
+      <Circle cx={c} cy={c} r={innerR} fill={cfg.fill} stroke={cfg.notch} strokeWidth="0.8" strokeOpacity="0.4" />
+      <SvgText x={c} y={c + size * 0.115} textAnchor="middle" fill={cfg.text} fontSize={size * 0.295} fontWeight="800">{value}</SvgText>
+    </Svg>
   );
 }
 
 function chipsFor(amount) {
-  const result = [];
+  const res = [];
   let rem = Math.max(0, Math.floor(amount));
-  for (const denom of [100, 25, 10]) {
-    const count = Math.floor(rem / denom);
-    if (count > 0) result.push({ denom, count });
-    rem -= count * denom;
+  for (const d of [100, 25, 10]) {
+    const n = Math.floor(rem / d);
+    if (n > 0) res.push({ denom: d, count: n });
+    rem -= n * d;
   }
-  return result;
+  return res;
 }
 
 export function ChipStack({ amount, size = 28 }) {
   if (!amount || amount <= 0) return null;
   const chips = chipsFor(amount);
-  if (chips.length === 0) return null;
-
+  if (!chips.length) return null;
   return (
-    <div className="chip-stack">
+    <View style={s.stack}>
       {chips.map(({ denom, count }) => (
-        <div key={denom} className="chip-group">
+        <View key={denom} style={s.group}>
           <PokerChip value={denom} size={size} />
-          {count > 1 && <span className="chip-count">×{count}</span>}
-        </div>
+          {count > 1 && <Text style={s.count}>×{count}</Text>}
+        </View>
       ))}
-    </div>
+    </View>
   );
 }
+
+const s = StyleSheet.create({
+  stack: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  group: { flexDirection: 'row', alignItems: 'center', gap: 2 },
+  count: { color: '#fafafa', fontSize: 11, fontWeight: '700' },
+});
