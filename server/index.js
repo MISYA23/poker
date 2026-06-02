@@ -10,8 +10,7 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-const clientBuild = path.join(__dirname, '../client/dist');
-app.use(express.static(clientBuild));
+app.get('/', (req, res) => res.json({ status: 'ok', service: 'poker-server' }));
 
 const server = http.createServer(app);
 const io = new Server(server, {

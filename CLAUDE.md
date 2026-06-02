@@ -1,7 +1,7 @@
 # Poker — Claude Context
 
 ## What this is
-Multiplayer Texas Hold'em. One table, up to 9 players, overflow goes to a waitlist. Real-time via Socket.IO. No auth, no persistence — all state is in-memory on the server.
+Multiplayer Texas Hold'em. Up to 9 players, overflow goes to a waitlist. Real-time via Socket.IO. No auth, no persistence — all state is in-memory on the server.
 
 **Live:** https://poker-production-d726.up.railway.app  
 **Repo:** https://github.com/briandanilo/poker.git
@@ -10,18 +10,23 @@ Multiplayer Texas Hold'em. One table, up to 9 players, overflow goes to a waitli
 
 ## Stack
 - **Server:** Node/Express + Socket.IO (`server/index.js`)
-- **Client:** React + Vite (`client/src/`)
+- **Client:** React Native (Expo SDK 56) — `client/`
 - **Deploy:** Railway — auto-deploys on every push to `main`
 
 ---
 
-## Dev ports
-- Client (Vite): **5843** — `cd client && npm run dev`
-- Server (Express): **3843** — `cd server && npm run dev`
+## Dev workflow — always prod server
+The client always connects to the production Railway server (`https://poker-production-d726.up.railway.app`). There is no local server. This eliminates local/prod drift.
 
-Open http://localhost:5843. Vite proxies `/socket.io` to 3843.
+**To run the client locally:**
+```
+npm run dev          # from root — launches Expo
+cd client && npm start   # equivalent
+```
 
-Start both: `npm start` from root (uses concurrently).
+Expo will print a QR code. Scan with the Expo Go app on Android, or press `a` to open in an Android emulator.
+
+**To deploy:** push to `main` on GitHub. Railway redeploys automatically.
 
 ---
 
@@ -32,26 +37,29 @@ Start both: `npm start` from root (uses concurrently).
 
 ## Project structure
 ```
-poker-game/
+poker/
 ├── CLAUDE.md               ← this file, keep updated
-├── README.md               ← human-facing short doc
-├── package.json            ← root: build + start scripts for Railway
-├── client/
-│   ├── src/
-│   │   ├── App.jsx         ← top-level state: screen, myId, gameState
-│   │   ├── App.css         ← all styles (single file)
-│   │   ├── hooks/
-│   │   │   └── useSocket.js ← singleton socket, registers handlers
-│   │   └── components/
-│   │       ├── GameTable.jsx     ← main game layout, owns raiseAmount state
-│   │       ├── BettingControls.jsx ← action buttons only (no slider)
-│   │       ├── PlayerSeat.jsx    ← opponent seat card
-│   │       ├── Card.jsx          ← playing card SVG
-│   │       ├── PokerChip.jsx     ← SVG chips ($10 red, $25 green, $100 black) + ChipStack
-│   │       ├── Lobby.jsx         ← name entry screen
-│   │       ├── WaitlistScreen.jsx
-│   │       └── WinnerDisplay.jsx ← unused (winner shown inline now)
-│   └── vite.config.js      ← port 5843, proxies /socket.io → 3843
+├── package.json            ← root: build + start for Railway, dev launches Expo
+├── client/                 ← Expo RN app (Android / iOS / web)
+│   ├── App.js              ← navigation root, GameContext, socket handlers
+│   ├── app.json            ← Expo config (name: Poker Monkey)
+│   ├── assets/             ← dk.png, diddy.webp, jungle.png + Expo icons
+│   └── src/
+│       ├── config.js       ← SERVER_URL (always prod Railway URL)
+│       ├── theme.js        ← color tokens
+│       ├── hooks/
+│       │   └── useSocket.js ← singleton socket.io-client, websocket transport
+│       ├── components/
+│       │   ├── Card.jsx         ← playing card (View + Text, no SVG needed)
+│       │   ├── PokerChip.jsx    ← SVG chips via react-native-svg + ChipStack
+│       │   ├── Avatar.jsx       ← player avatar image
+│       │   ├── TimerRing.jsx    ← Reanimated 4 animated SVG ring
+│       │   ├── PlayerSeat.jsx   ← opponent seat (cards + nameplate + ring)
+│       │   └── BettingControls.jsx ← fold/check/call/raise + horizontal slider
+│       └── screens/
+│           ├── LobbyScreen.jsx    ← name + avatar picker, jungle bg
+│           ├── WaitlistScreen.jsx ← queue position + live table view
+│           └── GameScreen.jsx     ← felt oval, community cards, pot, my seat
 └── server/
     ├── index.js            ← Express + Socket.IO + all game coordination
     └── game/
@@ -64,19 +72,19 @@ poker-game/
 
 ## Key architecture decisions
 
-**Single table:** One global `PokerGame` instance on the server. No rooms/lobbies.
+**GameContext:** `App.js` owns all game state and socket handlers. Screens read via `useContext(GameContext)`. Navigation is driven programmatically via `useNavigationContainerRef` — the server's socket events (`joined`, `game-state`, `reset`) trigger navigation, not the screens themselves.
 
 **State flow:** Server owns all truth. Every action emits `game-state` to all connected sockets with a per-player view (hole cards hidden for opponents except at showdown).
 
-**Turn timer:** Server enforces a 20-second auto-fold. `turnDeadline` (Unix ms timestamp) is broadcast in every `game-state` so clients can show an accurate countdown without drift.
+**Turn timer:** Server enforces a 20-second auto-fold. `turnDeadline` (Unix ms timestamp) is broadcast in every `game-state`. `TimerRing` uses Reanimated 4 `withTiming` on SVG `strokeDashoffset`, synced to the deadline so it's accurate even if state arrives mid-turn.
 
-**Raise slider:** Vertical, positioned absolute on the right edge of `.game-table` (middle 50% of screen height, `top: 25%` to `bottom: 25%`, `z-index: 10`). `raiseAmount` state lives in `GameTable`, passed down to `BettingControls` (buttons only) and rendered as a slider alongside. The `.action-bar` has `z-index: 20` to stay above the slider — without this the slider overlay eats clicks on the All In / Raise buttons.
+**Raise slider:** Horizontal `@react-native-community/slider`. `raiseAmount` state lives in `GameScreen`, passed to `BettingControls`.
 
-**Winner display:** No overlay. During showdown, chips appear on the winner's seat with hand name. Next hand starts automatically after 3s.
+**Winner display:** No overlay. During showdown, winner is shown in the nameplate chips area. Next hand starts automatically after 3s.
 
-**Pot chips:** `ChipStack` component breaks any amount into $100/$25/$10 chips and renders them as SVG. Shown in pot center and on player bets.
+**Pot chips:** `ChipStack` breaks any amount into $100/$25/$10 denominations, rendered as SVG circles via `react-native-svg`.
 
-**Reset:** `GET /reset` (browser URL bar) or `POST /admin/reset` (button). Clears all four timers (`turnTimer`, `autoStartTimer`, `nextHandTimer`, `timerPlayerId`), replaces the `PokerGame` instance, clears `socketPlayers` and `waitlist`, then `io.emit('reset')` sends all clients to the lobby. The button also does `window.location.href = '/'` to guarantee clean client state.
+**Reset:** `POST /admin/reset` — button in Lobby and GameScreen. Clears all timers server-side, emits `reset` to all clients which navigates everyone back to Lobby.
 
 ---
 
@@ -94,8 +102,8 @@ poker-game/
 ## Socket events
 | Event | Direction | Meaning |
 |---|---|---|
-| `join` | client→server | Player joins with `{ playerName }` |
-| `joined` | server→client | Confirms join with `{ playerId, atTable }` |
+| `join` | client→server | `{ playerName, avatarId }` |
+| `joined` | server→client | `{ playerId, atTable }` |
 | `game-state` | server→client | Full state update (every action) |
 | `player-action` | client→server | `{ action, amount }` — fold/check/call/raise/all-in |
 | `reset` | server→client | Wipe and go to lobby |
@@ -106,7 +114,7 @@ poker-game/
 ## Railway build
 Railway runs:
 ```
-npm run build   → installs deps + vite build → client/dist
-npm start       → node server/index.js (serves client/dist as static)
+npm run build   → npm install --prefix server  (no client build — Expo apps are distributed separately)
+npm start       → node server/index.js
 ```
-Single service — Express serves both the built React app and Socket.IO on the same port (Railway-injected `PORT` env var).
+Server exposes Socket.IO on Railway-injected `PORT`. No static file serving.
