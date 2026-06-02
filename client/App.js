@@ -40,9 +40,10 @@ export default function App() {
     },
   });
 
-  const onJoin = useCallback((playerName, avatarId) => {
+  const onJoin = useCallback((playerName, avatarId, playerId) => {
     setError(null);
-    emit('join', { playerName, avatarId });
+    emit('enter-lobby', { playerId });
+    emit('join', { playerId, playerName, avatarId });
   }, [emit]);
 
   const onAction = useCallback((action, amount) => {
