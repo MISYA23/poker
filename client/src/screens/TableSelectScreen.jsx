@@ -19,7 +19,7 @@ export default function TableSelectScreen() {
   useEffect(() => {
     fetchRooms();
     // Refresh every 5s so player counts stay current
-    const id = setInterval(fetchRooms, 5000);
+    const id = setInterval(fetchRooms, 2000);
     return () => clearInterval(id);
   }, [fetchRooms]);
 

@@ -25,7 +25,7 @@ export default function Card({ card, size = 'md', faceDown = false }) {
   }
 
   const symbol = SUIT_SYMBOLS[card.suit] || card.suit;
-  const color = SUIT_COLORS[card.suit] || '#1a1a1a';
+  const color = SUIT_COLORS_REGULAR[card.suit] || '#1a1a1a';
   const rankFont = card.rank === '10' ? s.font * 0.82 : s.font;
 
   return (
