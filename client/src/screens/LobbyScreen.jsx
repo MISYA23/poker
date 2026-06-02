@@ -101,7 +101,7 @@ export default function LobbyScreen() {
 
   const handleGoogleSignIn = useCallback(() => {
     setGoogleLoading(true);
-    promptAsync().finally(() => setGoogleLoading(false));
+    promptAsync({ createTask: false }).finally(() => setGoogleLoading(false));
   }, [promptAsync]);
 
   const handleReset = () => {
