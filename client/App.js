@@ -9,6 +9,7 @@ import { StatusBar } from 'expo-status-bar';
 import { GameContext } from './src/context/GameContext';
 import { useSocket } from './src/hooks/useSocket';
 import LobbyScreen from './src/screens/LobbyScreen';
+import TableSelectScreen from './src/screens/TableSelectScreen';
 import WaitlistScreen from './src/screens/WaitlistScreen';
 import GameScreen from './src/screens/GameScreen';
 
@@ -18,26 +19,15 @@ export default function App() {
   const [myId, setMyId] = useState(null);
   const [gameState, setGameState] = useState(null);
   const [error, setError] = useState(null);
+  const [tables, setTables] = useState(null);
   const navigationRef = useNavigationContainerRef();
 
-  // Store pending join info while waiting for lobby-state to get a tableId
-  const pendingJoinRef = useRef(null);
-  const emitRef = useRef(null);
+  // Pending player info (set on onJoin, used when onJoinTable is called)
+  const playerRef = useRef(null);
 
   const emit = useSocket({
-    'lobby-state': ({ tables }) => {
-      const pending = pendingJoinRef.current;
-      if (!pending || !emitRef.current) return;
-      // Find first table with room (playerCount < 2), or any table
-      const table = tables?.find(t => (t.playerCount ?? 0) < 2) || tables?.[0];
-      if (!table) return; // wait for next lobby-state
-      pendingJoinRef.current = null;
-      emitRef.current('join', {
-        playerId: pending.playerId,
-        playerName: pending.playerName,
-        avatarId: pending.avatarId,
-        tableId: table.id,
-      });
+    'lobby-state': ({ tables: t }) => {
+      setTables(t || []);
     },
     joined: ({ playerId }) => {
       setMyId(playerId);
@@ -52,19 +42,27 @@ export default function App() {
     reset: () => {
       setMyId(null);
       setGameState(null);
-      setError(null);
-      pendingJoinRef.current = null;
+      setTables(null);
+      playerRef.current = null;
       navigationRef.reset({ index: 0, routes: [{ name: 'Lobby' }] });
     },
   });
 
-  // Keep emitRef current so lobby-state handler can call it
-  emitRef.current = emit;
-
+  // Step 1: auth complete — store player info, enter lobby, go to table select
   const onJoin = useCallback((playerName, avatarId, playerId) => {
     setError(null);
-    pendingJoinRef.current = { playerName, avatarId, playerId };
+    setTables(null);
+    playerRef.current = { playerName, avatarId, playerId };
     emit('enter-lobby', { playerId });
+    navigationRef.navigate('TableSelect');
+  }, [emit]);
+
+  // Step 2: user picks a table
+  const onJoinTable = useCallback((tableId) => {
+    const p = playerRef.current;
+    if (!p) return;
+    setError(null);
+    emit('join', { playerId: p.playerId, playerName: p.playerName, avatarId: p.avatarId, tableId });
   }, [emit]);
 
   const onAction = useCallback((action, amount) => {
@@ -74,21 +72,21 @@ export default function App() {
   const onLeave = useCallback(() => {
     setMyId(null);
     setGameState(null);
-    setError(null);
-    pendingJoinRef.current = null;
+    setTables(null);
+    playerRef.current = null;
     emit('leave-table');
-    emit('enter-lobby', { playerId: myId });
     navigationRef.reset({ index: 0, routes: [{ name: 'Lobby' }] });
-  }, [emit, myId]);
+  }, [emit]);
 
   return (
-    <GameContext.Provider value={{ gameState, myId, error, emit, onJoin, onAction, onLeave }}>
+    <GameContext.Provider value={{ gameState, myId, error, tables, emit, onJoin, onJoinTable, onAction, onLeave }}>
       <GestureHandlerRootView style={{ flex: 1 }}>
         <SafeAreaProvider>
           <StatusBar style="light" />
           <NavigationContainer ref={navigationRef}>
             <Stack.Navigator screenOptions={{ headerShown: false, animation: 'fade' }}>
               <Stack.Screen name="Lobby" component={LobbyScreen} />
+              <Stack.Screen name="TableSelect" component={TableSelectScreen} />
               <Stack.Screen name="Waitlist" component={WaitlistScreen} />
               <Stack.Screen name="Game" component={GameScreen} />
             </Stack.Navigator>
