@@ -1,13 +1,27 @@
-import React, { useContext } from 'react';
+import React, { useContext, useState, useEffect, useCallback } from 'react';
 import { View, Text, Pressable, ScrollView, StyleSheet, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { GameContext } from '../context/GameContext';
+import { SERVER_URL } from '../config';
 import { colors } from '../theme';
 
-const TABLE_EMOJIS = { California: '🌴', Paris: '🗼', Dublin: '🍀' };
-
 export default function TableSelectScreen() {
-  const { tables, onJoinTable, onLeave, error } = useContext(GameContext);
+  const { onJoinTable, onLeave, error } = useContext(GameContext);
+  const [rooms, setRooms] = useState(null);
+
+  const fetchRooms = useCallback(() => {
+    fetch(`${SERVER_URL}/api/rooms`)
+      .then(r => r.json())
+      .then(setRooms)
+      .catch(() => setRooms([]));
+  }, []);
+
+  useEffect(() => {
+    fetchRooms();
+    // Refresh every 5s so player counts stay current
+    const id = setInterval(fetchRooms, 5000);
+    return () => clearInterval(id);
+  }, [fetchRooms]);
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -24,41 +38,39 @@ export default function TableSelectScreen() {
 
         {error && <Text style={styles.error}>{error}</Text>}
 
-        {!tables ? (
+        {!rooms ? (
           <View style={styles.loading}>
             <ActivityIndicator color={colors.gold} size="large" />
             <Text style={styles.loadingText}>Connecting…</Text>
           </View>
         ) : (
           <ScrollView style={styles.list} contentContainerStyle={styles.listContent}>
-            {tables.map(table => (
+            {rooms.map(room => (
               <Pressable
-                key={table.id}
+                key={room.id}
                 style={styles.tableCard}
-                onPress={() => onJoinTable(table.id)}
+                onPress={() => onJoinTable(room.id)}
               >
                 <View style={styles.tableLeft}>
-                  <Text style={styles.tableEmoji}>
-                    {TABLE_EMOJIS[table.name] || '🎲'}
-                  </Text>
+                  <Text style={styles.tableEmoji}>{room.emoji || '🎲'}</Text>
                   <View>
-                    <Text style={styles.tableName}>{table.name}</Text>
+                    <Text style={styles.tableName}>{room.name}</Text>
                     <Text style={styles.tableVariant}>No Limit Hold'em</Text>
                   </View>
                 </View>
 
                 <View style={styles.tableRight}>
-                  <Text style={styles.playerCount}>{table.playerCount ?? 0}</Text>
+                  <Text style={styles.playerCount}>{room.playerCount ?? 0}</Text>
                   <Text style={styles.playerLabel}>players</Text>
                 </View>
 
                 <View style={styles.tableFooter}>
                   <View style={[
                     styles.phaseDot,
-                    table.phase === 'waiting' ? styles.dotWaiting : styles.dotActive,
+                    room.phase === 'waiting' ? styles.dotWaiting : styles.dotActive,
                   ]} />
                   <Text style={styles.phaseLabel}>
-                    {table.phase === 'waiting' ? 'Waiting for players' : 'Hand in progress'}
+                    {room.phase === 'waiting' ? 'Waiting for players' : 'Hand in progress'}
                   </Text>
                   <Text style={styles.joinLabel}>Join →</Text>
                 </View>
