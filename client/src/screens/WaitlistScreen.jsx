@@ -1,7 +1,7 @@
 import React, { useContext } from 'react';
 import { View, Text, Pressable, ScrollView, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { GameContext } from '../../App';
+import { GameContext } from '../context/GameContext';
 import Card from '../components/Card';
 import { colors } from '../theme';
 

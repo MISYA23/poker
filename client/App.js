@@ -1,17 +1,16 @@
 import 'react-native-gesture-handler';
-import React, { useState, useCallback, createContext } from 'react';
+import React, { useState, useCallback } from 'react';
 import { NavigationContainer, useNavigationContainerRef } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 
+import { GameContext } from './src/context/GameContext';
 import { useSocket } from './src/hooks/useSocket';
 import LobbyScreen from './src/screens/LobbyScreen';
 import WaitlistScreen from './src/screens/WaitlistScreen';
 import GameScreen from './src/screens/GameScreen';
-
-export const GameContext = createContext(null);
 const Stack = createStackNavigator();
 
 export default function App() {

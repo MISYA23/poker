@@ -4,7 +4,7 @@ import {
   ImageBackground, ScrollView, StyleSheet, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { GameContext } from '../../App';
+import { GameContext } from '../context/GameContext';
 import { colors } from '../theme';
 import { SERVER_URL } from '../config';
 

@@ -1,7 +1,7 @@
 import React, { useContext, useState, useEffect } from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { GameContext } from '../../App';
+import { GameContext } from '../context/GameContext';
 import Card from '../components/Card';
 import Avatar from '../components/Avatar';
 import TimerRing from '../components/TimerRing';
