@@ -16,7 +16,7 @@ const AVATARS = [
 ];
 
 export default function ProfileScreen({ navigation }) {
-  const { playerInfo, myElo, onUpdateProfile } = useContext(GameContext);
+  const { playerInfo, myElo, onUpdateProfile, deckStyle, setDeckStyle } = useContext(GameContext);
 
   const [name, setName]         = useState(playerInfo?.name || '');
   const [avatarId, setAvatarId] = useState(playerInfo?.avatarId || 'dk');
@@ -81,6 +81,17 @@ export default function ProfileScreen({ navigation }) {
               </Pressable>
             ))}
           </View>
+        </View>
+
+        {/* 4-Color deck */}
+        <View style={s.section}>
+          <Text style={s.sectionLbl}>Card Style</Text>
+          <Pressable style={s.toggle} onPress={() => setDeckStyle(d => d === 'four-color' ? 'regular' : 'four-color')}>
+            <Text style={s.toggleLbl}>4-Color Deck</Text>
+            <View style={[s.toggleTrack, deckStyle === 'four-color' && s.toggleOn]}>
+              <View style={[s.toggleThumb, deckStyle === 'four-color' && s.toggleThumbOn]} />
+            </View>
+          </Pressable>
         </View>
 
         {/* Save */}
@@ -151,6 +162,12 @@ const s = StyleSheet.create({
   historyInfo: { flex: 1 },
   historyOpp: { color: colors.white, fontSize: 14, fontWeight: '600' },
   historyDate: { color: colors.gray, fontSize: 11, marginTop: 2 },
+  toggle: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: 10, padding: 14 },
+  toggleLbl: { color: colors.white, fontSize: 14 },
+  toggleTrack: { width: 44, height: 26, borderRadius: 13, backgroundColor: 'rgba(255,255,255,0.2)', justifyContent: 'center', padding: 2 },
+  toggleOn: { backgroundColor: colors.gold },
+  toggleThumb: { width: 22, height: 22, borderRadius: 11, backgroundColor: '#fff' },
+  toggleThumbOn: { alignSelf: 'flex-end' },
   replayArrow: { color: colors.gold, fontSize: 12, marginLeft: 4 },
   eloChange: { fontSize: 15, fontWeight: '800' },
   eloPos: { color: '#4ade80' },

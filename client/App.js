@@ -26,6 +26,7 @@ export default function App() {
   const [matchList, setMatchList]       = useState([]);
   const [onlinePlayers, setOnlinePlayers] = useState([]);
   const [myElo, setMyElo]                   = useState(null);
+  const [deckStyle, setDeckStyle]           = useState('regular');
   const [matchOver, setMatchOver]           = useState(null);
   const [myRecentMatches, setMyRecentMatches] = useState([]);
   const [playerInfo, setPlayerInfo] = useState(null); // { playerId, name, avatarId }
@@ -138,7 +139,7 @@ export default function App() {
   return (
     <GameContext.Provider value={{
       gameState, myId, error, inQueue, matchList, onlinePlayers, myElo, matchOver,
-      playerInfo, myRecentMatches,
+      playerInfo, myRecentMatches, deckStyle, setDeckStyle,
       emit, onLogin, onLogout, onUpdateProfile, onFindMatch, onCancelMatch,
       onObserve, onAction, onLeave, onRematch, navigationRef,
     }}>
