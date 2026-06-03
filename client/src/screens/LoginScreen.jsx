@@ -48,17 +48,26 @@ export default function LoginScreen() {
     });
   }, []);
 
-  // Handle Google OAuth response
+  // Handle Google OAuth response (authorization code flow)
   useEffect(() => {
     if (response?.type !== 'success') return;
-    const { access_token } = response.params;
     setGoogleLoading(true);
-    fetch('https://www.googleapis.com/userinfo/v2/me', { headers: { Authorization: `Bearer ${access_token}` } })
-      .then(r => r.json())
-      .then(async profile => {
+
+    AuthSession.exchangeCodeAsync(
+      {
+        clientId: GOOGLE_CLIENT_ID,
+        code: response.params.code,
+        redirectUri,
+        extraParams: { code_verifier: request?.codeVerifier },
+      },
+      GOOGLE_DISCOVERY
+    ).then(tokens => {
+      return fetch('https://www.googleapis.com/userinfo/v2/me', {
+        headers: { Authorization: `Bearer ${tokens.accessToken}` },
+      }).then(r => r.json()).then(async profile => {
         const serverRes = await fetch(`${SERVER_URL}/auth/google`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ token: access_token }),
+          body: JSON.stringify({ token: tokens.accessToken }),
         }).then(r => r.json()).catch(() => null);
 
         const playerId   = serverRes?.playerId || `g_${profile.id}`;
@@ -67,9 +76,10 @@ export default function LoginScreen() {
 
         await setUser({ playerId, name: playerName, avatarId: av, email: profile.email });
         onLogin(playerName, av, playerId);
-      })
-      .catch(() => {})
-      .finally(() => setGoogleLoading(false));
+      });
+    })
+    .catch(() => {})
+    .finally(() => setGoogleLoading(false));
   }, [response]);
 
   const handleGuestJoin = async () => {
