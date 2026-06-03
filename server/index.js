@@ -374,6 +374,12 @@ io.on('connection', (socket) => {
 
     if (vote) {
       m.rematchVotes.add(sp.playerId);
+      // Notify the other player that this player wants a rematch
+      const other = matchPlayers(m).find(p => p.playerId !== sp.playerId);
+      if (other) {
+        io.to(other.socketId).emit('rematch-pending', { from: sp.playerName });
+      }
+
       if (m.rematchVotes.size >= 2) {
         // Both agreed — restart
         resetRoom(m);

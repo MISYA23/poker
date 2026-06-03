@@ -358,15 +358,41 @@ export default function GameScreen() {
                 </Text>
                 <Text style={s.eloNew}>→ {matchOver.newElo}</Text>
               </View>
-              <Text style={s.modalSub}>One more for the road?</Text>
-              <View style={s.modalBtns}>
-                <Pressable style={[s.modalBtn, s.modalBtnNo]} onPress={() => onRematch(false)}>
-                  <Text style={s.modalBtnTxt}>Leave</Text>
-                </Pressable>
-                <Pressable style={[s.modalBtn, s.modalBtnYes]} onPress={() => onRematch(true)}>
-                  <Text style={s.modalBtnTxt}>Play Again</Text>
-                </Pressable>
-              </View>
+
+              {matchOver.myVote ? (
+                // I already voted yes — waiting for opponent
+                <Text style={s.modalWaiting}>
+                  {matchOver.opponentWantsRematch
+                    ? 'Starting rematch…'
+                    : 'Waiting for opponent…'}
+                </Text>
+              ) : matchOver.opponentWantsRematch ? (
+                // Opponent voted yes — prompt me
+                <>
+                  <Text style={s.modalSub}>{matchOver.opponentWantsRematch} wants a rematch!</Text>
+                  <View style={s.modalBtns}>
+                    <Pressable style={[s.modalBtn, s.modalBtnNo]} onPress={() => onRematch(false)}>
+                      <Text style={s.modalBtnTxt}>Decline</Text>
+                    </Pressable>
+                    <Pressable style={[s.modalBtn, s.modalBtnYes]} onPress={() => onRematch(true)}>
+                      <Text style={s.modalBtnTxt}>Accept</Text>
+                    </Pressable>
+                  </View>
+                </>
+              ) : (
+                // Neither voted yet
+                <>
+                  <Text style={s.modalSub}>One more for the road?</Text>
+                  <View style={s.modalBtns}>
+                    <Pressable style={[s.modalBtn, s.modalBtnNo]} onPress={() => onRematch(false)}>
+                      <Text style={s.modalBtnTxt}>Leave</Text>
+                    </Pressable>
+                    <Pressable style={[s.modalBtn, s.modalBtnYes]} onPress={() => onRematch(true)}>
+                      <Text style={s.modalBtnTxt} numberOfLines={1}>Play Again</Text>
+                    </Pressable>
+                  </View>
+                </>
+              )}
             </View>
           </View>
         )}
@@ -470,6 +496,7 @@ const s = StyleSheet.create({
   eloNeg: { color: '#f87171' },
   eloNew: { color: colors.gray, fontSize: 16 },
   modalSub: { color: 'rgba(255,255,255,0.6)', fontSize: 14 },
+  modalWaiting: { color: colors.gray, fontSize: 14, fontStyle: 'italic' },
   modalBtns: { flexDirection: 'row', gap: 12, marginTop: 4 },
   modalBtn: { flex: 1, paddingVertical: 12, borderRadius: 12, alignItems: 'center' },
   modalBtnNo:  { backgroundColor: 'rgba(255,255,255,0.1)' },

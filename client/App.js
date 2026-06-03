@@ -45,11 +45,16 @@ export default function App() {
     'match-list':  ({ matches, onlinePlayers: op }) => { setMatchList(matches || []); setOnlinePlayers(op || []); },
     'game-state':  (state)           => {
       setGameState(state);
+      // Clear match-over modal when rematch starts
+      if (state.atTable && !state.gameOver) setMatchOver(null);
       if (state.atTable || state.observing) navigationRef.navigate('Game');
     },
     'match-over':  (data)            => {
-      setMatchOver(data);
+      setMatchOver({ ...data, myVote: null, opponentWantsRematch: null });
       if (data.newElo != null) setMyElo(data.newElo);
+    },
+    'rematch-pending': ({ from })    => {
+      setMatchOver(prev => prev ? { ...prev, opponentWantsRematch: from } : prev);
     },
     error:         ({ message })     => setError(message),
     reset:         ()                => {
@@ -121,7 +126,9 @@ export default function App() {
 
   const onRematch = useCallback((vote) => {
     emit('rematch-vote', { vote });
-    if (!vote) {
+    if (vote) {
+      setMatchOver(prev => prev ? { ...prev, myVote: true } : prev);
+    } else {
       setGameState(null); setMatchOver(null);
       matchIdRef.current = null;
       navigationRef.reset({ index: 0, routes: [{ name: 'Lobby' }] });
