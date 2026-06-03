@@ -6,7 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { GameContext } from '../context/GameContext';
 import Card from '../components/Card';
 import Avatar from '../components/Avatar';
-import Bananas from '../components/Bananas';
+import { ChipStack } from '../components/PokerChip';
 import BettingControls from '../components/BettingControls';
 import { colors } from '../theme';
 import { SERVER_URL } from '../config';
@@ -184,7 +184,7 @@ function BetBadge({ player }) {
   if (!player || (player.roundBet <= 0 && !player.allIn)) return null;
   return (
     <View style={s.betBadge}>
-      {player.roundBet > 0 && <Bananas amount={player.roundBet} size={14} />}
+      {player.roundBet > 0 && <ChipStack amount={player.roundBet} size={14} />}
       {player.roundBet > 0 && <Text style={s.betAmt}>{player.roundBet.toLocaleString()}</Text>}
       {player.allIn && <Text style={s.allInTag}>ALL IN</Text>}
     </View>
@@ -211,7 +211,7 @@ function WinFlight({ show, toBottom, amount }) {
   if (!show) return null;
   return (
     <Animated.View style={[s.winFlight, { transform: [{ translateY: anim }], opacity }]}>
-      <Bananas amount={amount} size={24} />
+      <ChipStack amount={amount} size={24} />
     </Animated.View>
   );
 }
@@ -374,7 +374,7 @@ export default function GameScreen() {
               </View>
               {displayPot > 0 && (
                 <View style={s.potRow}>
-                  <Bananas amount={displayPot} size={16} />
+                  <ChipStack amount={displayPot} size={16} />
                   <Text style={s.potAmt}>{displayPot.toLocaleString()}</Text>
                 </View>
               )}
@@ -463,7 +463,7 @@ export default function GameScreen() {
                 {gameWinner?.id === myId ? '🎉 You Won!' : `${gameWinner?.name || 'Opponent'} Won!`}
               </Text>
               <View style={s.bananaRow}>
-                {[...Array(5)].map((_, i) => <Bananas key={i} amount={500} size={28} />)}
+                <ChipStack amount={gameWinner?.chips || 1000} size={28} />
               </View>
               <Text style={s.gameOverSub}>One more for the road?</Text>
               <View style={s.gameOverBtns}>
