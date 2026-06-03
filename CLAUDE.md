@@ -1,74 +1,111 @@
 # Poker — Claude Context
 
 ## What this is
-Multiplayer Texas Hold'em (Poker Monkey). Up to 9 players per table. Three permanent named tables: California, Paris, Dublin. Real-time via Socket.IO. Google SSO or guest identity. Full game state persisted to Postgres.
+Multiplayer Texas Hold'em (Poker Monkey). 1v1 matchmaking (chess.com style). ELO rating system. Three permanent named tables: California, Paris, Dublin. Real-time via Socket.IO. Google SSO or guest identity. Hand history persisted to Postgres via Redis.
 
-**Active branch:** `main` — React Native (Expo SDK 54) app  
+**Active branch:** `main`  
 **Live:** https://poker-production-d726.up.railway.app  
 **Repo:** https://github.com/briandanilo/poker.git  
-**Current version:** v2.0
-
-> `generic` branch = old web React/Vite client (deprecated, kept for reference)
+**Current version:** v2.3 (bump `VERSION` in `client/src/config.js` on every push)
 
 ---
 
 ## Stack
-- **Server:** Node/Express + Socket.IO (`server/index.js`) + pg (Railway Postgres)
-- **Client:** React Native (Expo SDK 54) — `client/` — runs on Android, iOS, and web
+- **Server:** Node/Express + Socket.IO (`server/index.js`) + pg + ioredis
+- **Client:** React Native (Expo SDK 54) — `client/` — Android, iOS, web
+- **DB:** Railway Postgres — rooms, matches, player_stats, hands, actions
+- **Cache:** Railway Redis — live game snapshot + hand event log
 - **Deploy:** Railway — auto-deploys on push to `main`
 
 ---
 
 ## Dev workflow
 
-### Local dev (server + Expo web)
+### Always use prod server
+The client always connects to `https://poker-production-d726.up.railway.app` by default. `client/.env` has the local override commented out — leave it that way unless you specifically need local server testing.
 
-**Start server:**
+```
+# client/.env
+# EXPO_PUBLIC_SERVER_URL=http://localhost:3843   ← emulator only, uncomment to use local
+```
+
+### Run local server (optional)
 ```bash
-cd server && node index.js
-# Runs on port 3843. Loads rooms from Railway Postgres.
+cd server && node index.js   # port 3843, connects to prod Railway Postgres + Redis via .env
 ```
 
-**Start Expo web:**
+`server/.env` contains prod DB + Redis URLs — never commit this file.
+
+### Run Expo
 ```bash
-cd client && ./node_modules/.bin/expo start --web --port 7843
+cd client && ./node_modules/.bin/expo start
 ```
-⚠️ Use `./node_modules/.bin/expo`, NOT `npx expo` — npx will pull down expo v56 which is incompatible with SDK 54.
+⚠️ Use `./node_modules/.bin/expo`, NOT `npx expo` — npx pulls expo v56 which is incompatible with SDK 54.
 
-**Client env (`client/.env`):**
-```
-EXPO_PUBLIC_SERVER_URL=http://localhost:3843
-```
-When this var is set, `src/config.js` uses it instead of the prod URL. Remove or unset to point back at prod.
+Press `a` for Android emulator, `w` for web, scan QR for physical device.
 
-### Android emulator dev
+### Android emulator
 ```bash
-# Start emulator (must be running before Expo)
 ~/Library/Android/sdk/emulator/emulator -avd Pixel_8 -no-audio -no-boot-anim -gpu host &
-
-# Start Expo
-cd client && ./node_modules/.bin/expo start --android
 ```
-- Pixel 8 AVD, API 37, **must have 4GB RAM** — default 2GB causes silent OOM crashes
-- Fix: `sed -i '' 's/hw.ramSize=2048/hw.ramSize=4096/' ~/.android/avd/Pixel_8.avd/config.ini`
+- Pixel 8 AVD, API 37, **must have 4GB RAM** (`hw.ramSize=4096` in `~/.android/avd/Pixel_8.avd/config.ini`)
+- Kill Metro only: `lsof -ti:8081 | xargs kill -9` — never `pkill -f expo` (kills emulator too)
 
-### Deploy to prod
+### Deploy
 ```bash
-git push origin main   # Railway auto-deploys
+git add -A && git commit && git push origin main
 ```
+Railway auto-deploys. Always bump `VERSION` in `client/src/config.js`.
 
 ---
 
 ## Screen flow
 ```
-LobbyScreen → TableSelectScreen → [WaitlistScreen] → GameScreen
+LoginScreen → LobbyScreen → GameScreen
 ```
-- `LobbyScreen.jsx` — name input, Google SSO (`expo-auth-session`), avatar picker (4 image avatars), jungle background
-- `TableSelectScreen.jsx` — California / Paris / Dublin table cards with live player counts
-- `WaitlistScreen.jsx` — queue position if table is full
-- `GameScreen.jsx` — felt oval, up to 9-player portrait layout, community cards, pot, betting controls
 
-Navigation: `@react-navigation/stack` in `App.js`, `headerShown: false`, `fade` animation.
+- **LoginScreen** — Google Sign In (`expo-auth-session`, `usePKCE: false`) + guest (name + avatar + Join). Auto-login if AsyncStorage has saved session.
+- **LobbyScreen** — PLAY! button, observer list of active matches, ☰ hamburger → Log Out
+- **GameScreen** — felt oval, up to 9-player portrait layout, community cards, pot, betting controls, match-over modal with ELO
+
+Navigation: `@react-navigation/stack`, `headerShown: false`, `fade` animation.
+
+---
+
+## Matchmaking flow
+1. Player hits PLAY! → `find-match` socket event
+2. If opponent waiting → instant pair → `match-found` → both navigate to GameScreen
+3. If no opponent → `in-queue` → spinner + Cancel button
+4. Game plays out (hands logged to Redis, flushed to Postgres at hand end)
+5. One player busted → `match-over` event with ELO change
+6. Match-over modal: Play Again (rematch) or Leave → back to Lobby
+
+---
+
+## Architecture
+
+### Data layers
+- **DB (Postgres)** — source of truth for permanent data: room definitions, player stats, hand history
+- **Redis** — live game snapshot (crash recovery) + append-only hand event log per hand
+- **Server memory** — active matches map, socket player map, matchmaking queue
+- **Client** — React state + AsyncStorage for user identity
+
+### Rooms (permanent in DB)
+Three rows in `rooms` table: California 🌴, Paris 🗼, Dublin 🍀. `max_players = 2`. Loaded on server startup via `loadRooms()` — but currently unused for gameplay (matches are dynamic). Kept for hand history FK.
+
+### Matches (dynamic, in memory)
+Each match = one PokerGame instance. Created by matchmaker when two players pair. Destroyed after rematch decision. Match UUID used as room UUID in hand logging.
+
+### Hand logging
+- Every action during a hand → `server/handLogger.js` → Redis Stream `room:{id}:hand:{uuid}:events`
+- Redis snapshot updated on every action → `room:{id}:snapshot`
+- On hand end → `flushHandToDb()` bulk-inserts all events to `actions` table, creates `hands` row
+- Redis hand key cleared for next hand
+
+### ELO
+- Stored in `player_stats` table (`player_id`, `elo`, `matches_played`, `matches_won`)
+- Calculated at match end: K=32, standard ELO formula
+- Both guests and Google users tracked by `player_id`
 
 ---
 
@@ -78,168 +115,115 @@ poker/
 ├── CLAUDE.md
 ├── package.json            ← root: build + start for Railway
 ├── server/
-│   ├── index.js            ← Express + Socket.IO + all game coordination
-│   ├── db.js               ← Postgres schema + queries
+│   ├── index.js            ← Express + Socket.IO + match coordination
+│   ├── matchmaker.js       ← in-memory queue, ELO calc
+│   ├── handLogger.js       ← Redis event log + Postgres flush
+│   ├── redis.js            ← ioredis client, snapshot + stream helpers
+│   ├── db.js               ← Postgres schema (from generic branch, partially used)
+│   ├── .env                ← DATABASE_URL + REDIS_URL (gitignored, never commit)
 │   └── game/
-│       ├── PokerGame.js    ← pure game logic
+│       ├── PokerGame.js
 │       ├── Deck.js
 │       └── HandEvaluator.js
 └── client/
-    ├── App.js              ← navigation root, socket event handlers, GameContext provider
-    ├── app.json            ← Expo config (name: Poker Monkey, SDK 54)
+    ├── App.js              ← navigation, socket handlers, GameContext provider
+    ├── app.json            ← Expo config (scheme: poker-monkey, SDK 54)
     ├── eas.json            ← EAS build profiles
-    ├── assets/             ← dk.png, diddy.webp, alfie.png, jazz.png, jungle.png
+    ├── .env                ← EXPO_PUBLIC_SERVER_URL (gitignored, commented out by default)
+    ├── assets/             ← dk.png, diddy.webp, alfie.png, jazz.png, jungle.png, bananas.png
     └── src/
-        ├── config.js           ← SERVER_URL (env var or prod fallback)
+        ├── config.js           ← SERVER_URL + VERSION
         ├── theme.js            ← color tokens
-        ├── context/
-        │   └── GameContext.js  ← shared React context (myId, gameState, emit, onJoin, etc.)
-        ├── hooks/
-        │   └── useSocket.js    ← singleton socket.io-client connecting to SERVER_URL
-        ├── utils/
-        │   └── user.js         ← AsyncStorage helpers (getUser, setUser, getOrCreatePlayerId)
+        ├── context/GameContext.js
+        ├── hooks/useSocket.js  ← singleton socket.io-client
+        ├── utils/user.js       ← AsyncStorage helpers
         ├── components/
-        │   ├── Avatar.jsx          ← image avatar (dk/diddy/alfie/jazz)
-        │   ├── Bananas.jsx         ← exists but NOT used in GameScreen (chips are canonical)
-        │   ├── BettingControls.jsx ← fold/check/call/raise + slider
-        │   ├── Card.jsx            ← playing card (View + Text)
-        │   ├── PokerChip.jsx       ← SVG chips via react-native-svg; exports PokerChip + ChipStack
-        │   └── TimerRing.jsx       ← pure-JS SVG countdown ring (setInterval, no Reanimated)
+        │   ├── Avatar.jsx, Bananas.jsx, BettingControls.jsx
+        │   ├── Card.jsx (deckStyle prop: regular/four-color)
+        │   ├── PokerChip.jsx + ChipStack
+        │   └── TimerRing.jsx (setInterval, no Reanimated)
         └── screens/
+            ├── LoginScreen.jsx
             ├── LobbyScreen.jsx
-            ├── TableSelectScreen.jsx
-            ├── WaitlistScreen.jsx
             └── GameScreen.jsx
 ```
 
 ---
 
-## Key architecture decisions
-
-**No localStorage** — this is React Native. Use `AsyncStorage` via `src/utils/user.js`.
-
-**GameContext** (`src/context/GameContext.js`) — provided by `App.js`, consumed by all screens. Contains: `gameState`, `myId`, `error`, `lobbyRooms`, `emit`, `onJoin`, `onJoinTable`, `onAction`, `onLeave`. Kept in its own file to avoid circular imports.
-
-**Socket** (`useSocket.js`) — singleton, connects to `SERVER_URL` with `transports: ['websocket']`. Reconnects automatically. For web, `SERVER_URL` must point to the Express server, not the Metro bundler port.
-
-**Rooms** — loaded from Postgres on server startup (`loadRooms()`). Keyed by UUID in `rooms` Map. Three permanent rooms: California 🌴, Paris 🗼, Dublin 🍀. Room object: `{ id (uuid), name, emoji, maxPlayers, game, rematchVotes, timers }`.
-
-**State flow** — server owns all truth. Every action emits `game-state` to all sockets in the room with per-player hole card visibility.
-
-**Turn timer** — server enforces 20s auto-fold. `turnDeadline` (Unix ms) broadcast in `game-state`. `TimerRing` uses `setInterval` + React state at 100ms — no Reanimated.
-
-**Avatars** — 4 image-based: `dk`, `diddy`, `alfie`, `jazz`. VALID_AVATARS checked on server; unknown IDs default to `dk`.
-
-**Auth:**
-- Google: `expo-auth-session` → `/auth/google` on server (validates token via Google userinfo API) → returns `{ playerId, name }`
-- Guest: `getOrCreatePlayerId()` from AsyncStorage → `/api/player/guest` (fire-and-forget acknowledgement)
-
-**Pot / bet display — use ChipStack, not Bananas:**
-`Bananas.jsx` still exists but is not used in `GameScreen`. Pot, bet badges, and the win-flight animation all use `ChipStack` from `PokerChip.jsx`. Do not swap back to Bananas.
-
-**9-player layout:**
-`OPP_SLOTS` in `GameScreen.jsx` handles 1–8 opponents (9 total players including local player). `PokerGame.js` caps at 9. DB `max_players = 9` for all rooms. The layout positions (`getSeatStyle`/`getBetStyle`) cover all slots including `top-cl`, `top-cr`, `bot-left`, `bot-right`.
-
-**SeatView `hideCards` prop:**
-The local player's seat (`bottom` slot) passes `hideCards` to `SeatView` to suppress the small xs-size card thumbnails — their large hole cards are rendered separately below the oval. Opponents never get `hideCards`.
-
-**Oval size — use `useWindowDimensions`, never `onLayout`:**
-`GameScreen` derives `ovalSize` from `useWindowDimensions()` (only fires on actual window resize). Do NOT attach `onLayout` to `ovalWrap` — game state changes (pot text, community cards, narration) would cause layout thrash, re-firing `onLayout` on every update and making the oval visually unstable. `ovalSize` feeds `getSeatStyle`/`getBetStyle`/`myCards` positioning.
-
-**Portrait layout:**
-The app is portrait-first. `ovalWrap` uses `flex: 1` (not `aspectRatio`) so the felt fills vertical space. Stage has `paddingVertical: 80` to give seats room to extend ±60px outside the oval edges. My large hole cards sit at `bottom: -90` relative to the oval.
-
----
-
-## HTTP routes (server)
-| Method | Path | Purpose |
-|---|---|---|
-| GET | `/` | Health check |
-| GET | `/health` | Detailed health |
-| GET | `/api/rooms` | Room list (used by TableSelectScreen seed fetch) |
-| POST | `/api/player/guest` | Guest registration acknowledgement |
-| POST | `/auth/google` | Google token validation → returns playerId |
-| POST | `/admin/reset` | Wipe all rooms, emit reset to all clients |
-
 ## Socket events
 | Event | Direction | Payload |
 |---|---|---|
 | `enter-lobby` | client→server | `{ playerId }` |
-| `join` | client→server | `{ playerId, playerName, avatarId, tableId }` |
-| `leave-table` | client→server | — |
+| `find-match` | client→server | `{ playerId, playerName, avatarId }` |
+| `cancel-match` | client→server | — |
+| `observe` | client→server | `{ matchId }` |
+| `unobserve` | client→server | `{ matchId }` |
 | `player-action` | client→server | `{ action, amount }` |
-| `rematch-vote` | client→server | `{ vote }` |
-| `joined` | server→client | `{ playerId, tableId }` |
+| `rematch-vote` | client→server | `{ vote: bool }` |
+| `leave-table` | client→server | — |
+| `in-queue` | server→client | — |
+| `queue-cancelled` | server→client | — |
+| `match-found` | server→client | `{ matchId, opponent: { name } }` |
+| `match-list` | server→client | `{ matches: [{ id, player1, player2, phase, handCount }] }` |
 | `game-state` | server→client | Full state for this player |
-| `lobby-state` | server→client | `{ tables: [{id, name, emoji, playerCount, phase, maxPlayers}] }` |
+| `match-over` | server→client | `{ winnerId, winnerName, eloChange, newElo }` |
 | `reset` | server→client | Go back to Lobby |
 | `error` | server→client | `{ message }` |
 
 ---
 
-## Building an APK
-```bash
-cd client
-eas build --platform android --profile preview
-```
-- `preview` → internal distribution APK (~15 min, EAS cloud)
-- EAS project: `coinburst/poker-monkey` (ID: `8b891cf4-46a6-46b7-951b-7cc826e8a4e7`)
-- EAS account: `coinburst` / brian.danilo@gmail.com
+## DB schema (key tables)
+| Table | Purpose |
+|---|---|
+| `rooms` | Permanent table definitions (California/Paris/Dublin) |
+| `matches` | Completed match records with ELO before/after |
+| `player_stats` | ELO, matches played/won per player |
+| `hands` | One row per completed hand (room_uuid, hand_uuid, pot, winner) |
+| `actions` | Every action in every hand (player, action_type, amount, phase, seq) |
+| `users` | Google auth profiles (from generic branch) |
 
 ---
 
-## Railway build
+## Building an APK
+```bash
+cd client && eas build --platform android --profile preview
 ```
-npm run build   → npm install --prefix server
-npm start       → node server/index.js
-```
-No static file serving — Expo apps are distributed separately (Expo Go or APK).
+EAS project: `coinburst/poker-monkey` (ID: `8b891cf4-46a6-46b7-951b-7cc826e8a4e7`)
+
+---
+
+## Railway services
+| Service | Purpose |
+|---|---|
+| poker | Node server (auto-deploys from main) |
+| Postgres | DB — public URL in server/.env |
+| Redis | Cache — public URL in server/.env |
+
+Railway API token: in global CLAUDE.md
 
 ---
 
 ## Troubleshooting
 
-### Socket connects to wrong port on web
-**Symptom:** `[socket] connect_error: server error` — socket tries to connect to Metro bundler port instead of Express.  
-**Root cause:** `useSocket.js` was using `window.location.origin` (Metro port) instead of `SERVER_URL`.  
-**Fix:** `useSocket.js` now uses `SERVER_URL` from `config.js`. Make sure `EXPO_PUBLIC_SERVER_URL` in `client/.env` points to the Express server port.
+### Socket connects to wrong URL
+**Symptom:** `connect_error: websocket error` on physical device  
+**Fix:** Restart Metro fully (Ctrl+C + re-run). `r` (JS reload) doesn't re-read `.env`. Physical device always uses prod — make sure `EXPO_PUBLIC_SERVER_URL` is commented out in `client/.env`.
 
-### npx expo pulls wrong version
-**Symptom:** `npm warn exec The following package was not found and will be installed: expo@56.x.x`  
-**Fix:** Always use `./node_modules/.bin/expo start`, never `npx expo start`.
+### Google OAuth Error 400: invalid_request
+**Symptom:** `Parameter not allowed for this message type: code_challenge_method`  
+**Fix:** `usePKCE: false` in `useAuthRequest` options (already applied in LoginScreen).
 
 ### DO NOT USE react-native-reanimated
-**Symptom:** `TurboModule method "installTurboModule"` crash or `NullPointerException in ReanimatedModule`  
-**Root cause:** Expo Go SDK 54 bundled native Reanimated doesn't match any installable JS version.  
-**Fix:** `TimerRing` uses `setInterval` + React state. If you need animations, use Reanimated only in EAS builds, not Expo Go.
+Expo Go SDK 54 bundled native Reanimated doesn't match any installable JS version. `TimerRing` uses `setInterval`. If animations needed, use Reanimated only in EAS builds.
 
-### Emulator OOM (Expo Go silently closes)
-**Symptom:** `lowmemorykiller: Kill 'host.exp.exponent'` in adb logcat  
-**Fix:** `sed -i '' 's/hw.ramSize=2048/hw.ramSize=4096/' ~/.android/avd/Pixel_8.avd/config.ini` then restart emulator.
-
-### Emulator black screen
-**Fix:** `rm -rf ~/.android/avd/Pixel_8.avd/snapshots` then cold boot.
-
-### pkill -f expo kills the emulator
-**Fix:** Never use `pkill -f expo`. Kill Metro only: `lsof -ti:8081 | xargs kill -9`
-
-### Circular import: App.js ↔ screens
-**Fix:** `GameContext` lives in `src/context/GameContext.js`. Never import it from `App.js`.
-
-### Expo Go SDK mismatch
-**Fix:** `npx expo install expo@~54.0.0 && npx expo install --fix`
+### Emulator OOM
+`sed -i '' 's/hw.ramSize=2048/hw.ramSize=4096/' ~/.android/avd/Pixel_8.avd/config.ini`
 
 ### Oval background shifts during gameplay
-**Symptom:** The felt oval appears to resize or jump as cards are dealt, pot updates, or narration text appears.  
-**Root cause:** `onLayout` on `ovalWrap` fires on every flex recalculation caused by game state changes. Each fire updates `ovalSize` state → re-render → another layout pass → infinite churn.  
-**Fix:** Use `useWindowDimensions()` to derive `ovalSize`. It only fires on actual window/screen resize. Never attach `onLayout` to `ovalWrap`.
+Use `useWindowDimensions()` for oval sizing. Never `onLayout` on `ovalWrap` — fires on every game state change causing thrash.
 
-### Hole cards rendered twice on local player's seat
-**Symptom:** Local player sees small cards above the nameplate AND large cards below it.  
-**Root cause:** `SeatView` renders xs-size card thumbnails for all players. The local player also has a separate large-card block below the oval.  
-**Fix:** Pass `hideCards` prop to `SeatView` for the bottom (local player) seat only. Opponents never get this prop.
+### npx expo pulls wrong version
+Always use `./node_modules/.bin/expo start`, never `npx expo start`.
 
-### Table appears in landscape mode
-**Symptom:** The poker table oval is wider than it is tall, even on a portrait phone.  
-**Root cause:** `ovalWrap` had `aspectRatio: 2.1` which forces a landscape-ratio rectangle.  
-**Fix:** `ovalWrap` uses `flex: 1` so the oval fills available portrait height. Do not add `aspectRatio` back.
+### Duplicate hole cards on local player seat
+Pass `hideCards` prop to `SeatView` for the bottom (local player) slot only.
