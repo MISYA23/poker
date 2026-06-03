@@ -381,15 +381,31 @@ io.on('connection', (socket) => {
       }
 
       if (m.rematchVotes.size >= 2) {
-        // Both agreed — restart
-        resetRoom(m);
-        m.game.gameOver = false;
-        m.ended = false;
+        // Both agreed — create a NEW match (not a reset of the same one)
+        const { randomUUID } = require('crypto');
+        const newMatchId = randomUUID();
+        const newMatch = createMatch(m.p1, m.p2);
+        // Override the UUID to our new one and tag the previous match
+        matches.delete(newMatch.id);
+        newMatch.id = newMatchId;
+        newMatch.previousMatchUuid = m.id; // link back for DB
+        matches.set(newMatchId, newMatch);
+
+        // Update socketPlayers to point to the new match
         for (const p of matchPlayers(m)) {
-          m.game.addPlayer(p.playerId, p.playerName, p.avatarId);
+          const psp = socketPlayers.get(p.socketId);
+          if (psp) psp.matchId = newMatchId;
         }
-        broadcastMatchState(m);
-        tryAutoStart(m);
+
+        // Close out the old match
+        m.ended = true;
+        matches.delete(m.id);
+
+        // Start the new match
+        newMatch.game.addPlayer(m.p1.playerId, m.p1.playerName, m.p1.avatarId);
+        newMatch.game.addPlayer(m.p2.playerId, m.p2.playerName, m.p2.avatarId);
+        broadcastMatchState(newMatch);
+        tryAutoStart(newMatch);
       }
     } else {
       // Player declined — both go back to lobby

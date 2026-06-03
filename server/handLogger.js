@@ -20,16 +20,23 @@ async function ensurePlayers(players) {
   }
 }
 
-async function getOrCreateMatchRow(matchUuid, p1, p2) {
+async function getOrCreateMatchRow(matchUuid, p1, p2, previousMatchUuid) {
   if (matchIdCache[matchUuid]) return matchIdCache[matchUuid];
-  // Ensure both players exist first (required for FK)
   await ensurePlayers([p1, p2]);
+
+  // Resolve previous match DB id if this is a rematch
+  let prevDbId = null;
+  if (previousMatchUuid) {
+    const { rows } = await db.query('SELECT id FROM matches WHERE uuid=$1', [previousMatchUuid]);
+    prevDbId = rows[0]?.id || null;
+  }
+
   const { rows } = await db.query(
-    `INSERT INTO matches (uuid, player1_id, player2_id, status)
-     VALUES ($1, $2, $3, 'active')
+    `INSERT INTO matches (uuid, player1_id, player2_id, status, previous_match_id)
+     VALUES ($1, $2, $3, 'active', $4)
      ON CONFLICT (uuid) DO UPDATE SET status='active'
      RETURNING id`,
-    [matchUuid, p1.id, p2.id]
+    [matchUuid, p1.id, p2.id, prevDbId]
   );
   matchIdCache[matchUuid] = rows[0].id;
   return rows[0].id;
@@ -134,7 +141,7 @@ async function flushHandToDb(room, game) {
     const p2 = room.p2 ? { id: room.p2.playerId, name: room.p2.playerName, avatarId: room.p2.avatarId } : null;
     if (!p1?.id || !p2?.id) { await clearHandEvents(room.id, handUuid); return; }
 
-    const matchDbId = await getOrCreateMatchRow(room.id, p1, p2);
+    const matchDbId = await getOrCreateMatchRow(room.id, p1, p2, room.previousMatchUuid);
     const winner = game.winners?.[0];
 
     const { rows: [hand] } = await db.query(
