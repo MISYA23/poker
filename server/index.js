@@ -1,3 +1,4 @@
+require('dotenv').config();
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
@@ -281,6 +282,28 @@ function doReset() {
 
 app.get('/reset', (_, res) => { doReset(); res.json({ ok: true }); });
 app.post('/admin/reset', (_, res) => { doReset(); res.json({ ok: true }); });
+
+// Guest player registration — fire-and-forget from client, just acknowledge
+app.post('/api/player/guest', (req, res) => {
+  res.json({ ok: true });
+});
+
+// Google auth — validates access token and returns playerId
+app.post('/auth/google', async (req, res) => {
+  const { token } = req.body || {};
+  if (!token) return res.status(400).json({ error: 'Missing token' });
+  try {
+    const profile = await fetch('https://www.googleapis.com/userinfo/v2/me', {
+      headers: { Authorization: `Bearer ${token}` },
+    }).then(r => r.json());
+    if (!profile.id) return res.status(401).json({ error: 'Invalid token' });
+    const playerId = 'g_' + profile.id;
+    const name = profile.given_name || profile.name || '';
+    res.json({ playerId, name, avatarId: null });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 
 const PORT = process.env.PORT || 3843;
 loadRooms()

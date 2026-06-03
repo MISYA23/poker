@@ -1,156 +1,175 @@
 # Poker — Claude Context
 
 ## What this is
-Multiplayer Texas Hold'em. Up to 9 players, overflow goes to a waitlist. Real-time via Socket.IO. No auth, no persistence — all state is in-memory on the server.
+Multiplayer Texas Hold'em (Poker Monkey). Up to 6 players per table. Three permanent named tables: California, Paris, Dublin. Real-time via Socket.IO. Google SSO or guest identity. Full game state persisted to Postgres.
 
-**Branches:** `generic` = active development branch (multi-table, emoji avatars, bots, lobby)  
+**Active branch:** `main` — React Native (Expo SDK 54) app  
 **Live:** https://poker-production-d726.up.railway.app  
 **Repo:** https://github.com/briandanilo/poker.git  
-**Current version:** v1.04
+**Current version:** v2.0
+
+> `generic` branch = old web React/Vite client (deprecated, kept for reference)
 
 ---
 
 ## Stack
-- **Server:** Node/Express + Socket.IO (`server/index.js`)
-- **Client:** React Native (Expo SDK 54) — `client/`
-- **Deploy:** Railway — auto-deploys on every push to `main`
+- **Server:** Node/Express + Socket.IO (`server/index.js`) + pg (Railway Postgres)
+- **Client:** React Native (Expo SDK 54) — `client/` — runs on Android, iOS, and web
+- **Deploy:** Railway — auto-deploys on push to `main`
 
 ---
 
-## Dev workflow — always prod server
-The client always connects to the production Railway server. There is no local server. This eliminates local/prod drift entirely.
+## Dev workflow
 
-**First time setup on a new machine:**
+### Local dev (server + Expo web)
+
+**Start server:**
 ```bash
-# 1. Install EAS CLI (global, one-time)
-npm install -g eas-cli
+cd server && node index.js
+# Runs on port 3843. Loads rooms from Railway Postgres.
+```
 
-# 2. Log into Expo account
-eas login   # account: coinburst / brian.danilo@gmail.com
+**Start Expo web:**
+```bash
+cd client && ./node_modules/.bin/expo start --web --port 7843
+```
+⚠️ Use `./node_modules/.bin/expo`, NOT `npx expo` — npx will pull down expo v56 which is incompatible with SDK 54.
 
-# 3. Install deps
-cd client && npm install
+**Client env (`client/.env`):**
+```
+EXPO_PUBLIC_SERVER_URL=http://localhost:3843
+```
+When this var is set, `src/config.js` uses it instead of the prod URL. Remove or unset to point back at prod.
 
-# 4. Start Android emulator (must be running before step 5)
-#    Open Android Studio → Device Manager → start Pixel 8
-#    OR from terminal:
+### Android emulator dev
+```bash
+# Start emulator (must be running before Expo)
 ~/Library/Android/sdk/emulator/emulator -avd Pixel_8 -no-audio -no-boot-anim -gpu host &
 
-# 5. Run the app
-cd /path/to/poker/client && npx expo start --android
+# Start Expo
+cd client && ./node_modules/.bin/expo start --android
 ```
+- Pixel 8 AVD, API 37, **must have 4GB RAM** — default 2GB causes silent OOM crashes
+- Fix: `sed -i '' 's/hw.ramSize=2048/hw.ramSize=4096/' ~/.android/avd/Pixel_8.avd/config.ini`
 
-**Emulator requirements:**
-- Pixel 8 AVD must have at least **4GB RAM** (default 2GB causes OOM crashes)
-- To check/fix: `~/.android/avd/Pixel_8.avd/config.ini` → `hw.ramSize=4096`
-- API 37 (Android 17 "CinnamonBun") — only system image currently installed
-
-**Daily dev loop:**
+### Deploy to prod
 ```bash
-cd /Users/briandanilo/poker/client && npx expo start --android
+git push origin main   # Railway auto-deploys
 ```
-The emulator must be running first. Expo auto-opens Expo Go and loads the app.
-
-**To deploy:** push to `main` on GitHub. Railway redeploys automatically.
 
 ---
 
 ## Screen flow
 ```
-SignIn (name + avatar) → Lobby (table picker) → GameTable
+LobbyScreen → TableSelectScreen → [WaitlistScreen] → GameScreen
 ```
-- `SignIn.jsx` — name + avatar selection; auto-advances if localStorage has saved profile
-- `Lobby.jsx` — shows California / Paris / Dublin cards with player count + phase
-- `GameTable.jsx` — full game UI
+- `LobbyScreen.jsx` — name input, Google SSO (`expo-auth-session`), avatar picker (4 image avatars), jungle background
+- `TableSelectScreen.jsx` — California / Paris / Dublin table cards with live player counts
+- `WaitlistScreen.jsx` — queue position if table is full
+- `GameScreen.jsx` — felt oval, 6-player layout, community cards, pot, betting controls
+
+Navigation: `@react-navigation/stack` in `App.js`, `headerShown: false`, `fade` animation.
 
 ---
 
 ## Project structure
 ```
 poker/
-├── CLAUDE.md               ← this file, keep updated
-├── package.json            ← root: build + start for Railway, dev launches Expo
-├── client/                 ← Expo RN app (Android / iOS / web)
-│   ├── App.js              ← navigation root, socket handlers
-│   ├── app.json            ← Expo config (name: Poker Monkey, SDK 54)
-│   ├── eas.json            ← EAS build profiles (preview = internal APK)
-│   ├── assets/             ← dk.png, diddy.webp, jungle.png + Expo icons
-│   └── src/
-│       ├── config.js           ← SERVER_URL (always prod Railway URL)
-│       ├── theme.js            ← color tokens
-│       ├── context/
-│       │   └── GameContext.js  ← React context shared across screens
-│       ├── hooks/
-│       │   └── useSocket.js    ← singleton socket.io-client, websocket transport
-│       ├── components/
-│       │   ├── Card.jsx            ← playing card (View + Text)
-│       │   ├── PokerChip.jsx       ← SVG chips via react-native-svg + ChipStack
-│       │   ├── Avatar.jsx          ← player avatar image (dk / diddy)
-│       │   ├── TimerRing.jsx       ← pure-JS SVG ring (setInterval, no Reanimated)
-│       │   ├── PlayerSeat.jsx      ← opponent seat (cards + nameplate + ring)
-│       │   └── BettingControls.jsx ← fold/check/call/raise + horizontal slider
-│       └── screens/
-│           ├── LobbyScreen.jsx    ← name + avatar picker, jungle bg
-│           ├── WaitlistScreen.jsx ← queue position + live table view
-│           └── GameScreen.jsx     ← felt oval, community cards, pot, my seat
-└── server/
-    ├── index.js                 ← all game coordination + Socket.IO
-    ├── db.js                    ← Postgres schema + queries
-    └── game/
-        ├── PokerGame.js         ← pure game logic
-        ├── Deck.js
-        └── HandEvaluator.js
+├── CLAUDE.md
+├── package.json            ← root: build + start for Railway
+├── server/
+│   ├── index.js            ← Express + Socket.IO + all game coordination
+│   ├── db.js               ← Postgres schema + queries
+│   └── game/
+│       ├── PokerGame.js    ← pure game logic
+│       ├── Deck.js
+│       └── HandEvaluator.js
+└── client/
+    ├── App.js              ← navigation root, socket event handlers, GameContext provider
+    ├── app.json            ← Expo config (name: Poker Monkey, SDK 54)
+    ├── eas.json            ← EAS build profiles
+    ├── assets/             ← dk.png, diddy.webp, alfie.png, jazz.png, jungle.png
+    └── src/
+        ├── config.js           ← SERVER_URL (env var or prod fallback)
+        ├── theme.js            ← color tokens
+        ├── context/
+        │   └── GameContext.js  ← shared React context (myId, gameState, emit, onJoin, etc.)
+        ├── hooks/
+        │   └── useSocket.js    ← singleton socket.io-client connecting to SERVER_URL
+        ├── utils/
+        │   └── user.js         ← AsyncStorage helpers (getUser, setUser, getOrCreatePlayerId)
+        ├── components/
+        │   ├── Avatar.jsx          ← image avatar (dk/diddy/alfie/jazz)
+        │   ├── Bananas.jsx         ← win celebration component
+        │   ├── BettingControls.jsx ← fold/check/call/raise + slider
+        │   ├── Card.jsx            ← playing card (View + Text)
+        │   ├── PokerChip.jsx       ← SVG chips via react-native-svg + ChipStack
+        │   └── TimerRing.jsx       ← pure-JS SVG countdown ring (setInterval, no Reanimated)
+        └── screens/
+            ├── LobbyScreen.jsx
+            ├── TableSelectScreen.jsx
+            ├── WaitlistScreen.jsx
+            └── GameScreen.jsx
 ```
 
 ---
 
 ## Key architecture decisions
 
-**GameContext:** Lives in `src/context/GameContext.js`. `App.js` provides it; screens consume via `useContext(GameContext)`. Kept separate to avoid circular imports (screens used to import from `../../App` which caused cycles).
+**No localStorage** — this is React Native. Use `AsyncStorage` via `src/utils/user.js`.
 
-**State flow:** Server owns all truth. Every action emits `game-state` to all sockets with a per-player view (hole cards hidden for opponents except at showdown).
+**GameContext** (`src/context/GameContext.js`) — provided by `App.js`, consumed by all screens. Contains: `gameState`, `myId`, `error`, `lobbyRooms`, `emit`, `onJoin`, `onJoinTable`, `onAction`, `onLeave`. Kept in its own file to avoid circular imports.
 
-**Turn timer:** Server enforces 20s auto-fold. `turnDeadline` (Unix ms) is broadcast in every `game-state`. `TimerRing` uses `setInterval` at 100ms to update SVG `strokeDashoffset` — pure JS, no Reanimated (see troubleshooting below).
+**Socket** (`useSocket.js`) — singleton, connects to `SERVER_URL` with `transports: ['websocket']`. Reconnects automatically. For web, `SERVER_URL` must point to the Express server, not the Metro bundler port.
 
-**Raise slider:** Horizontal `@react-native-community/slider`. `raiseAmount` state lives in `GameScreen`, passed to `BettingControls`.
+**Rooms** — loaded from Postgres on server startup (`loadRooms()`). Keyed by UUID in `rooms` Map. Three permanent rooms: California 🌴, Paris 🗼, Dublin 🍀. Room object: `{ id (uuid), name, emoji, maxPlayers, game, rematchVotes, timers }`.
 
-**Winner display:** No overlay. Winner shown in nameplate chips area during showdown. Next hand starts automatically after 3s.
+**State flow** — server owns all truth. Every action emits `game-state` to all sockets in the room with per-player hole card visibility.
 
-**Pot chips:** `ChipStack` breaks any amount into $100/$25/$10 denominations, rendered as SVG via `react-native-svg`.
+**Turn timer** — server enforces 20s auto-fold. `turnDeadline` (Unix ms) broadcast in `game-state`. `TimerRing` uses `setInterval` + React state at 100ms — no Reanimated.
 
-**Reset:** `POST /admin/reset` — clears all timers server-side, emits `reset` to all clients → back to Lobby.
+**Avatars** — 4 image-based: `dk`, `diddy`, `alfie`, `jazz`. VALID_AVATARS checked on server; unknown IDs default to `dk`.
+
+**Auth:**
+- Google: `expo-auth-session` → `/auth/google` on server (validates token via Google userinfo API) → returns `{ playerId, name }`
+- Guest: `getOrCreatePlayerId()` from AsyncStorage → `/api/player/guest` (fire-and-forget acknowledgement)
 
 ---
 
-## Building an APK (for distribution)
+## HTTP routes (server)
+| Method | Path | Purpose |
+|---|---|---|
+| GET | `/` | Health check |
+| GET | `/health` | Detailed health |
+| GET | `/api/rooms` | Room list (used by TableSelectScreen seed fetch) |
+| POST | `/api/player/guest` | Guest registration acknowledgement |
+| POST | `/auth/google` | Google token validation → returns playerId |
+| POST | `/admin/reset` | Wipe all rooms, emit reset to all clients |
 
+## Socket events
+| Event | Direction | Payload |
+|---|---|---|
+| `enter-lobby` | client→server | `{ playerId }` |
+| `join` | client→server | `{ playerId, playerName, avatarId, tableId }` |
+| `leave-table` | client→server | — |
+| `player-action` | client→server | `{ action, amount }` |
+| `rematch-vote` | client→server | `{ vote }` |
+| `joined` | server→client | `{ playerId, tableId }` |
+| `game-state` | server→client | Full state for this player |
+| `lobby-state` | server→client | `{ tables: [{id, name, emoji, playerCount, phase, maxPlayers}] }` |
+| `reset` | server→client | Go back to Lobby |
+| `error` | server→client | `{ message }` |
+
+---
+
+## Building an APK
 ```bash
 cd client
 eas build --platform android --profile preview
 ```
-
-- `preview` profile → internal distribution APK (no Play Store needed)
-- Build happens on EAS cloud servers (~15 min)
-- Download link emailed when done
+- `preview` → internal distribution APK (~15 min, EAS cloud)
 - EAS project: `coinburst/poker-monkey` (ID: `8b891cf4-46a6-46b7-951b-7cc826e8a4e7`)
-
-**State flow:** Server owns all truth. `game-state` broadcast on every action with per-player hole card visibility.
-
-**Bet chips on felt:** Rendered as separate absolutely-positioned elements at `BET_POS` coordinates, not inside nameplates.
-
-**Action labels on felt:** `ActionOnFelt` component renders flash labels (Fold/Call/Raise etc.) on the felt at `BET_POS`, not in nameplates. Chip count always visible in nameplate.
-
----
-
-## Socket events
-| Event | Direction | Meaning |
-|---|---|---|
-| `join` | client→server | `{ playerName, avatarId }` |
-| `joined` | server→client | `{ playerId, atTable }` |
-| `game-state` | server→client | Full state update (every action) |
-| `player-action` | client→server | `{ action, amount }` — fold/check/call/raise/all-in |
-| `reset` | server→client | Wipe and go to lobby |
-| `error` | server→client | `{ message }` for invalid actions |
+- EAS account: `coinburst` / brian.danilo@gmail.com
 
 ---
 
@@ -159,76 +178,38 @@ eas build --platform android --profile preview
 npm run build   → npm install --prefix server
 npm start       → node server/index.js
 ```
-Server exposes Socket.IO on Railway-injected `PORT`. No static file serving (Expo apps are distributed separately).
+No static file serving — Expo apps are distributed separately (Expo Go or APK).
 
 ---
 
-## Troubleshooting log
+## Troubleshooting
 
-### Reanimated crashes in Expo Go — DO NOT USE react-native-reanimated
-**Symptom:** `Exception in HostFunction: TurboModule method "installTurboModule" called with 1 arguments (expected argument count: 0)` or `NullPointerException in ReanimatedModule`
+### Socket connects to wrong port on web
+**Symptom:** `[socket] connect_error: server error` — socket tries to connect to Metro bundler port instead of Express.  
+**Root cause:** `useSocket.js` was using `window.location.origin` (Metro port) instead of `SERVER_URL`.  
+**Fix:** `useSocket.js` now uses `SERVER_URL` from `config.js`. Make sure `EXPO_PUBLIC_SERVER_URL` in `client/.env` points to the Express server port.
 
-**Root cause:** Expo Go bundles its own native Reanimated binary. The JS version we install must exactly match that native version. For SDK 54, neither Reanimated 3.x nor 4.x produced a working match — every version we tried (3.16.7, 4.1.1, 4.3.1) failed with either a signature mismatch or null pointer.
+### npx expo pulls wrong version
+**Symptom:** `npm warn exec The following package was not found and will be installed: expo@56.x.x`  
+**Fix:** Always use `./node_modules/.bin/expo start`, never `npx expo start`.
 
-**Fix:** Removed Reanimated entirely. `TimerRing` now uses `setInterval` + React state to update SVG `strokeDashoffset` at 100ms intervals. Pure JS, no native module dependency. Looks identical.
+### DO NOT USE react-native-reanimated
+**Symptom:** `TurboModule method "installTurboModule"` crash or `NullPointerException in ReanimatedModule`  
+**Root cause:** Expo Go SDK 54 bundled native Reanimated doesn't match any installable JS version.  
+**Fix:** `TimerRing` uses `setInterval` + React state. If you need animations, use Reanimated only in EAS builds, not Expo Go.
 
-**If adding animations in future:** Use Reanimated only in EAS/production builds, not Expo Go. Or use `react-native-reanimated` in a development build (not Expo Go).
+### Emulator OOM (Expo Go silently closes)
+**Symptom:** `lowmemorykiller: Kill 'host.exp.exponent'` in adb logcat  
+**Fix:** `sed -i '' 's/hw.ramSize=2048/hw.ramSize=4096/' ~/.android/avd/Pixel_8.avd/config.ini` then restart emulator.
 
----
+### Emulator black screen
+**Fix:** `rm -rf ~/.android/avd/Pixel_8.avd/snapshots` then cold boot.
 
-### Expo Go SDK version mismatch
-**Symptom:** "Project is incompatible with this version of Expo Go" or "installed version is for SDK 54, project uses SDK 53"
+### pkill -f expo kills the emulator
+**Fix:** Never use `pkill -f expo`. Kill Metro only: `lsof -ti:8081 | xargs kill -9`
 
-**Fix:** Project must match Expo Go on device. We're on SDK 54. To upgrade/downgrade:
-```bash
-npx expo install expo@~54.0.0
-npx expo install --fix
-```
+### Circular import: App.js ↔ screens
+**Fix:** `GameContext` lives in `src/context/GameContext.js`. Never import it from `App.js`.
 
----
-
-### babel-preset-expo missing after SDK shuffle
-**Symptom:** `Cannot find module 'babel-preset-expo'`
-
-**Fix:** `npm install babel-preset-expo@~54.0.10 --save-dev`
-
----
-
-### Emulator OOM crash (Expo Go killed silently)
-**Symptom:** Expo Go opens then immediately closes. `adb logcat` shows `lowmemorykiller: Kill 'host.exp.exponent'`
-
-**Fix:** Increase AVD RAM to 4096MB:
-```bash
-sed -i '' 's/hw.ramSize=2048/hw.ramSize=4096/' ~/.android/avd/Pixel_8.avd/config.ini
-```
-Restart emulator after.
-
----
-
-### pkill -f expo kills the emulator too
-**Symptom:** Emulator disappears after trying to restart Expo server.
-
-**Fix:** Never use `pkill -f expo`. Kill only specific ports:
-```bash
-lsof -ti:8081 | xargs kill -9
-```
-
----
-
-### Emulator stuck on black screen / fails to boot
-**Symptom:** Black screen, "Emulator failed to connect within 5 minutes" in Device Manager.
-
-**Fix:** Wipe corrupted snapshots and cold boot:
-```bash
-rm -rf ~/.android/avd/Pixel_8.avd/snapshots
-```
-Then start with: `emulator -avd Pixel_8 -no-audio -no-boot-anim -gpu host`
-
----
-
-### Circular import warning: App.js ↔ screens
-**Symptom:** `Require cycle: App.js -> src/screens/LobbyScreen.jsx -> App.js`
-
-**Root cause:** Screens were importing `GameContext` from `../../App`, creating a cycle.
-
-**Fix:** `GameContext` lives in `src/context/GameContext.js`. All screens import from there.
+### Expo Go SDK mismatch
+**Fix:** `npx expo install expo@~54.0.0 && npx expo install --fix`

@@ -1,12 +1,13 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { io } from 'socket.io-client';
+import { SERVER_URL } from '../config';
 
 let socketInstance = null;
 
 function getSocket() {
   if (!socketInstance) {
-    console.log('[socket] creating new socket to', window.location.origin);
-    socketInstance = io(window.location.origin, { path: '/socket.io' });
+    console.log('[socket] creating new socket to', SERVER_URL);
+    socketInstance = io(SERVER_URL, { transports: ['websocket'] });
 
     socketInstance.on('connect', () => console.log('[socket] connected, id=', socketInstance.id));
     socketInstance.on('disconnect', (reason) => console.log('[socket] disconnected:', reason));
