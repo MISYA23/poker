@@ -137,7 +137,7 @@ function TimerRing({ deadline }) {
   return null; // fallback — countdown shown as text
 }
 
-function SeatView({ player, turnDeadline, lastAction, win, displayChips, deckStyle }) {
+function SeatView({ player, turnDeadline, lastAction, win, displayChips, deckStyle, hideCards }) {
   const timeLeft = useCountdown(turnDeadline);
   const actionLabel = useActionFlash(player, lastAction);
   if (!player) return null;
@@ -148,13 +148,15 @@ function SeatView({ player, turnDeadline, lastAction, win, displayChips, deckSty
 
   return (
     <View style={[s.seatWrap, player.folded && s.seatFolded]}>
-      {/* Small cards */}
-      <View style={[s.seatCards, (!hasCards || player.folded) && s.hidden]}>
-        {[0, 1].map(i => (
-          <Card key={i} card={player.holeCards?.[i]} size="xs" deckStyle={deckStyle}
-            faceDown={!player.holeCards?.[i] || !!player.holeCards[i]?.hidden} />
-        ))}
-      </View>
+      {/* Small cards (suppressed for local player — large cards shown separately) */}
+      {!hideCards && (
+        <View style={[s.seatCards, (!hasCards || player.folded) && s.hidden]}>
+          {[0, 1].map(i => (
+            <Card key={i} card={player.holeCards?.[i]} size="xs" deckStyle={deckStyle}
+              faceDown={!player.holeCards?.[i] || !!player.holeCards[i]?.hidden} />
+          ))}
+        </View>
+      )}
 
       {/* Name pill */}
       <View style={[s.namePill, isActive && s.namePillActive]}>
@@ -420,6 +422,7 @@ export default function GameScreen() {
                     win={myWin}
                     displayChips={chipsFor(me)}
                     deckStyle={deckStyle}
+                    hideCards
                   />
                 </View>
                 <View style={[s.absoluteBet, getBetStyle('bottom', ovalSize.width, ovalSize.height)]}>
