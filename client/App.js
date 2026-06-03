@@ -29,6 +29,7 @@ export default function App() {
   const [deckStyle, setDeckStyle]           = useState('regular');
   const [matchOver, setMatchOver]           = useState(null);
   const [myRecentMatches, setMyRecentMatches] = useState([]);
+  const [opponentDisconnected, setOpponentDisconnected] = useState(null); // deadline timestamp or null
   const [playerInfo, setPlayerInfo] = useState(null); // { playerId, name, avatarId }
 
   const navigationRef = useNavigationContainerRef();
@@ -41,6 +42,7 @@ export default function App() {
       setInQueue(false);
       matchIdRef.current = matchId;
       setMatchOver(null);
+      setOpponentDisconnected(null);
       navigationRef.navigate('Game');
     },
     'match-list':  ({ matches, onlinePlayers: op }) => { setMatchList(matches || []); setOnlinePlayers(op || []); },
@@ -57,10 +59,13 @@ export default function App() {
     'rematch-pending': ({ from })    => {
       setMatchOver(prev => prev ? { ...prev, opponentWantsRematch: from } : prev);
     },
+    'opponent-disconnected': ({ deadline }) => setOpponentDisconnected(deadline),
+    'opponent-reconnected':  ()             => setOpponentDisconnected(null),
     error:         ({ message })     => setError(message),
     reset:         ()                => {
       setMyId(null); setGameState(null);
       setInQueue(false); setMatchOver(null);
+      setOpponentDisconnected(null);
       matchIdRef.current = null;
       navigationRef.reset({ index: 0, routes: [{ name: 'Lobby' }] });
     },
@@ -139,7 +144,7 @@ export default function App() {
   return (
     <GameContext.Provider value={{
       gameState, myId, error, inQueue, matchList, onlinePlayers, myElo, matchOver,
-      playerInfo, myRecentMatches, deckStyle, setDeckStyle,
+      playerInfo, myRecentMatches, deckStyle, setDeckStyle, opponentDisconnected,
       emit, onLogin, onLogout, onUpdateProfile, onFindMatch, onCancelMatch,
       onObserve, onAction, onLeave, onRematch, navigationRef,
     }}>

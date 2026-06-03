@@ -32,6 +32,9 @@ const matches = new Map();
 // socketId → { playerId, playerName, avatarId, matchId | null }
 const socketPlayers = new Map();
 
+// playerId → { timer, matchId } — players mid-match who lost connection
+const pendingDisconnects = new Map();
+
 // ── Match helpers ─────────────────────────────────────────────────────────────
 
 function createMatch(p1, p2) {
@@ -283,10 +286,30 @@ io.on('connection', (socket) => {
 
   socket.on('enter-lobby', ({ playerId, playerName, avatarId } = {}) => {
     if (playerId && playerName) {
+      const safeAvatar = VALID_AVATARS.includes(avatarId) ? avatarId : VALID_AVATARS[0];
       const existing = socketPlayers.get(socket.id);
       if (!existing) {
-        const safeAvatar = VALID_AVATARS.includes(avatarId) ? avatarId : VALID_AVATARS[0];
         socketPlayers.set(socket.id, { playerId, playerName: playerName.trim().slice(0, 20), avatarId: safeAvatar, matchId: null, socketId: socket.id });
+      }
+
+      // Rejoin an active match if this player was in a disconnect grace period
+      const pending = pendingDisconnects.get(playerId);
+      if (pending) {
+        clearTimeout(pending.timer);
+        pendingDisconnects.delete(playerId);
+        const m = matches.get(pending.matchId);
+        if (m && !m.ended) {
+          const sp = socketPlayers.get(socket.id);
+          sp.matchId = m.id;
+          const pRef = m.p1?.playerId === playerId ? m.p1 : m.p2;
+          pRef.socketId = socket.id;
+          const other = matchPlayers(m).find(p => p.playerId !== playerId);
+          if (other) io.to(other.socketId).emit('opponent-reconnected');
+          io.to(socket.id).emit('match-found', { matchId: m.id, opponent: { name: other?.playerName || '' } });
+          broadcastMatchState(m);
+          console.log(`[server] ${playerName} reconnected to match ${m.id.slice(0, 8)}`);
+          return;
+        }
       }
     }
     broadcastMatchList();
@@ -443,11 +466,21 @@ io.on('connection', (socket) => {
     if (sp.matchId) {
       const m = matches.get(sp.matchId);
       if (m && !m.ended) {
-        const otherId = matchPlayers(m).find(p => p.playerId !== sp.playerId)?.playerId;
-        if (otherId) endMatch(m, otherId);
+        const other = matchPlayers(m).find(p => p.playerId !== sp.playerId);
+        if (other) {
+          // Give the disconnected player 30s to reconnect before forfeiting
+          const deadline = Date.now() + 30000;
+          io.to(other.socketId).emit('opponent-disconnected', { deadline });
+          const timer = setTimeout(() => {
+            pendingDisconnects.delete(sp.playerId);
+            const m2 = matches.get(sp.matchId);
+            if (m2 && !m2.ended) endMatch(m2, other.playerId);
+          }, 30000);
+          pendingDisconnects.set(sp.playerId, { timer, matchId: sp.matchId });
+          console.log(`[server] ${sp.playerName} mid-match disconnect — 30s grace period`);
+        }
       }
     } else {
-      // Was in lobby — update online list immediately
       broadcastMatchList();
     }
   });

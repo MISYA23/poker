@@ -89,6 +89,18 @@ function useCenterAction(lastAction) {
   return label;
 }
 
+// ─── DisconnectBanner ────────────────────────────────────────────────────────
+function DisconnectBanner({ deadline }) {
+  const secsLeft = useCountdown(deadline);
+  return (
+    <View style={s.disconnectBanner}>
+      <Text style={s.disconnectTxt}>
+        Opponent disconnected — {secsLeft !== null ? `${secsLeft}s to reconnect` : 'waiting…'}
+      </Text>
+    </View>
+  );
+}
+
 // ─── PlayerPod ───────────────────────────────────────────────────────────────
 // isMe=true  → nameplate below cards (cards face the table)
 // isMe=false → nameplate above cards (cards face the table)
@@ -144,7 +156,7 @@ function PlayerPod({ player, isMe, turnDeadline, lastAction, win, displayChips, 
 
 // ─── Main Screen ─────────────────────────────────────────────────────────────
 export default function GameScreen() {
-  const { gameState, myId, onAction, onLeave, onRematch, onLogout, emit, matchOver, navigationRef, deckStyle } = useContext(GameContext);
+  const { gameState, myId, onAction, onLeave, onRematch, onLogout, emit, matchOver, navigationRef, deckStyle, opponentDisconnected } = useContext(GameContext);
 
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -262,6 +274,11 @@ export default function GameScreen() {
               </Pressable>
             </View>
           </Pressable>
+        )}
+
+        {/* Opponent disconnect banner */}
+        {opponentDisconnected && (
+          <DisconnectBanner deadline={opponentDisconnected} />
         )}
 
         {/* Opponent pod */}
@@ -415,6 +432,8 @@ const s = StyleSheet.create({
   menuItemTxt: { color: 'rgba(255,255,255,0.9)', fontSize: 14 },
 
   // Sections
+  disconnectBanner: { marginHorizontal: 12, marginBottom: 4, backgroundColor: 'rgba(251,146,60,0.18)', borderWidth: 1, borderColor: 'rgba(251,146,60,0.5)', borderRadius: 8, paddingVertical: 6, paddingHorizontal: 12 },
+  disconnectTxt: { color: '#fb923c', fontSize: 12, fontWeight: '700', textAlign: 'center' },
   oppSection: { paddingHorizontal: 12, paddingTop: 4, paddingBottom: 0 },
   mySection:  { paddingHorizontal: 12, paddingTop: 0, paddingBottom: 4 },
 
