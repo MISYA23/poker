@@ -8,7 +8,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { GameContext } from '../context/GameContext';
 import { colors } from '../theme';
 import { SERVER_URL } from '../config';
-import { getUser, setUser, getOrCreatePlayerId } from '../utils/user';
+import { getUser, setUser, getOrCreatePlayerId, clearUser } from '../utils/user';
 
 const AVATARS = [
   { id: 'dk',    source: require('../../assets/dk.png') },
@@ -23,6 +23,7 @@ export default function LobbyScreen() {
   const [playerName, setPlayerName]       = useState('');
   const [avatarId, setAvatarId]           = useState(AVATARS[0].id);
   const [savedPlayerId, setSavedPlayerId] = useState(null);
+  const [menuOpen, setMenuOpen]           = useState(false);
 
   useEffect(() => {
     getUser().then(user => {
@@ -41,8 +42,13 @@ export default function LobbyScreen() {
     onFindMatch(name, avatarId, playerId);
   };
 
-  const handleReset = () =>
-    fetch(`${SERVER_URL}/admin/reset`, { method: 'POST' }).catch(() => {});
+  const handleLogout = async () => {
+    await clearUser();
+    setPlayerName('');
+    setAvatarId(AVATARS[0].id);
+    setSavedPlayerId(null);
+    setMenuOpen(false);
+  };
 
   return (
     <ImageBackground source={require('../../assets/jungle.png')} style={s.bg} resizeMode="cover">
@@ -51,14 +57,25 @@ export default function LobbyScreen() {
           <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={s.kav}>
             <ScrollView contentContainerStyle={s.scroll} keyboardShouldPersistTaps="handled">
 
-              <View style={s.header}>
-                <Text style={s.logo}>♠ Poker Monkey ♣</Text>
-                {myElo != null && <Text style={s.elo}>ELO: {myElo}</Text>}
+              <View style={s.topBar}>
+                <View style={s.header}>
+                  <Text style={s.logo}>♠ Poker Monkey ♣</Text>
+                  {myElo != null && <Text style={s.elo}>ELO: {myElo}</Text>}
+                </View>
+                <Pressable style={s.hamburger} onPress={() => setMenuOpen(o => !o)}>
+                  <Text style={s.hamburgerTxt}>☰</Text>
+                </Pressable>
               </View>
 
-              <Pressable style={s.resetBtn} onPress={handleReset}>
-                <Text style={s.resetBtnTxt}>Reset</Text>
-              </Pressable>
+              {menuOpen && (
+                <Pressable style={s.menuOverlay} onPress={() => setMenuOpen(false)}>
+                  <View style={s.menuPanel}>
+                    <Pressable style={s.menuItem} onPress={handleLogout}>
+                      <Text style={s.menuItemTxt}>🚪 Sign Out</Text>
+                    </Pressable>
+                  </View>
+                </Pressable>
+              )}
 
               <View style={s.card}>
                 <View style={s.formGroup}>
@@ -139,11 +156,16 @@ const s = StyleSheet.create({
   safe: { flex: 1 },
   kav: { flex: 1 },
   scroll: { flexGrow: 1, alignItems: 'center', justifyContent: 'center', padding: 20, gap: 14 },
-  header: { alignItems: 'center', gap: 6 },
-  logo: { fontSize: 28, fontWeight: '900', color: colors.goldLight, letterSpacing: 2 },
+  topBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%', maxWidth: 420 },
+  header: { alignItems: 'center', gap: 4 },
+  logo: { fontSize: 26, fontWeight: '900', color: colors.goldLight, letterSpacing: 2 },
   elo: { fontSize: 13, color: colors.gray, fontWeight: '600' },
-  resetBtn: { alignSelf: 'flex-end', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6, borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)' },
-  resetBtnTxt: { color: 'rgba(255,255,255,0.5)', fontSize: 11 },
+  hamburger: { width: 40, height: 40, borderRadius: 10, backgroundColor: 'rgba(0,0,0,0.45)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center' },
+  hamburgerTxt: { color: colors.white, fontSize: 18 },
+  menuOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 50 },
+  menuPanel: { position: 'absolute', top: 52, right: 0, width: 180, backgroundColor: '#111', borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)', borderRadius: 14, overflow: 'hidden', shadowColor: '#000', shadowOpacity: 0.5, shadowRadius: 12, elevation: 8 },
+  menuItem: { paddingHorizontal: 16, paddingVertical: 14 },
+  menuItemTxt: { color: 'rgba(255,255,255,0.9)', fontSize: 14 },
   card: { backgroundColor: 'rgba(255,255,255,0.06)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)', borderRadius: 16, width: '100%', maxWidth: 420, padding: 20, gap: 16 },
   formGroup: { gap: 6 },
   label: { color: colors.gray, fontSize: 11, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 1 },
