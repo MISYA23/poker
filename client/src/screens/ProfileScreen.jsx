@@ -99,7 +99,11 @@ export default function ProfileScreen({ navigation }) {
             <Text style={s.emptyTxt}>No matches yet</Text>
           ) : (
             history?.map((m, i) => (
-              <View key={m.matchId || i} style={s.historyRow}>
+              <Pressable key={m.matchId || i} style={s.historyRow}
+                onPress={() => navigation.navigate('HandReplay', {
+                  matchId: m.matchId,
+                  matchLabel: `vs ${m.opponentName}`,
+                })}>
                 <View style={[s.resultDot, m.won ? s.dotWin : s.dotLoss]} />
                 <View style={s.historyInfo}>
                   <Text style={s.historyOpp}>vs {m.opponentName}</Text>
@@ -108,7 +112,8 @@ export default function ProfileScreen({ navigation }) {
                 <Text style={[s.eloChange, m.eloChange >= 0 ? s.eloPos : s.eloNeg]}>
                   {m.eloChange >= 0 ? '+' : ''}{m.eloChange}
                 </Text>
-              </View>
+                <Text style={s.replayArrow}>▶</Text>
+              </Pressable>
             ))
           )}
         </View>
@@ -146,6 +151,7 @@ const s = StyleSheet.create({
   historyInfo: { flex: 1 },
   historyOpp: { color: colors.white, fontSize: 14, fontWeight: '600' },
   historyDate: { color: colors.gray, fontSize: 11, marginTop: 2 },
+  replayArrow: { color: colors.gold, fontSize: 12, marginLeft: 4 },
   eloChange: { fontSize: 15, fontWeight: '800' },
   eloPos: { color: '#4ade80' },
   eloNeg: { color: '#f87171' },

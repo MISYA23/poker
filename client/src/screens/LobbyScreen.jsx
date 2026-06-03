@@ -9,7 +9,8 @@ import { VERSION } from '../config';
 
 export default function LobbyScreen() {
   const { onFindMatch, onCancelMatch, onObserve, onLogout,
-          error, matchList, onlinePlayers, inQueue, myElo, playerInfo, navigationRef } = useContext(GameContext);
+          error, matchList, onlinePlayers, inQueue, myElo, playerInfo, navigationRef,
+          myRecentMatches } = useContext(GameContext);
 
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -51,6 +52,38 @@ export default function LobbyScreen() {
             </View>
 
             {error && <Text style={s.error}>{error}</Text>}
+
+            {/* Dashboard cards */}
+            <View style={s.dashboard}>
+              {/* Recent games */}
+              <Pressable style={s.dashCard} onPress={() => navigationRef.navigate('Profile')}>
+                <Text style={s.dashCardTitle}>Recent Games</Text>
+                {myRecentMatches?.length ? (
+                  myRecentMatches.slice(0, 2).map((m, i) => (
+                    <Text key={i} style={s.dashCardRow}>
+                      {m.won ? '✅' : '❌'} vs {m.opponentName}
+                      {'  '}<Text style={m.eloChange >= 0 ? s.eloPos : s.eloNeg}>
+                        {m.eloChange >= 0 ? '+' : ''}{m.eloChange}
+                      </Text>
+                    </Text>
+                  ))
+                ) : (
+                  <Text style={s.dashCardEmpty}>No games yet</Text>
+                )}
+              </Pressable>
+
+              {/* Friends */}
+              <View style={s.dashCard}>
+                <Text style={s.dashCardTitle}>Friends</Text>
+                <Text style={s.dashCardEmpty}>Coming soon</Text>
+              </View>
+
+              {/* Leaderboard */}
+              <View style={s.dashCard}>
+                <Text style={s.dashCardTitle}>Leaderboard</Text>
+                <Text style={s.dashCardEmpty}>Coming soon</Text>
+              </View>
+            </View>
 
             {/* PLAY button */}
             {inQueue ? (
@@ -123,6 +156,13 @@ const s = StyleSheet.create({
   queueTxt: { color: colors.white, fontSize: 18, fontWeight: '600' },
   cancelBtn: { paddingHorizontal: 24, paddingVertical: 10, borderRadius: 10, borderWidth: 1, borderColor: 'rgba(255,255,255,0.3)' },
   cancelTxt: { color: colors.white, fontSize: 14 },
+  dashboard: { flexDirection: 'row', width: '100%', maxWidth: 420, gap: 8 },
+  dashCard: { flex: 1, backgroundColor: 'rgba(255,255,255,0.06)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)', borderRadius: 12, padding: 10, gap: 5, minHeight: 80 },
+  dashCardTitle: { color: colors.goldLight, fontSize: 11, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 2 },
+  dashCardRow: { color: colors.white, fontSize: 11 },
+  dashCardEmpty: { color: colors.gray, fontSize: 11, fontStyle: 'italic' },
+  eloPos: { color: '#4ade80', fontWeight: '700' },
+  eloNeg: { color: '#f87171', fontWeight: '700' },
   section: { width: '100%', maxWidth: 420, gap: 10 },
   sectionLabel: { color: colors.white, fontSize: 16, fontWeight: '800' },
   playerRow: { paddingVertical: 8, paddingHorizontal: 14, backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: 10, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' },

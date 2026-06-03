@@ -464,6 +464,54 @@ app.get('/api/player/:playerId/profile', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// Full hand-by-hand replay for a match
+app.get('/api/match/:matchUuid/replay', async (req, res) => {
+  try {
+    const { matchUuid } = req.params;
+
+    // Get the tables row for this match UUID
+    const { rows: tableRows } = await db.query(
+      'SELECT id FROM tables WHERE uuid=$1 LIMIT 1', [matchUuid]
+    );
+    if (!tableRows.length) return res.json([]);
+    const tableId = tableRows[0].id;
+
+    // Get all hands for this table, ordered
+    const { rows: hands } = await db.query(
+      `SELECT id, hand_number, hand_uuid, community_cards, winner_name, winning_hand
+       FROM hands WHERE table_id=$1 ORDER BY hand_number`,
+      [tableId]
+    );
+
+    // For each hand, get all logged events from the metadata column
+    const result = await Promise.all(hands.map(async h => {
+      const { rows: events } = await db.query(
+        `SELECT action_type, player_name, player_id, amount, phase, sequence_number, metadata
+         FROM actions WHERE hand_id=$1 ORDER BY sequence_number`,
+        [h.id]
+      );
+      return {
+        handNumber:    h.hand_number,
+        handUuid:      h.hand_uuid,
+        communityCards: h.community_cards || [],
+        winnerName:    h.winner_name,
+        winningHand:   h.winning_hand,
+        events: events.map(e => ({
+          seq:        e.sequence_number,
+          type:       e.action_type,
+          playerName: e.player_name,
+          playerId:   e.player_id,
+          amount:     e.amount,
+          phase:      e.phase,
+          data:       e.metadata || {},
+        })),
+      };
+    }));
+
+    res.json(result);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 app.get('/health', (_, res) => res.json({
   ok: true,
   matches: matches.size,

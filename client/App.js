@@ -9,10 +9,12 @@ import { StatusBar } from 'expo-status-bar';
 import { GameContext } from './src/context/GameContext';
 import { useSocket } from './src/hooks/useSocket';
 import { clearUser } from './src/utils/user';
+import { SERVER_URL } from './src/config';
 import LoginScreen   from './src/screens/LoginScreen';
 import LobbyScreen   from './src/screens/LobbyScreen';
 import GameScreen    from './src/screens/GameScreen';
-import ProfileScreen from './src/screens/ProfileScreen';
+import ProfileScreen    from './src/screens/ProfileScreen';
+import HandReplayScreen from './src/screens/HandReplayScreen';
 
 const Stack = createStackNavigator();
 
@@ -23,8 +25,9 @@ export default function App() {
   const [inQueue, setInQueue]     = useState(false);
   const [matchList, setMatchList]       = useState([]);
   const [onlinePlayers, setOnlinePlayers] = useState([]);
-  const [myElo, setMyElo]         = useState(null);
-  const [matchOver, setMatchOver] = useState(null);
+  const [myElo, setMyElo]                   = useState(null);
+  const [matchOver, setMatchOver]           = useState(null);
+  const [myRecentMatches, setMyRecentMatches] = useState([]);
   const [playerInfo, setPlayerInfo] = useState(null); // { playerId, name, avatarId }
 
   const navigationRef = useNavigationContainerRef();
@@ -63,6 +66,11 @@ export default function App() {
     setPlayerInfo({ name, avatarId, playerId });
     setError(null);
     emit('enter-lobby', { playerId, playerName: name, avatarId });
+    // Fetch recent matches for dashboard
+    fetch(`${SERVER_URL}/api/player/${playerId}/profile`)
+      .then(r => r.json())
+      .then(d => { setMyRecentMatches(d.history?.slice(0, 3) || []); if (d.stats?.elo) setMyElo(d.stats.elo); })
+      .catch(() => {});
     navigationRef.navigate('Lobby');
   }, [emit]);
 
@@ -122,7 +130,8 @@ export default function App() {
 
   return (
     <GameContext.Provider value={{
-      gameState, myId, error, inQueue, matchList, onlinePlayers, myElo, matchOver, playerInfo,
+      gameState, myId, error, inQueue, matchList, onlinePlayers, myElo, matchOver,
+      playerInfo, myRecentMatches,
       emit, onLogin, onLogout, onUpdateProfile, onFindMatch, onCancelMatch,
       onObserve, onAction, onLeave, onRematch, navigationRef,
     }}>
@@ -134,7 +143,8 @@ export default function App() {
               <Stack.Screen name="Login" component={LoginScreen} />
               <Stack.Screen name="Lobby"   component={LobbyScreen} />
               <Stack.Screen name="Game"    component={GameScreen} />
-              <Stack.Screen name="Profile" component={ProfileScreen} />
+              <Stack.Screen name="Profile"    component={ProfileScreen} />
+              <Stack.Screen name="HandReplay" component={HandReplayScreen} />
             </Stack.Navigator>
           </NavigationContainer>
         </SafeAreaProvider>
