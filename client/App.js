@@ -8,8 +8,10 @@ import { StatusBar } from 'expo-status-bar';
 
 import { GameContext } from './src/context/GameContext';
 import { useSocket } from './src/hooks/useSocket';
+import { clearUser } from './src/utils/user';
+import LoginScreen from './src/screens/LoginScreen';
 import LobbyScreen from './src/screens/LobbyScreen';
-import GameScreen from './src/screens/GameScreen';
+import GameScreen  from './src/screens/GameScreen';
 
 const Stack = createStackNavigator();
 
@@ -21,44 +23,63 @@ export default function App() {
   const [matchList, setMatchList] = useState([]);
   const [myElo, setMyElo]         = useState(null);
   const [matchOver, setMatchOver] = useState(null);
+  const [playerInfo, setPlayerInfo] = useState(null); // { playerId, name, avatarId }
 
   const navigationRef = useNavigationContainerRef();
-  const playerRef     = useRef(null);
   const matchIdRef    = useRef(null);
 
   const emit = useSocket({
-    'in-queue':        ()               => { setInQueue(true); setError(null); },
-    'queue-cancelled': ()               => setInQueue(false),
-    'match-found':     ({ matchId })    => {
+    'in-queue':        ()            => { setInQueue(true); setError(null); },
+    'queue-cancelled': ()            => setInQueue(false),
+    'match-found':     ({ matchId }) => {
       setInQueue(false);
       matchIdRef.current = matchId;
       setMatchOver(null);
       navigationRef.navigate('Game');
     },
-    'match-list':      ({ matches })    => setMatchList(matches || []),
-    'game-state':      (state)          => {
+    'match-list':  ({ matches })     => setMatchList(matches || []),
+    'game-state':  (state)           => {
       setGameState(state);
       if (state.atTable || state.observing) navigationRef.navigate('Game');
     },
-    'match-over':      (data)           => {
+    'match-over':  (data)            => {
       setMatchOver(data);
       if (data.newElo != null) setMyElo(data.newElo);
     },
-    error:             ({ message })    => setError(message),
-    reset:             ()               => {
+    error:         ({ message })     => setError(message),
+    reset:         ()                => {
       setMyId(null); setGameState(null);
       setInQueue(false); setMatchOver(null);
-      matchIdRef.current = null; playerRef.current = null;
+      matchIdRef.current = null;
       navigationRef.reset({ index: 0, routes: [{ name: 'Lobby' }] });
     },
   });
 
-  const onFindMatch = useCallback((playerName, avatarId, playerId) => {
-    setError(null);
+  // Called from LoginScreen after Google or guest auth
+  const onLogin = useCallback((name, avatarId, playerId) => {
     setMyId(playerId);
-    playerRef.current = { playerId, playerName, avatarId };
+    setPlayerInfo({ name, avatarId, playerId });
+    setError(null);
     emit('enter-lobby', { playerId });
-    emit('find-match', { playerId, playerName, avatarId });
+    navigationRef.navigate('Lobby');
+  }, [emit]);
+
+  // Called from Lobby hamburger → Log Out
+  const onLogout = useCallback(async () => {
+    await clearUser();
+    setMyId(null);
+    setPlayerInfo(null);
+    setMyElo(null);
+    setInQueue(false);
+    setMatchOver(null);
+    setGameState(null);
+    matchIdRef.current = null;
+    navigationRef.reset({ index: 0, routes: [{ name: 'Login' }] });
+  }, []);
+
+  const onFindMatch = useCallback((name, avatarId, playerId) => {
+    setError(null);
+    emit('find-match', { playerId, playerName: name, avatarId });
   }, [emit]);
 
   const onCancelMatch = useCallback(() => {
@@ -94,14 +115,16 @@ export default function App() {
 
   return (
     <GameContext.Provider value={{
-      gameState, myId, error, inQueue, matchList, myElo, matchOver,
-      emit, onFindMatch, onCancelMatch, onObserve, onAction, onLeave, onRematch,
+      gameState, myId, error, inQueue, matchList, myElo, matchOver, playerInfo,
+      emit, onLogin, onLogout, onFindMatch, onCancelMatch,
+      onObserve, onAction, onLeave, onRematch,
     }}>
       <GestureHandlerRootView style={{ flex: 1 }}>
         <SafeAreaProvider>
           <StatusBar style="light" />
           <NavigationContainer ref={navigationRef}>
             <Stack.Navigator screenOptions={{ headerShown: false, animation: 'fade' }}>
+              <Stack.Screen name="Login" component={LoginScreen} />
               <Stack.Screen name="Lobby" component={LobbyScreen} />
               <Stack.Screen name="Game"  component={GameScreen} />
             </Stack.Navigator>
