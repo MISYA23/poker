@@ -1,5 +1,20 @@
 # Poker Monkey — Claude Context
 
+## Session startup (do this at the start of EVERY session)
+
+1. **Greet and recap** — Show the last 5 commits so the user knows where things left off
+2. **Confirm who's here** — Ask: "Who's working today?" (Brian works on `main`; there is at least one other collaborator)
+3. **Confirm branch** — Ask which branch to work on, then run `git checkout <branch> && git pull origin <branch>` to make sure we're up to date
+4. **Confirm server state** — Check if local server is running (`lsof -i:3843`) and offer to start it if not
+
+Example opening:
+> Here's where we left off: [last 5 commits]
+> Who's working today, and which branch?
+
+Do not skip this. Do not assume it's Brian or that we're on `main` without asking first.
+
+---
+
 ## What this is
 1v1 Texas Hold'em matchmaking app (chess.com style). Players queue up, get paired, play heads-up NL Hold'em, ELO rating updates after each match. Full hand history stored in Postgres. Real-time via Socket.IO.
 
