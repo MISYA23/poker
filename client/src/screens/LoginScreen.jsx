@@ -35,7 +35,7 @@ export default function LoginScreen() {
 
   const redirectUri = AuthSession.makeRedirectUri({ useProxy: true });
   const [request, response, promptAsync] = AuthSession.useAuthRequest(
-    { clientId: GOOGLE_CLIENT_ID, redirectUri, scopes: ['openid', 'profile', 'email'], responseType: AuthSession.ResponseType.Token },
+    { clientId: GOOGLE_CLIENT_ID, redirectUri, scopes: ['openid', 'profile', 'email'], responseType: AuthSession.ResponseType.Token, usePKCE: false },
     GOOGLE_DISCOVERY
   );
 
