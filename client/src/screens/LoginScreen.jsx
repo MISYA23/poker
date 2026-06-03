@@ -33,11 +33,32 @@ export default function LoginScreen() {
   const [avatarId, setAvatar] = useState(AVATARS[0].id);
   const [googleLoading, setGoogleLoading] = useState(false);
 
-  const redirectUri = AuthSession.makeRedirectUri({ useProxy: true });
+  const redirectUri = Platform.OS === 'web'
+    ? window.location.origin + '/'
+    : AuthSession.makeRedirectUri({ useProxy: true });
+
   const [request, response, promptAsync] = AuthSession.useAuthRequest(
     { clientId: GOOGLE_CLIENT_ID, redirectUri, scopes: ['openid', 'profile', 'email'], responseType: AuthSession.ResponseType.Code, usePKCE: true },
     GOOGLE_DISCOVERY
   );
+
+  const finishGoogleLogin = async (accessToken) => {
+    const profile = await fetch('https://www.googleapis.com/userinfo/v2/me', {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    }).then(r => r.json());
+
+    const serverRes = await fetch(`${SERVER_URL}/auth/google`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token: accessToken }),
+    }).then(r => r.json()).catch(() => null);
+
+    const playerId   = serverRes?.playerId || `g_${profile.id}`;
+    const playerName = serverRes?.name || profile.given_name || profile.name || '';
+    const av         = serverRes?.avatarId || avatarId;
+
+    await setUser({ playerId, name: playerName, avatarId: av, email: profile.email });
+    onLogin(playerName, av, playerId);
+  };
 
   // Auto-login if saved session exists
   useEffect(() => {
@@ -48,38 +69,39 @@ export default function LoginScreen() {
     });
   }, []);
 
-  // Handle Google OAuth response (authorization code flow)
+  // Web: handle OAuth redirect-back (code in URL after full-page redirect to Google)
   useEffect(() => {
+    if (Platform.OS !== 'web') return;
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get('code');
+    if (!code) return;
+
+    setGoogleLoading(true);
+    const codeVerifier = sessionStorage.getItem('pkce_code_verifier');
+    window.history.replaceState({}, '', '/');
+
+    AuthSession.exchangeCodeAsync(
+      { clientId: GOOGLE_CLIENT_ID, code, redirectUri, extraParams: codeVerifier ? { code_verifier: codeVerifier } : {} },
+      GOOGLE_DISCOVERY
+    )
+      .then(tokens => finishGoogleLogin(tokens.accessToken))
+      .catch(() => {})
+      .finally(() => setGoogleLoading(false));
+  }, []);
+
+  // Native: handle OAuth response from in-app browser
+  useEffect(() => {
+    if (Platform.OS === 'web') return;
     if (response?.type !== 'success') return;
     setGoogleLoading(true);
 
     AuthSession.exchangeCodeAsync(
-      {
-        clientId: GOOGLE_CLIENT_ID,
-        code: response.params.code,
-        redirectUri,
-        extraParams: { code_verifier: request?.codeVerifier },
-      },
+      { clientId: GOOGLE_CLIENT_ID, code: response.params.code, redirectUri, extraParams: { code_verifier: request?.codeVerifier } },
       GOOGLE_DISCOVERY
-    ).then(tokens => {
-      return fetch('https://www.googleapis.com/userinfo/v2/me', {
-        headers: { Authorization: `Bearer ${tokens.accessToken}` },
-      }).then(r => r.json()).then(async profile => {
-        const serverRes = await fetch(`${SERVER_URL}/auth/google`, {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ token: tokens.accessToken }),
-        }).then(r => r.json()).catch(() => null);
-
-        const playerId   = serverRes?.playerId || `g_${profile.id}`;
-        const playerName = serverRes?.name || profile.given_name || profile.name || '';
-        const av         = serverRes?.avatarId || avatarId;
-
-        await setUser({ playerId, name: playerName, avatarId: av, email: profile.email });
-        onLogin(playerName, av, playerId);
-      });
-    })
-    .catch(() => {})
-    .finally(() => setGoogleLoading(false));
+    )
+      .then(tokens => finishGoogleLogin(tokens.accessToken))
+      .catch(() => {})
+      .finally(() => setGoogleLoading(false));
   }, [response]);
 
   const handleGuestJoin = async () => {
@@ -106,7 +128,16 @@ export default function LoginScreen() {
                 {/* Google */}
                 <Pressable
                   style={[s.googleBtn, (googleLoading || !request) && s.dim]}
-                  onPress={() => { setGoogleLoading(true); promptAsync({ createTask: false }).finally(() => setGoogleLoading(false)); }}
+                  onPress={() => {
+                    if (Platform.OS === 'web') {
+                      if (!request) return;
+                      sessionStorage.setItem('pkce_code_verifier', request.codeVerifier || '');
+                      window.location.href = request.url;
+                    } else {
+                      setGoogleLoading(true);
+                      promptAsync({ createTask: false }).finally(() => setGoogleLoading(false));
+                    }
+                  }}
                   disabled={googleLoading || !request}
                 >
                   {googleLoading
