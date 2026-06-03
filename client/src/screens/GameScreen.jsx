@@ -1,6 +1,6 @@
-import React, { useContext, useState, useEffect, useRef, useCallback } from 'react';
+import React, { useContext, useState, useEffect, useRef } from 'react';
 import {
-  View, Text, Pressable, StyleSheet, Animated, Image, ScrollView,
+  View, Text, Pressable, StyleSheet, Animated, Image, ScrollView, useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { GameContext } from '../context/GameContext';
@@ -222,7 +222,12 @@ export default function GameScreen() {
 
   const [deckStyle, setDeckStyle] = useState('regular');
   const [menuOpen, setMenuOpen] = useState(false);
-  const [ovalSize, setOvalSize] = useState({ width: 320, height: 420 });
+  const { width: winW, height: winH } = useWindowDimensions();
+  // Oval size derived from window dimensions — stable during gameplay, updates only on resize
+  const ovalSize = {
+    width:  winW - 48,           // horizontal stage padding (24 each side)
+    height: Math.max(160, winH - 44 - 90 - 160 - 88), // topBar + actionsBar + paddingVertical + safeArea estimate
+  };
 
   const me = gameState?.players?.find(p => p.id === myId);
   const opponents = gameState?.players?.filter(p => p.id !== myId) || [];
@@ -320,10 +325,6 @@ export default function GameScreen() {
   const isGameOver = gameState?.gameOver === true;
   const gameWinner = isGameOver ? (gameState.players || []).find(p => p.chips > 0) : null;
 
-  const onOvalLayout = useCallback(e => {
-    const { width, height } = e.nativeEvent.layout;
-    setOvalSize({ width, height });
-  }, []);
 
   const slots = OPP_SLOTS[Math.min(opponents.length, 8)] || OPP_SLOTS[1];
   const showdownWinner = showWinners && gameState?.winners?.[0];
@@ -349,7 +350,7 @@ export default function GameScreen() {
 
         {/* Oval stage */}
         <View style={s.stage}>
-          <View style={s.ovalWrap} onLayout={onOvalLayout}>
+          <View style={s.ovalWrap}>
             {/* Felt oval */}
             <View style={s.felt} />
 
