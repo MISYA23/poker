@@ -169,7 +169,7 @@ async function flushHandToDb(room, game) {
     await clearHandEvents(room.id, handUuid);
     console.log(`[hand] flushed ${events.length} events → DB (hand ${handUuid.slice(0, 8)})`);
   } catch (err) {
-    console.error('[hand] flush failed:', err.message);
+    console.error('[hand] flush failed:', err.message, err.stack?.split('\n')[1]);
   }
 }
 

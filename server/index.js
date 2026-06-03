@@ -143,7 +143,8 @@ async function beginHand(m) {
   m.handCount = (m.handCount || 0) + 1;
   m.handEventSeq = 0;
   m.game.startHand();
-  m.currentHandUuid = await logStartHand(m, m.game).catch(() => null);
+  m.currentHandUuid = await logStartHand(m, m.game).catch(e => { console.error('[hand] startHand failed:', e.message); return null; });
+  console.log('[hand] started uuid:', m.currentHandUuid?.slice(0, 8));
 }
 
 function tryAutoStart(m) {
