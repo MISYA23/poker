@@ -418,11 +418,11 @@ const s = StyleSheet.create({
   countdownUrgent: { color: '#f87171' },
 
   // Cards coming out of pod
-  podCards: { flexDirection: 'row', justifyContent: 'center', paddingVertical: 4 },
+  podCards: { flexDirection: 'row', justifyContent: 'center', paddingVertical: 4, gap: 6 },
   hidden: { opacity: 0 },
   cardWrap: {},
-  cardLeft:  { transform: [{ rotate: '-5deg' }, { translateX: 6 }], zIndex: 1 },
-  cardRight: { transform: [{ rotate: '5deg' },  { translateX: -6 }] },
+  cardLeft:  {},
+  cardRight: {},
 
   // Waiting
   waitingPod: { backgroundColor: 'rgba(0,0,0,0.4)', borderRadius: 16, padding: 18, alignItems: 'center' },
