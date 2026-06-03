@@ -192,9 +192,9 @@ function scheduleNextHand(m, delay = 5000) {
 // ── Match end + ELO ───────────────────────────────────────────────────────────
 
 async function getOrCreateStats(playerId) {
-  // Ensure player row exists first (required for FK)
+  // Ensure player row exists — only set display_name on first insert, never overwrite
   await db.query(
-    `INSERT INTO players (id, display_name, is_guest) VALUES ($1, $1, true)
+    `INSERT INTO players (id, display_name, is_guest) VALUES ($1, 'Player', true)
      ON CONFLICT (id) DO UPDATE SET last_seen_at=NOW()`,
     [playerId]
   );
@@ -216,6 +216,16 @@ async function endMatch(m, winnerId) {
   if (!winner || !loser) return;
 
   try {
+    // Ensure both players have real names in the players table
+    for (const p of [winner, loser]) {
+      await db.query(
+        `INSERT INTO players (id, display_name, avatar_id, is_guest)
+         VALUES ($1, $2, $3, true)
+         ON CONFLICT (id) DO UPDATE SET display_name=$2, avatar_id=$3, last_seen_at=NOW()`,
+        [p.playerId, (p.playerName || 'Player').trim().slice(0, 20), p.avatarId || 'dk']
+      );
+    }
+
     const [wStats, lStats] = await Promise.all([
       getOrCreateStats(winner.playerId),
       getOrCreateStats(loser.playerId),

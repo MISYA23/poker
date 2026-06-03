@@ -7,14 +7,29 @@ const db = new Pool({ connectionString: process.env.DATABASE_URL });
 // matchUuid → integer matches.id (cached)
 const matchIdCache = {};
 
-async function getOrCreateMatchRow(matchUuid, p1Id, p2Id) {
+async function ensurePlayers(players) {
+  for (const p of players) {
+    if (!p.id || !p.name) continue;
+    await db.query(
+      `INSERT INTO players (id, display_name, avatar_id, is_guest)
+       VALUES ($1, $2, $3, true)
+       ON CONFLICT (id) DO UPDATE SET
+         display_name=$2, avatar_id=$3, last_seen_at=NOW()`,
+      [p.id, (p.name || 'Player').trim().slice(0, 20), p.avatarId || 'dk']
+    );
+  }
+}
+
+async function getOrCreateMatchRow(matchUuid, p1, p2) {
   if (matchIdCache[matchUuid]) return matchIdCache[matchUuid];
+  // Ensure both players exist first (required for FK)
+  await ensurePlayers([p1, p2]);
   const { rows } = await db.query(
     `INSERT INTO matches (uuid, player1_id, player2_id, status)
      VALUES ($1, $2, $3, 'active')
      ON CONFLICT (uuid) DO UPDATE SET status='active'
      RETURNING id`,
-    [matchUuid, p1Id, p2Id]
+    [matchUuid, p1.id, p2.id]
   );
   matchIdCache[matchUuid] = rows[0].id;
   return rows[0].id;
@@ -115,12 +130,11 @@ async function flushHandToDb(room, game) {
   try {
     const events = await getHandEvents(room.id, handUuid);
 
-    // Determine player IDs from the hand
-    const p1Id = room.p1?.playerId;
-    const p2Id = room.p2?.playerId;
-    if (!p1Id || !p2Id) { await clearHandEvents(room.id, handUuid); return; }
+    const p1 = room.p1 ? { id: room.p1.playerId, name: room.p1.playerName, avatarId: room.p1.avatarId } : null;
+    const p2 = room.p2 ? { id: room.p2.playerId, name: room.p2.playerName, avatarId: room.p2.avatarId } : null;
+    if (!p1?.id || !p2?.id) { await clearHandEvents(room.id, handUuid); return; }
 
-    const matchDbId = await getOrCreateMatchRow(room.id, p1Id, p2Id);
+    const matchDbId = await getOrCreateMatchRow(room.id, p1, p2);
     const winner = game.winners?.[0];
 
     const { rows: [hand] } = await db.query(
