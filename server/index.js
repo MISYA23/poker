@@ -402,7 +402,18 @@ io.on('connection', (socket) => {
         const otherId = matchPlayers(m).find(p => p.playerId !== sp.playerId)?.playerId;
         if (otherId) endMatch(m, otherId);
       }
+    } else {
+      // Was in lobby — update online list immediately
+      broadcastMatchList();
     }
+  });
+
+  // Explicit logout — remove from socketPlayers so they disappear from online list
+  socket.on('logout', () => {
+    const sp = socketPlayers.get(socket.id);
+    if (sp) dequeue(sp.playerId);
+    socketPlayers.delete(socket.id);
+    broadcastMatchList();
   });
 });
 

@@ -68,6 +68,7 @@ export default function App() {
 
   // Called from Lobby hamburger → Log Out
   const onLogout = useCallback(async () => {
+    emit('logout', {});
     await clearUser();
     setMyId(null);
     setPlayerInfo(null);
