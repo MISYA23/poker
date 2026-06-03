@@ -218,7 +218,7 @@ function WinFlight({ show, toBottom, amount }) {
 
 // ─── Main Screen ─────────────────────────────────────────────────────────────
 export default function GameScreen() {
-  const { gameState, myId, onAction, onLeave, emit } = useContext(GameContext);
+  const { gameState, myId, onAction, onLeave, onRematch, emit, matchOver } = useContext(GameContext);
 
   const [deckStyle, setDeckStyle] = useState('regular');
   const [menuOpen, setMenuOpen] = useState(false);
@@ -456,22 +456,25 @@ export default function GameScreen() {
           />
         </View>
 
-        {/* Game over modal */}
-        {isGameOver && (
+        {/* Match over modal */}
+        {matchOver && (
           <View style={s.gameOverOverlay}>
             <View style={s.gameOverModal}>
               <Text style={s.gameOverTitle}>
-                {gameWinner?.id === myId ? '🎉 You Won!' : `${gameWinner?.name || 'Opponent'} Won!`}
+                {matchOver.winnerId === myId ? '🎉 You Won!' : `${matchOver.winnerName || 'Opponent'} Won!`}
               </Text>
-              <View style={s.bananaRow}>
-                <ChipStack amount={gameWinner?.chips || 1000} size={28} />
+              <View style={s.eloRow}>
+                <Text style={[s.eloChange, matchOver.eloChange >= 0 ? s.eloPos : s.eloNeg]}>
+                  {matchOver.eloChange >= 0 ? '+' : ''}{matchOver.eloChange} ELO
+                </Text>
+                <Text style={s.eloNew}>→ {matchOver.newElo}</Text>
               </View>
               <Text style={s.gameOverSub}>One more for the road?</Text>
               <View style={s.gameOverBtns}>
-                <Pressable style={[s.govBtn, s.govBtnNo]} onPress={onLeave}>
+                <Pressable style={[s.govBtn, s.govBtnNo]} onPress={() => onRematch(false)}>
                   <Text style={s.govBtnTxt}>Leave</Text>
                 </Pressable>
-                <Pressable style={[s.govBtn, s.govBtnYes]} onPress={() => emit('rematch-vote', { vote: true })}>
+                <Pressable style={[s.govBtn, s.govBtnYes]} onPress={() => onRematch(true)}>
                   <Text style={s.govBtnTxt}>Play Again</Text>
                 </Pressable>
               </View>
@@ -577,7 +580,11 @@ const s = StyleSheet.create({
   gameOverOverlay: { position: 'absolute', inset: 0, backgroundColor: 'rgba(0,0,0,0.75)', alignItems: 'center', justifyContent: 'center', zIndex: 100 },
   gameOverModal: { backgroundColor: '#111', borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)', borderRadius: 24, padding: 28, alignItems: 'center', gap: 14, width: '80%' },
   gameOverTitle: { color: colors.white, fontSize: 24, fontWeight: '900', textAlign: 'center' },
-  bananaRow: { flexDirection: 'row', gap: 4 },
+  eloRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  eloChange: { fontSize: 28, fontWeight: '900' },
+  eloPos: { color: '#4ade80' },
+  eloNeg: { color: '#f87171' },
+  eloNew: { color: colors.gray, fontSize: 16 },
   gameOverSub: { color: 'rgba(255,255,255,0.6)', fontSize: 14 },
   gameOverBtns: { flexDirection: 'row', gap: 12, marginTop: 4 },
   govBtn: { flex: 1, paddingVertical: 12, borderRadius: 12, alignItems: 'center' },

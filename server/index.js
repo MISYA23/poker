@@ -1,17 +1,18 @@
 require('dotenv').config();
-const express = require('express');
-const http = require('http');
+const express    = require('express');
+const http       = require('http');
 const { Server } = require('socket.io');
-const cors = require('cors');
-const { Pool } = require('pg');
-const { PokerGame } = require('./game/PokerGame');
-const { redis } = require('./redis');
+const cors       = require('cors');
+const { Pool }   = require('pg');
+const { randomUUID } = require('crypto');
+const { PokerGame }  = require('./game/PokerGame');
+const { redis }      = require('./redis');
 const { startHand: logStartHand, logAction, flushHandToDb } = require('./handLogger');
+const { enqueue, dequeue, tryPair, calcElo } = require('./matchmaker');
 
 const app = express();
 app.use(cors());
 app.use(express.json());
-
 app.get('/', (_, res) => res.json({ status: 'ok', service: 'poker-server' }));
 
 const server = http.createServer(app);
@@ -19,302 +20,404 @@ const io = new Server(server, { cors: { origin: '*', methods: ['GET', 'POST'] } 
 
 const db = new Pool({ connectionString: process.env.DATABASE_URL });
 
-const GAME_OPTIONS = { startingChips: 1000, bigBlind: 20, smallBlind: 10 };
-const TURN_SECONDS = 20;
+const GAME_OPTIONS  = { startingChips: 1000, bigBlind: 20, smallBlind: 10 };
+const TURN_SECONDS  = 20;
 const VALID_AVATARS = ['dk', 'diddy', 'alfie', 'jazz'];
 
-// roomId (uuid from DB) -> { id, name, emoji, maxPlayers, game, rematchVotes,
-//                            autoStartTimer, nextHandTimer, turnTimer, timerPlayerId, turnDeadline }
-const rooms = new Map();
+// matchId → { id, game, p1, p2, observers, rematchVotes, timers... }
+const matches = new Map();
 
-// socketId -> { id, name, avatarId, roomId }
+// socketId → { playerId, playerName, avatarId, matchId | null }
 const socketPlayers = new Map();
 
-async function loadRooms() {
-  const { rows } = await db.query('SELECT uuid, name, emoji, max_players FROM rooms ORDER BY id');
-  for (const row of rows) {
-    if (rooms.has(row.uuid)) continue;
-    rooms.set(row.uuid, {
-      id: row.uuid,
-      name: row.name,
-      emoji: row.emoji,
-      maxPlayers: row.max_players,
-      game: new PokerGame(row.uuid, GAME_OPTIONS),
-      rematchVotes: new Set(),
-      autoStartTimer: null,
-      nextHandTimer: null,
-      turnTimer: null,
-      timerPlayerId: null,
-      turnDeadline: null,
-    });
-    console.log('[server] room loaded:', row.name);
-  }
-  console.log('[server] rooms ready:', rooms.size);
+// ── Match helpers ─────────────────────────────────────────────────────────────
+
+function createMatch(p1, p2) {
+  const id = randomUUID();
+  const m = {
+    id,
+    game: new PokerGame(id, GAME_OPTIONS),
+    p1, p2,                  // { playerId, playerName, avatarId, socketId }
+    observers: new Set(),    // socketIds watching
+    rematchVotes: new Set(),
+    ended: false,
+    autoStartTimer: null, nextHandTimer: null,
+    turnTimer: null, timerPlayerId: null, turnDeadline: null,
+    handCount: 0, handEventSeq: 0, currentHandUuid: null,
+    maxPlayers: 2, name: `match:${id.slice(0, 8)}`, emoji: '♠',
+  };
+  matches.set(id, m);
+  return m;
 }
 
-function resetRoom(r) {
-  clearTimeout(r.autoStartTimer);
-  clearTimeout(r.nextHandTimer);
-  clearTimeout(r.turnTimer);
-  r.autoStartTimer = null;
-  r.nextHandTimer = null;
-  r.turnTimer = null;
-  r.timerPlayerId = null;
-  r.turnDeadline = null;
-  r.rematchVotes = new Set();
-  r.game = new PokerGame(r.id, GAME_OPTIONS);
+function matchPlayers(m) {
+  return [m.p1, m.p2].filter(Boolean);
 }
 
-function startTurnTimer(r) {
-  const pid = r.game.currentPlayerId;
-  if (pid === r.timerPlayerId) return;
-  if (r.turnTimer) { clearTimeout(r.turnTimer); r.turnTimer = null; }
-  r.timerPlayerId = pid;
-  r.turnDeadline = null;
-  if (!pid || r.game.phase === 'waiting' || r.game.phase === 'showdown') return;
-  r.turnDeadline = Date.now() + TURN_SECONDS * 1000;
-  r.turnTimer = setTimeout(() => {
-    r.turnTimer = null;
-    if (r.game.currentPlayerId !== pid) return;
-    r.timerPlayerId = null;
-    r.turnDeadline = null;
+function resetRoom(m) {
+  clearTimeout(m.autoStartTimer);
+  clearTimeout(m.nextHandTimer);
+  clearTimeout(m.turnTimer);
+  m.autoStartTimer = m.nextHandTimer = m.turnTimer = null;
+  m.timerPlayerId = null;
+  m.turnDeadline = null;
+  m.rematchVotes = new Set();
+  m.game = new PokerGame(m.id, GAME_OPTIONS);
+}
+
+// ── Turn timer ────────────────────────────────────────────────────────────────
+
+function startTurnTimer(m) {
+  const pid = m.game.currentPlayerId;
+  if (pid === m.timerPlayerId) return;
+  if (m.turnTimer) { clearTimeout(m.turnTimer); m.turnTimer = null; }
+  m.timerPlayerId = pid;
+  m.turnDeadline  = null;
+  if (!pid || m.game.phase === 'waiting' || m.game.phase === 'showdown') return;
+  m.turnDeadline = Date.now() + TURN_SECONDS * 1000;
+  m.turnTimer = setTimeout(() => {
+    m.turnTimer = null;
+    if (m.game.currentPlayerId !== pid) return;
+    m.timerPlayerId = null;
+    m.turnDeadline  = null;
     try {
-      r.game.handleAction(pid, 'fold');
-      broadcastRoomState(r);
-      if (r.game.phase === 'showdown') scheduleNextHand(r, 5000);
+      m.game.handleAction(pid, 'fold');
+      broadcastMatchState(m);
+      if (m.game.phase === 'showdown') scheduleNextHand(m, 5000);
     } catch (e) {}
   }, TURN_SECONDS * 1000);
 }
 
-function broadcastRoomState(r) {
-  startTurnTimer(r);
-  for (const [socketId, player] of socketPlayers) {
-    if (player.roomId !== r.id) continue;
-    const atTable = r.game.players.some(p => p.id === player.id);
-    const state = atTable ? r.game.getStateFor(player.id) : r.game.getStateFor(null);
-    io.to(socketId).emit('game-state', {
-      ...state,
-      atTable,
-      gameOver: r.game.gameOver || false,
-      waitlistCount: 0,
-      tableCount: r.game.players.length,
-      turnDeadline: r.turnDeadline,
+// ── Broadcast ─────────────────────────────────────────────────────────────────
+
+function broadcastMatchState(m) {
+  startTurnTimer(m);
+  for (const p of matchPlayers(m)) {
+    const sp = socketPlayers.get(p.socketId);
+    if (!sp) continue;
+    const atTable = m.game.players.some(pl => pl.id === p.playerId);
+    const state   = atTable ? m.game.getStateFor(p.playerId) : m.game.getStateFor(null);
+    io.to(p.socketId).emit('game-state', {
+      ...state, atTable,
+      matchId: m.id,
+      gameOver: m.game.gameOver || false,
+      turnDeadline: m.turnDeadline,
     });
   }
-  broadcastAllLobbyState();
+  // Observers see face-down cards
+  for (const sid of m.observers) {
+    io.to(sid).emit('game-state', {
+      ...m.game.getStateFor(null),
+      atTable: false, observing: true,
+      matchId: m.id, turnDeadline: m.turnDeadline,
+    });
+  }
+  broadcastMatchList();
 }
 
-function broadcastAllLobbyState() {
-  const tableList = [...rooms.values()].map(r => ({
-    id: r.id, name: r.name, emoji: r.emoji,
-    playerCount: r.game.players.length, phase: r.game.phase, maxPlayers: r.maxPlayers,
+function broadcastMatchList() {
+  const list = [...matches.values()].filter(m => !m.ended).map(m => ({
+    id:      m.id,
+    player1: m.p1?.playerName || '?',
+    player2: m.p2?.playerName || '?',
+    phase:   m.game.phase,
+    handCount: m.handCount || 0,
   }));
-  io.emit('lobby-state', { tables: tableList, activeSeats: [] });
+  io.emit('match-list', { matches: list });
 }
 
-function broadcastLobbyState(socketId) {
-  const tableList = [...rooms.values()].map(r => ({
-    id: r.id, name: r.name, emoji: r.emoji,
-    playerCount: r.game.players.length, phase: r.game.phase, maxPlayers: r.maxPlayers,
-  }));
-  io.to(socketId).emit('lobby-state', { tables: tableList, activeSeats: [] });
+// ── Hand lifecycle ────────────────────────────────────────────────────────────
+
+async function beginHand(m) {
+  m.handCount = (m.handCount || 0) + 1;
+  m.handEventSeq = 0;
+  m.game.startHand();
+  m.currentHandUuid = await logStartHand(m, m.game).catch(() => null);
 }
 
-async function beginHand(r) {
-  r.handCount = (r.handCount || 0) + 1;
-  r.handEventSeq = 0;
-  r.game.startHand();
-  r.currentHandUuid = await logStartHand(r, r.game).catch(() => null);
-}
-
-function tryAutoStart(r) {
-  if (r.autoStartTimer) return;
-  const ready = r.game.players.filter(p => p.isActive && p.chips > 0);
-  if (ready.length >= 2 && r.game.phase === 'waiting' && !r.game.gameOver) {
-    r.autoStartTimer = setTimeout(async () => {
-      r.autoStartTimer = null;
-      if (r.game.phase === 'waiting' && r.game.canStart()) {
-        await beginHand(r);
-        broadcastRoomState(r);
+function tryAutoStart(m) {
+  if (m.autoStartTimer) return;
+  const ready = m.game.players.filter(p => p.isActive && p.chips > 0);
+  if (ready.length >= 2 && m.game.phase === 'waiting' && !m.game.gameOver) {
+    m.autoStartTimer = setTimeout(async () => {
+      m.autoStartTimer = null;
+      if (m.game.phase === 'waiting' && m.game.canStart()) {
+        await beginHand(m);
+        broadcastMatchState(m);
       }
     }, 3000);
   }
 }
 
-function scheduleNextHand(r, delay = 5000) {
-  if (r.nextHandTimer) { clearTimeout(r.nextHandTimer); }
-  r.nextHandTimer = setTimeout(async () => {
-    r.nextHandTimer = null;
-    // Flush completed hand to DB
-    await flushHandToDb(r, r.game).catch(e => console.error('[hand] flush error:', e.message));
-    r.currentHandUuid = null;
-    r.handEventSeq = 0;
+function scheduleNextHand(m, delay = 5000) {
+  if (m.nextHandTimer) clearTimeout(m.nextHandTimer);
+  m.nextHandTimer = setTimeout(async () => {
+    m.nextHandTimer = null;
+    await flushHandToDb(m, m.game).catch(e => console.error('[hand] flush:', e.message));
+    m.currentHandUuid = null;
+    m.handEventSeq    = 0;
 
-    const withChips = r.game.players.filter(p => p.isActive && p.chips > 0);
-    const activePlayers = r.game.players.filter(p => p.isActive);
-    if (activePlayers.length >= 2 && withChips.length === 1) {
-      r.game.phase = 'waiting';
-      r.game.gameOver = true;
-      r.rematchVotes = new Set();
-      broadcastRoomState(r);
+    const withChips = m.game.players.filter(p => p.isActive && p.chips > 0);
+    const active    = m.game.players.filter(p => p.isActive);
+
+    if (active.length >= 2 && withChips.length === 1) {
+      // One player is bust — match over
+      const winnerId = withChips[0].id;
+      m.game.phase   = 'waiting';
+      m.game.gameOver = true;
+      broadcastMatchState(m);
+      await endMatch(m, winnerId);
       return;
     }
-    if (withChips.length >= 2 && r.game.canStart()) {
-      try { await beginHand(r); } catch (err) { r.game.phase = 'waiting'; }
+    if (withChips.length >= 2 && m.game.canStart()) {
+      try { await beginHand(m); } catch { m.game.phase = 'waiting'; }
     } else {
-      r.game.phase = 'waiting';
+      m.game.phase = 'waiting';
     }
-    broadcastRoomState(r);
+    broadcastMatchState(m);
   }, delay);
 }
 
-io.on('connection', (socket) => {
-  console.log('[server] socket connected:', socket.id);
+// ── Match end + ELO ───────────────────────────────────────────────────────────
 
-  socket.on('enter-lobby', ({ playerId } = {}) => {
-    broadcastLobbyState(socket.id);
+async function getOrCreateStats(playerId) {
+  const { rows } = await db.query(
+    `INSERT INTO player_stats (player_id) VALUES ($1)
+     ON CONFLICT (player_id) DO UPDATE SET player_id=EXCLUDED.player_id
+     RETURNING *`,
+    [playerId]
+  );
+  return rows[0];
+}
+
+async function endMatch(m, winnerId) {
+  if (m.ended) return;
+  m.ended = true;
+
+  const loser = matchPlayers(m).find(p => p.playerId !== winnerId);
+  const winner = matchPlayers(m).find(p => p.playerId === winnerId);
+  if (!winner || !loser) return;
+
+  try {
+    const [wStats, lStats] = await Promise.all([
+      getOrCreateStats(winner.playerId),
+      getOrCreateStats(loser.playerId),
+    ]);
+    const { winnerGain, loserLoss } = calcElo(wStats.elo, lStats.elo);
+    const wNewElo = wStats.elo + winnerGain;
+    const lNewElo = lStats.elo - loserLoss;
+
+    await Promise.all([
+      db.query(
+        `UPDATE player_stats SET elo=$1, matches_played=matches_played+1,
+         matches_won=matches_won+1, updated_at=NOW() WHERE player_id=$2`,
+        [wNewElo, winner.playerId]
+      ),
+      db.query(
+        `UPDATE player_stats SET elo=$1, matches_played=matches_played+1,
+         updated_at=NOW() WHERE player_id=$2`,
+        [lNewElo, loser.playerId]
+      ),
+      db.query(
+        `INSERT INTO matches (uuid,player1_id,player2_id,status,ended_at,winner_id,
+          player1_elo_before,player2_elo_before,player1_elo_after,player2_elo_after)
+         VALUES ($1,$2,$3,'complete',NOW(),$4,$5,$6,$7,$8)
+         ON CONFLICT (uuid) DO NOTHING`,
+        [m.id, winner.playerId, loser.playerId, winnerId,
+         wStats.elo, lStats.elo, wNewElo, lNewElo]
+      ),
+    ]);
+
+    // Notify players with ELO changes
+    for (const p of matchPlayers(m)) {
+      const isWin = p.playerId === winnerId;
+      io.to(p.socketId).emit('match-over', {
+        winnerId, winnerName: winner.playerName,
+        eloChange: isWin ? +winnerGain : -loserLoss,
+        newElo:    isWin ? wNewElo : lNewElo,
+      });
+    }
+    console.log(`[match] ended — winner: ${winner.playerName}, elo: ${wStats.elo}→${wNewElo}`);
+  } catch (err) {
+    console.error('[match] endMatch error:', err.message);
+  }
+}
+
+// ── Socket handlers ───────────────────────────────────────────────────────────
+
+io.on('connection', (socket) => {
+  console.log('[server] connected:', socket.id);
+
+  socket.on('enter-lobby', () => {
+    broadcastMatchList();
   });
 
-  socket.on('join', ({ playerId, playerName, avatarId, tableId }) => {
+  socket.on('find-match', ({ playerId, playerName, avatarId }) => {
     if (!playerId) { socket.emit('error', { message: 'Missing player ID.' }); return; }
 
-    const r = rooms.get(tableId);
-    if (!r) { socket.emit('error', { message: 'Table not found.' }); return; }
-    if (r.game.players.length >= r.maxPlayers) { socket.emit('error', { message: 'Table is full.' }); return; }
+    const name      = (playerName || 'Player').trim().slice(0, 20);
+    const safeAvatar = VALID_AVATARS.includes(avatarId) ? avatarId : VALID_AVATARS[0];
 
-    // Remove from old room if switching
-    const existing = socketPlayers.get(socket.id);
-    if (existing && existing.roomId !== tableId) {
-      const oldRoom = rooms.get(existing.roomId);
-      if (oldRoom) { oldRoom.game.removePlayer(existing.id); broadcastRoomState(oldRoom); }
+    // Register socket
+    socketPlayers.set(socket.id, { playerId, playerName: name, avatarId: safeAvatar, matchId: null, socketId: socket.id });
+
+    // Enqueue
+    enqueue({ playerId, playerName: name, avatarId: safeAvatar, socketId: socket.id });
+
+    const pair = tryPair();
+    if (pair) {
+      const m = createMatch(pair.p1, pair.p2);
+
+      // Link sockets to match
+      const sp1 = socketPlayers.get(pair.p1.socketId);
+      const sp2 = socketPlayers.get(pair.p2.socketId);
+      if (sp1) sp1.matchId = m.id;
+      if (sp2) sp2.matchId = m.id;
+
+      // Add players to game
+      m.game.addPlayer(pair.p1.playerId, pair.p1.playerName, pair.p1.avatarId);
+      m.game.addPlayer(pair.p2.playerId, pair.p2.playerName, pair.p2.avatarId);
+
+      io.to(pair.p1.socketId).emit('match-found', { matchId: m.id, opponent: { name: pair.p2.playerName } });
+      io.to(pair.p2.socketId).emit('match-found', { matchId: m.id, opponent: { name: pair.p1.playerName } });
+
+      broadcastMatchState(m);
+      tryAutoStart(m);
+    } else {
+      socket.emit('in-queue', {});
     }
-
-    const name = (playerName || 'Player').trim().slice(0, 20);
-    const safeAvatarId = VALID_AVATARS.includes(avatarId) ? avatarId : VALID_AVATARS[0];
-
-    socketPlayers.set(socket.id, { id: playerId, name, avatarId: safeAvatarId, roomId: tableId });
-    r.game.addPlayer(playerId, name, safeAvatarId);
-
-    console.log('[server] player joined', r.name, '| seats:', r.game.players.length, '/', r.maxPlayers);
-    socket.emit('joined', { playerId, tableId });
-    broadcastRoomState(r);
-    tryAutoStart(r);
   });
 
-  socket.on('leave-table', () => {
-    const player = socketPlayers.get(socket.id);
-    if (!player) return;
-    const r = rooms.get(player.roomId);
-    if (r) { r.game.removePlayer(player.id); broadcastRoomState(r); }
-    socketPlayers.delete(socket.id);
-    broadcastLobbyState(socket.id);
+  socket.on('cancel-match', () => {
+    const sp = socketPlayers.get(socket.id);
+    if (sp) { dequeue(sp.playerId); sp.matchId = null; }
+    socket.emit('queue-cancelled', {});
+  });
+
+  socket.on('observe', ({ matchId }) => {
+    const m = matches.get(matchId);
+    if (!m) return;
+    m.observers.add(socket.id);
+    // Send current state immediately
+    io.to(socket.id).emit('game-state', {
+      ...m.game.getStateFor(null),
+      atTable: false, observing: true,
+      matchId: m.id, turnDeadline: m.turnDeadline,
+    });
+  });
+
+  socket.on('unobserve', ({ matchId }) => {
+    const m = matches.get(matchId);
+    if (m) m.observers.delete(socket.id);
   });
 
   socket.on('player-action', ({ action, amount }) => {
-    const player = socketPlayers.get(socket.id);
-    if (!player) return;
-    const r = rooms.get(player.roomId);
-    if (!r) return;
+    const sp = socketPlayers.get(socket.id);
+    if (!sp?.matchId) return;
+    const m = matches.get(sp.matchId);
+    if (!m) return;
     try {
-      const prevCommunityCount = r.game.communityCards?.length || 0;
-      r.game.handleAction(player.id, action, amount);
-      // Log action + any newly revealed community cards to Redis
-      logAction(r, r.game, player.id, player.name, action, amount, prevCommunityCount)
-        .catch(e => console.error('[hand] logAction error:', e.message));
-      broadcastRoomState(r);
-      if (r.game.phase === 'showdown') scheduleNextHand(r, 5000);
+      const prevCC = m.game.communityCards?.length || 0;
+      m.game.handleAction(sp.playerId, action, amount);
+      logAction(m, m.game, sp.playerId, sp.playerName, action, amount, prevCC)
+        .catch(e => console.error('[hand] logAction:', e.message));
+      broadcastMatchState(m);
+      if (m.game.phase === 'showdown') scheduleNextHand(m, 5000);
     } catch (err) {
       socket.emit('error', { message: err.message });
     }
   });
 
   socket.on('rematch-vote', ({ vote }) => {
-    const player = socketPlayers.get(socket.id);
-    if (!player) return;
-    const r = rooms.get(player.roomId);
-    if (!r || !r.game.gameOver) return;
+    const sp = socketPlayers.get(socket.id);
+    if (!sp?.matchId) return;
+    const m = matches.get(sp.matchId);
+    if (!m || !m.game.gameOver) return;
 
     if (vote) {
-      r.rematchVotes.add(player.id);
-      const activePlayers = r.game.players.filter(p => p.isActive);
-      // All active players voted yes — start rematch
-      if (r.rematchVotes.size >= activePlayers.length && activePlayers.length >= 2) {
-        r.game.gameOver = false;
-        // Give everyone back starting chips
-        for (const p of r.game.players) { p.chips = GAME_OPTIONS.startingChips; p.isActive = true; }
-        r.rematchVotes = new Set();
-        tryAutoStart(r);
-        broadcastRoomState(r);
+      m.rematchVotes.add(sp.playerId);
+      if (m.rematchVotes.size >= 2) {
+        // Both agreed — restart
+        resetRoom(m);
+        m.game.gameOver = false;
+        m.ended = false;
+        for (const p of matchPlayers(m)) {
+          m.game.addPlayer(p.playerId, p.playerName, p.avatarId);
+        }
+        broadcastMatchState(m);
+        tryAutoStart(m);
       }
     } else {
-      // Player said no — remove them from the table
-      r.game.removePlayer(player.id);
-      socketPlayers.delete(socket.id);
-      socket.emit('reset');
-      broadcastRoomState(r);
+      // Player declined — both go back to lobby
+      for (const p of matchPlayers(m)) {
+        const psp = socketPlayers.get(p.socketId);
+        if (psp) psp.matchId = null;
+        io.to(p.socketId).emit('reset');
+      }
+      matches.delete(m.id);
+      broadcastMatchList();
     }
   });
 
+  socket.on('leave-table', () => {
+    const sp = socketPlayers.get(socket.id);
+    if (!sp?.matchId) return;
+    const m = matches.get(sp.matchId);
+    if (m && !m.ended) {
+      const otherId = matchPlayers(m).find(p => p.playerId !== sp.playerId)?.playerId;
+      if (otherId) endMatch(m, otherId);
+    }
+    sp.matchId = null;
+    socket.emit('reset');
+  });
+
   socket.on('disconnect', () => {
-    const player = socketPlayers.get(socket.id);
-    if (!player) return;
+    const sp = socketPlayers.get(socket.id);
+    if (!sp) return;
     socketPlayers.delete(socket.id);
-    console.log('[server] disconnected:', socket.id, player.name);
-    const r = rooms.get(player.roomId);
-    if (!r) return;
-    r.game.removePlayer(player.id);
-    broadcastRoomState(r);
-    if (r.game.phase === 'showdown') scheduleNextHand(r, 5000);
-    else if (r.game.phase === 'waiting') tryAutoStart(r);
+    dequeue(sp.playerId);
+    console.log('[server] disconnected:', sp.playerName || socket.id);
+
+    if (sp.matchId) {
+      const m = matches.get(sp.matchId);
+      if (m && !m.ended) {
+        const otherId = matchPlayers(m).find(p => p.playerId !== sp.playerId)?.playerId;
+        if (otherId) endMatch(m, otherId);
+      }
+    }
   });
 });
 
-app.get('/api/rooms', async (_, res) => {
-  try {
-    const { rows } = await db.query('SELECT uuid, name, emoji, max_players FROM rooms ORDER BY id');
-    const result = rows.map(row => {
-      const r = rooms.get(row.uuid);
-      return {
-        id: row.uuid, name: row.name, emoji: row.emoji, maxPlayers: row.max_players,
-        playerCount: r ? r.game.players.length : 0,
-        phase: r ? r.game.phase : 'waiting',
-      };
-    });
-    res.json(result);
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
+// ── HTTP routes ───────────────────────────────────────────────────────────────
 
 app.get('/health', (_, res) => res.json({
   ok: true,
-  rooms: [...rooms.values()].map(r => ({ id: r.id, name: r.name, players: r.game.players.length, phase: r.game.phase })),
+  matches: matches.size,
+  activeMatches: [...matches.values()].filter(m => !m.ended).map(m => ({
+    id: m.id, p1: m.p1?.playerName, p2: m.p2?.playerName, phase: m.game.phase,
+  })),
 }));
 
-function doReset() {
-  for (const r of rooms.values()) resetRoom(r);
-  socketPlayers.clear();
-  io.emit('reset');
-  io.sockets.sockets.forEach(s => broadcastLobbyState(s.id));
-  console.log('[server] full reset — rooms preserved');
-}
-
-app.get('/reset', (_, res) => { doReset(); res.json({ ok: true }); });
-app.post('/admin/reset', (_, res) => { doReset(); res.json({ ok: true }); });
-
-// Guest player registration — fire-and-forget from client, just acknowledge
-app.post('/api/player/guest', (req, res) => {
-  res.json({ ok: true });
+app.get('/api/matches', (_, res) => {
+  res.json([...matches.values()].filter(m => !m.ended).map(m => ({
+    id: m.id, player1: m.p1?.playerName, player2: m.p2?.playerName,
+    phase: m.game.phase, handCount: m.handCount,
+  })));
 });
 
-// Google auth — validates access token and returns playerId
+// Kept for TableSelectScreen backward compat — returns empty
+app.get('/api/rooms', (_, res) => res.json([]));
+
+app.post('/api/player/guest', (_, res) => res.json({ ok: true }));
+
 app.post('/auth/google', async (req, res) => {
-  const { token } = req.body || {};
-  if (!token) return res.status(400).json({ error: 'Missing token' });
   try {
-    const profile = await fetch('https://www.googleapis.com/userinfo/v2/me', {
+    const { token } = req.body;
+    const r = await fetch(`https://www.googleapis.com/userinfo/v2/me`, {
       headers: { Authorization: `Bearer ${token}` },
-    }).then(r => r.json());
-    if (!profile.id) return res.status(401).json({ error: 'Invalid token' });
-    const playerId = 'g_' + profile.id;
+    });
+    const profile = await r.json();
+    const playerId = `g_${profile.id}`;
     const name = profile.given_name || profile.name || '';
     res.json({ playerId, name, avatarId: null });
   } catch (err) {
@@ -322,11 +425,23 @@ app.post('/auth/google', async (req, res) => {
   }
 });
 
+function doReset() {
+  for (const m of matches.values()) {
+    clearTimeout(m.autoStartTimer);
+    clearTimeout(m.nextHandTimer);
+    clearTimeout(m.turnTimer);
+  }
+  matches.clear();
+  socketPlayers.clear();
+  io.emit('reset');
+  console.log('[server] full reset');
+}
+
+app.get('/reset', (_, res) => { doReset(); res.json({ ok: true }); });
+app.post('/admin/reset', (_, res) => { doReset(); res.json({ ok: true }); });
+
+// ── Start ─────────────────────────────────────────────────────────────────────
+
 const PORT = process.env.PORT || 3843;
-redis.connect().catch(e => console.error('[redis] initial connect failed:', e.message));
-loadRooms()
-  .then(() => server.listen(PORT, () => console.log(`Poker server on port ${PORT}`)))
-  .catch(err => {
-    console.error('[server] DB load failed:', err.message, '— starting anyway');
-    server.listen(PORT, () => console.log(`Poker server on port ${PORT}`));
-  });
+redis.connect().catch(e => console.error('[redis] connect failed:', e.message));
+server.listen(PORT, () => console.log(`Poker server on port ${PORT}`));

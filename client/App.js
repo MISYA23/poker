@@ -9,56 +9,67 @@ import { StatusBar } from 'expo-status-bar';
 import { GameContext } from './src/context/GameContext';
 import { useSocket } from './src/hooks/useSocket';
 import LobbyScreen from './src/screens/LobbyScreen';
-import TableSelectScreen from './src/screens/TableSelectScreen';
-import WaitlistScreen from './src/screens/WaitlistScreen';
 import GameScreen from './src/screens/GameScreen';
 
 const Stack = createStackNavigator();
 
 export default function App() {
-  const [myId, setMyId] = useState(null);
+  const [myId, setMyId]           = useState(null);
   const [gameState, setGameState] = useState(null);
-  const [error, setError] = useState(null);
-  const [lobbyRooms, setLobbyRooms] = useState(null);
-  const navigationRef = useNavigationContainerRef();
+  const [error, setError]         = useState(null);
+  const [inQueue, setInQueue]     = useState(false);
+  const [matchList, setMatchList] = useState([]);
+  const [myElo, setMyElo]         = useState(null);
+  const [matchOver, setMatchOver] = useState(null);
 
-  // Pending player info (set on onJoin, used when onJoinTable is called)
-  const playerRef = useRef(null);
+  const navigationRef = useNavigationContainerRef();
+  const playerRef     = useRef(null);
+  const matchIdRef    = useRef(null);
 
   const emit = useSocket({
-    'lobby-state': ({ tables }) => setLobbyRooms(tables || []),
-    joined: ({ playerId }) => {
-      setMyId(playerId);
-      setError(null);
+    'in-queue':        ()               => { setInQueue(true); setError(null); },
+    'queue-cancelled': ()               => setInQueue(false),
+    'match-found':     ({ matchId })    => {
+      setInQueue(false);
+      matchIdRef.current = matchId;
+      setMatchOver(null);
       navigationRef.navigate('Game');
     },
-    'game-state': (state) => {
+    'match-list':      ({ matches })    => setMatchList(matches || []),
+    'game-state':      (state)          => {
       setGameState(state);
-      if (state.atTable) navigationRef.navigate('Game');
+      if (state.atTable || state.observing) navigationRef.navigate('Game');
     },
-    error: ({ message }) => setError(message),
-    reset: () => {
-      setMyId(null);
-      setGameState(null);
-      playerRef.current = null;
+    'match-over':      (data)           => {
+      setMatchOver(data);
+      if (data.newElo != null) setMyElo(data.newElo);
+    },
+    error:             ({ message })    => setError(message),
+    reset:             ()               => {
+      setMyId(null); setGameState(null);
+      setInQueue(false); setMatchOver(null);
+      matchIdRef.current = null; playerRef.current = null;
       navigationRef.reset({ index: 0, routes: [{ name: 'Lobby' }] });
     },
   });
 
-  // Step 1: auth complete — store player info, enter lobby, go to table select
-  const onJoin = useCallback((playerName, avatarId, playerId) => {
+  const onFindMatch = useCallback((playerName, avatarId, playerId) => {
     setError(null);
-    playerRef.current = { playerName, avatarId, playerId };
+    setMyId(playerId);
+    playerRef.current = { playerId, playerName, avatarId };
     emit('enter-lobby', { playerId });
-    navigationRef.navigate('TableSelect');
+    emit('find-match', { playerId, playerName, avatarId });
   }, [emit]);
 
-  // Step 2: user picks a table
-  const onJoinTable = useCallback((tableId) => {
-    const p = playerRef.current;
-    if (!p) return;
-    setError(null);
-    emit('join', { playerId: p.playerId, playerName: p.playerName, avatarId: p.avatarId, tableId });
+  const onCancelMatch = useCallback(() => {
+    emit('cancel-match', {});
+    setInQueue(false);
+  }, [emit]);
+
+  const onObserve = useCallback((matchId) => {
+    matchIdRef.current = matchId;
+    emit('observe', { matchId });
+    navigationRef.navigate('Game');
   }, [emit]);
 
   const onAction = useCallback((action, amount) => {
@@ -66,24 +77,33 @@ export default function App() {
   }, [emit]);
 
   const onLeave = useCallback(() => {
-    setMyId(null);
-    setGameState(null);
-    playerRef.current = null;
-    emit('leave-table');
+    emit('leave-table', {});
+    setMyId(null); setGameState(null); setMatchOver(null);
+    matchIdRef.current = null;
     navigationRef.reset({ index: 0, routes: [{ name: 'Lobby' }] });
   }, [emit]);
 
+  const onRematch = useCallback((vote) => {
+    emit('rematch-vote', { vote });
+    if (!vote) {
+      setGameState(null); setMatchOver(null);
+      matchIdRef.current = null;
+      navigationRef.reset({ index: 0, routes: [{ name: 'Lobby' }] });
+    }
+  }, [emit]);
+
   return (
-    <GameContext.Provider value={{ gameState, myId, error, lobbyRooms, emit, onJoin, onJoinTable, onAction, onLeave }}>
+    <GameContext.Provider value={{
+      gameState, myId, error, inQueue, matchList, myElo, matchOver,
+      emit, onFindMatch, onCancelMatch, onObserve, onAction, onLeave, onRematch,
+    }}>
       <GestureHandlerRootView style={{ flex: 1 }}>
         <SafeAreaProvider>
           <StatusBar style="light" />
           <NavigationContainer ref={navigationRef}>
             <Stack.Navigator screenOptions={{ headerShown: false, animation: 'fade' }}>
               <Stack.Screen name="Lobby" component={LobbyScreen} />
-              <Stack.Screen name="TableSelect" component={TableSelectScreen} />
-              <Stack.Screen name="Waitlist" component={WaitlistScreen} />
-              <Stack.Screen name="Game" component={GameScreen} />
+              <Stack.Screen name="Game"  component={GameScreen} />
             </Stack.Navigator>
           </NavigationContainer>
         </SafeAreaProvider>
