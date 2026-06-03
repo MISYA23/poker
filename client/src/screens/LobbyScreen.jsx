@@ -5,6 +5,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { GameContext } from '../context/GameContext';
 import { colors } from '../theme';
+import { VERSION } from '../config';
 
 export default function LobbyScreen() {
   const { onFindMatch, onCancelMatch, onObserve, onLogout,
@@ -21,6 +22,7 @@ export default function LobbyScreen() {
           <View style={s.topBar}>
             <View>
               <Text style={s.logo}>♠ Poker Monkey ♣</Text>
+              <Text style={s.version}>{VERSION}</Text>
               <Text style={s.playerName}>
                 {playerInfo?.name || ''}
                 {myElo != null ? `  ·  ELO ${myElo}` : ''}
@@ -91,6 +93,7 @@ const s = StyleSheet.create({
   safe: { flex: 1 },
   topBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 12, paddingBottom: 8 },
   logo: { fontSize: 20, fontWeight: '900', color: colors.goldLight, letterSpacing: 1 },
+  version: { fontSize: 10, color: 'rgba(255,255,255,0.25)', letterSpacing: 1 },
   playerName: { fontSize: 12, color: colors.gray, marginTop: 2 },
   hamburger: { width: 40, height: 40, borderRadius: 10, backgroundColor: 'rgba(0,0,0,0.45)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center' },
   hamburgerTxt: { color: colors.white, fontSize: 18 },

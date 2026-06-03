@@ -8,7 +8,7 @@ import * as WebBrowser from 'expo-web-browser';
 import * as AuthSession from 'expo-auth-session';
 import { GameContext } from '../context/GameContext';
 import { colors } from '../theme';
-import { SERVER_URL } from '../config';
+import { SERVER_URL, VERSION } from '../config';
 import { getUser, setUser, getOrCreatePlayerId } from '../utils/user';
 
 WebBrowser.maybeCompleteAuthSession();
@@ -90,6 +90,7 @@ export default function LoginScreen() {
               <View style={s.header}>
                 <Text style={s.logo}>♠ Poker Monkey ♣</Text>
                 <Text style={s.sub}>NL Hold'em · 1v1</Text>
+                <Text style={s.version}>{VERSION}</Text>
               </View>
 
               <View style={s.card}>
@@ -154,6 +155,7 @@ const s = StyleSheet.create({
   header: { alignItems: 'center', gap: 6 },
   logo: { fontSize: 28, fontWeight: '900', color: colors.goldLight, letterSpacing: 2 },
   sub: { fontSize: 12, color: colors.gray, letterSpacing: 1 },
+  version: { fontSize: 11, color: 'rgba(255,255,255,0.25)', letterSpacing: 1 },
   card: { backgroundColor: 'rgba(255,255,255,0.06)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)', borderRadius: 16, width: '100%', maxWidth: 400, padding: 22, gap: 16 },
   googleBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#fff', borderRadius: 50, paddingVertical: 13, gap: 10 },
   dim: { opacity: 0.45 },

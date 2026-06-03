@@ -9,10 +9,9 @@ import Avatar from '../components/Avatar';
 import { ChipStack } from '../components/PokerChip';
 import BettingControls from '../components/BettingControls';
 import { colors } from '../theme';
-import { SERVER_URL } from '../config';
+import { SERVER_URL, VERSION } from '../config';
 
 const TURN_DURATION_MS = 20000;
-const VERSION = 'v2.0';
 
 // ─── Seat positions (calculated from oval dimensions via onLayout) ──────────
 // Returns absolute style for each slot, centered on seat width ~110pt
