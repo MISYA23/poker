@@ -12,3 +12,4 @@ and log [START] / [DONE] entries for every task. See global CLAUDE.md for protoc
 
 [22:07 UTC] [DONE] Created CLAUDE_LOG.md — multi-session coordination enabled
 [22:10 UTC] [DONE] Merged sessions — resolved duplicate /health route; all changes from both sessions intact
+[22:20 UTC] [DONE] v4.8 — proxy Google web token exchange through server; GOOGLE_CLIENT_SECRET set in Railway + server/.env
