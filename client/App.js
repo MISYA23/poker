@@ -9,9 +9,10 @@ import { StatusBar } from 'expo-status-bar';
 import { GameContext } from './src/context/GameContext';
 import { useSocket } from './src/hooks/useSocket';
 import { clearUser } from './src/utils/user';
-import LoginScreen from './src/screens/LoginScreen';
-import LobbyScreen from './src/screens/LobbyScreen';
-import GameScreen  from './src/screens/GameScreen';
+import LoginScreen   from './src/screens/LoginScreen';
+import LobbyScreen   from './src/screens/LobbyScreen';
+import GameScreen    from './src/screens/GameScreen';
+import ProfileScreen from './src/screens/ProfileScreen';
 
 const Stack = createStackNavigator();
 
@@ -61,7 +62,7 @@ export default function App() {
     setMyId(playerId);
     setPlayerInfo({ name, avatarId, playerId });
     setError(null);
-    emit('enter-lobby', { playerId });
+    emit('enter-lobby', { playerId, playerName: name, avatarId });
     navigationRef.navigate('Lobby');
   }, [emit]);
 
@@ -76,6 +77,10 @@ export default function App() {
     setGameState(null);
     matchIdRef.current = null;
     navigationRef.reset({ index: 0, routes: [{ name: 'Login' }] });
+  }, []);
+
+  const onUpdateProfile = useCallback((name, avatarId) => {
+    setPlayerInfo(p => ({ ...p, name, avatarId }));
   }, []);
 
   const onFindMatch = useCallback((name, avatarId, playerId) => {
@@ -117,8 +122,8 @@ export default function App() {
   return (
     <GameContext.Provider value={{
       gameState, myId, error, inQueue, matchList, onlinePlayers, myElo, matchOver, playerInfo,
-      emit, onLogin, onLogout, onFindMatch, onCancelMatch,
-      onObserve, onAction, onLeave, onRematch,
+      emit, onLogin, onLogout, onUpdateProfile, onFindMatch, onCancelMatch,
+      onObserve, onAction, onLeave, onRematch, navigationRef,
     }}>
       <GestureHandlerRootView style={{ flex: 1 }}>
         <SafeAreaProvider>
@@ -126,8 +131,9 @@ export default function App() {
           <NavigationContainer ref={navigationRef}>
             <Stack.Navigator screenOptions={{ headerShown: false, animation: 'fade' }}>
               <Stack.Screen name="Login" component={LoginScreen} />
-              <Stack.Screen name="Lobby" component={LobbyScreen} />
-              <Stack.Screen name="Game"  component={GameScreen} />
+              <Stack.Screen name="Lobby"   component={LobbyScreen} />
+              <Stack.Screen name="Game"    component={GameScreen} />
+              <Stack.Screen name="Profile" component={ProfileScreen} />
             </Stack.Navigator>
           </NavigationContainer>
         </SafeAreaProvider>

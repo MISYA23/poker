@@ -1,0 +1,152 @@
+import React, { useContext, useState, useEffect } from 'react';
+import {
+  View, Text, TextInput, Pressable, Image, ScrollView, StyleSheet, ActivityIndicator,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { GameContext } from '../context/GameContext';
+import { colors } from '../theme';
+import { SERVER_URL } from '../config';
+import { getUser, setUser } from '../utils/user';
+
+const AVATARS = [
+  { id: 'dk',    source: require('../../assets/dk.png') },
+  { id: 'diddy', source: require('../../assets/diddy.webp') },
+  { id: 'alfie', source: require('../../assets/alfie.png') },
+  { id: 'jazz',  source: require('../../assets/jazz.png') },
+];
+
+export default function ProfileScreen({ navigation }) {
+  const { playerInfo, myElo, onUpdateProfile } = useContext(GameContext);
+
+  const [name, setName]         = useState(playerInfo?.name || '');
+  const [avatarId, setAvatarId] = useState(playerInfo?.avatarId || 'dk');
+  const [saving, setSaving]     = useState(false);
+  const [history, setHistory]   = useState(null);
+  const [loadingHistory, setLoadingHistory] = useState(true);
+
+  useEffect(() => {
+    if (!playerInfo?.playerId) return;
+    fetch(`${SERVER_URL}/api/player/${playerInfo.playerId}/profile`)
+      .then(r => r.json())
+      .then(data => setHistory(data.history || []))
+      .catch(() => setHistory([]))
+      .finally(() => setLoadingHistory(false));
+  }, [playerInfo?.playerId]);
+
+  const handleSave = async () => {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    setSaving(true);
+    await setUser({ name: trimmed, avatarId });
+    onUpdateProfile(trimmed, avatarId);
+    setSaving(false);
+    navigation.goBack();
+  };
+
+  return (
+    <SafeAreaView style={s.safe}>
+      <View style={s.header}>
+        <Pressable style={s.backBtn} onPress={() => navigation.goBack()}>
+          <Text style={s.backTxt}>← Back</Text>
+        </Pressable>
+        <Text style={s.title}>Profile</Text>
+        <View style={{ width: 60 }} />
+      </View>
+
+      <ScrollView contentContainerStyle={s.scroll}>
+
+        {/* ELO */}
+        {myElo != null && (
+          <View style={s.eloCard}>
+            <Text style={s.eloNum}>{myElo}</Text>
+            <Text style={s.eloLbl}>ELO Rating</Text>
+          </View>
+        )}
+
+        {/* Name */}
+        <View style={s.section}>
+          <Text style={s.sectionLbl}>Username</Text>
+          <TextInput style={s.input} value={name} onChangeText={setName}
+            maxLength={20} placeholder="Your name" placeholderTextColor={colors.gray} />
+        </View>
+
+        {/* Avatar */}
+        <View style={s.section}>
+          <Text style={s.sectionLbl}>Avatar</Text>
+          <View style={s.avatarRow}>
+            {AVATARS.map(av => (
+              <Pressable key={av.id} style={[s.avatarOpt, avatarId === av.id && s.avatarSel]}
+                onPress={() => setAvatarId(av.id)}>
+                <Image source={av.source} style={s.avatarImg} resizeMode="cover" />
+              </Pressable>
+            ))}
+          </View>
+        </View>
+
+        {/* Save */}
+        <Pressable style={[s.saveBtn, (!name.trim() || saving) && s.saveDim]}
+          onPress={handleSave} disabled={!name.trim() || saving}>
+          {saving ? <ActivityIndicator color="#000" size="small" />
+            : <Text style={s.saveTxt}>Save Changes</Text>}
+        </Pressable>
+
+        {/* Game history */}
+        <View style={s.section}>
+          <Text style={s.sectionLbl}>Match History</Text>
+          {loadingHistory ? (
+            <ActivityIndicator color={colors.gold} />
+          ) : history?.length === 0 ? (
+            <Text style={s.emptyTxt}>No matches yet</Text>
+          ) : (
+            history?.map((m, i) => (
+              <View key={m.matchId || i} style={s.historyRow}>
+                <View style={[s.resultDot, m.won ? s.dotWin : s.dotLoss]} />
+                <View style={s.historyInfo}>
+                  <Text style={s.historyOpp}>vs {m.opponentName}</Text>
+                  <Text style={s.historyDate}>{new Date(m.date).toLocaleDateString()}</Text>
+                </View>
+                <Text style={[s.eloChange, m.eloChange >= 0 ? s.eloPos : s.eloNeg]}>
+                  {m.eloChange >= 0 ? '+' : ''}{m.eloChange}
+                </Text>
+              </View>
+            ))
+          )}
+        </View>
+
+      </ScrollView>
+    </SafeAreaView>
+  );
+}
+
+const s = StyleSheet.create({
+  safe: { flex: 1, backgroundColor: '#0a1628' },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.08)' },
+  backBtn: { paddingVertical: 4, paddingHorizontal: 4 },
+  backTxt: { color: colors.goldLight, fontSize: 15 },
+  title: { color: colors.white, fontSize: 18, fontWeight: '800' },
+  scroll: { padding: 20, gap: 24 },
+  eloCard: { backgroundColor: 'rgba(212,160,23,0.12)', borderWidth: 1, borderColor: 'rgba(212,160,23,0.3)', borderRadius: 16, padding: 20, alignItems: 'center' },
+  eloNum: { color: colors.goldLight, fontSize: 48, fontWeight: '900' },
+  eloLbl: { color: colors.gray, fontSize: 13, marginTop: 2 },
+  section: { gap: 10 },
+  sectionLbl: { color: colors.gray, fontSize: 11, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 1 },
+  input: { backgroundColor: 'rgba(0,0,0,0.4)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12, color: colors.white, fontSize: 16 },
+  avatarRow: { flexDirection: 'row', gap: 12 },
+  avatarOpt: { width: 64, height: 64, borderRadius: 32, borderWidth: 2, borderColor: 'rgba(255,255,255,0.2)', overflow: 'hidden' },
+  avatarSel: { borderColor: colors.goldLight },
+  avatarImg: { width: 64, height: 64 },
+  saveBtn: { backgroundColor: colors.gold, borderRadius: 12, paddingVertical: 14, alignItems: 'center' },
+  saveDim: { opacity: 0.45 },
+  saveTxt: { color: '#000', fontSize: 16, fontWeight: '800' },
+  emptyTxt: { color: colors.gray, fontSize: 14, fontStyle: 'italic' },
+  historyRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: 10, padding: 12, gap: 10 },
+  resultDot: { width: 10, height: 10, borderRadius: 5 },
+  dotWin: { backgroundColor: '#4ade80' },
+  dotLoss: { backgroundColor: '#f87171' },
+  historyInfo: { flex: 1 },
+  historyOpp: { color: colors.white, fontSize: 14, fontWeight: '600' },
+  historyDate: { color: colors.gray, fontSize: 11, marginTop: 2 },
+  eloChange: { fontSize: 15, fontWeight: '800' },
+  eloPos: { color: '#4ade80' },
+  eloNeg: { color: '#f87171' },
+});

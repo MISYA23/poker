@@ -144,7 +144,7 @@ function PlayerPod({ player, isMe, turnDeadline, lastAction, win, displayChips, 
 
 // ─── Main Screen ─────────────────────────────────────────────────────────────
 export default function GameScreen() {
-  const { gameState, myId, onAction, onLeave, onRematch, emit, matchOver } = useContext(GameContext);
+  const { gameState, myId, onAction, onLeave, onRematch, emit, matchOver, navigationRef } = useContext(GameContext);
 
   const [deckStyle, setDeckStyle] = useState('regular');
   const [menuOpen,  setMenuOpen]  = useState(false);
@@ -252,6 +252,9 @@ export default function GameScreen() {
         {menuOpen && (
           <Pressable style={s.menuOverlay} onPress={() => setMenuOpen(false)}>
             <View style={s.menuPanel}>
+              <Pressable style={s.menuItem} onPress={() => { setMenuOpen(false); navigationRef.navigate('Profile'); }}>
+                <Text style={s.menuItemTxt}>👤 Profile</Text>
+              </Pressable>
               <Pressable style={s.menuItem} onPress={() => setDeckStyle(d => d === 'four-color' ? 'regular' : 'four-color')}>
                 <Text style={s.menuItemTxt}>🃏 {deckStyle === 'four-color' ? '4-Color ✓' : '4-Color Deck'}</Text>
               </Pressable>

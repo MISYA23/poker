@@ -9,7 +9,7 @@ import { VERSION } from '../config';
 
 export default function LobbyScreen() {
   const { onFindMatch, onCancelMatch, onObserve, onLogout,
-          error, matchList, onlinePlayers, inQueue, myElo, playerInfo } = useContext(GameContext);
+          error, matchList, onlinePlayers, inQueue, myElo, playerInfo, navigationRef } = useContext(GameContext);
 
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -33,7 +33,10 @@ export default function LobbyScreen() {
           {menuOpen && (
             <Pressable style={s.menuOverlay} onPress={() => setMenuOpen(false)}>
               <View style={s.menuPanel}>
-                <Pressable style={s.menuItem} onPress={() => { setMenuOpen(false); onLogout(); }}>
+                <Pressable style={s.menuItem} onPress={() => { setMenuOpen(false); navigationRef.navigate('Profile'); }}>
+                  <Text style={s.menuItemTxt}>👤 Profile</Text>
+                </Pressable>
+                <Pressable style={[s.menuItem, { borderBottomWidth: 0 }]} onPress={() => { setMenuOpen(false); onLogout(); }}>
                   <Text style={s.menuItemTxt}>🚪 Log Out</Text>
                 </Pressable>
               </View>

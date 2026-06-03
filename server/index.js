@@ -259,7 +259,14 @@ async function endMatch(m, winnerId) {
 io.on('connection', (socket) => {
   console.log('[server] connected:', socket.id);
 
-  socket.on('enter-lobby', () => {
+  socket.on('enter-lobby', ({ playerId, playerName, avatarId } = {}) => {
+    if (playerId && playerName) {
+      const existing = socketPlayers.get(socket.id);
+      if (!existing) {
+        const safeAvatar = VALID_AVATARS.includes(avatarId) ? avatarId : VALID_AVATARS[0];
+        socketPlayers.set(socket.id, { playerId, playerName: playerName.trim().slice(0, 20), avatarId: safeAvatar, matchId: null, socketId: socket.id });
+      }
+    }
     broadcastMatchList();
   });
 
@@ -400,6 +407,51 @@ io.on('connection', (socket) => {
 });
 
 // ── HTTP routes ───────────────────────────────────────────────────────────────
+
+app.get('/api/player/:playerId/profile', async (req, res) => {
+  try {
+    const { playerId } = req.params;
+    const stats = await db.query(
+      'SELECT elo, matches_played, matches_won FROM player_stats WHERE player_id=$1',
+      [playerId]
+    );
+    const history = await db.query(
+      `SELECT m.uuid, m.started_at, m.ended_at,
+        CASE WHEN m.player1_id=$1 THEN m.player2_id ELSE m.player1_id END AS opponent_id,
+        CASE WHEN m.player1_id=$1 THEN m.player2_elo_before ELSE m.player1_elo_before END AS opp_elo,
+        CASE WHEN m.player1_id=$1 THEN m.player1_elo_after ELSE m.player2_elo_after END AS my_elo_after,
+        CASE WHEN m.player1_id=$1 THEN m.player1_elo_before ELSE m.player2_elo_before END AS my_elo_before,
+        m.winner_id
+       FROM matches m
+       WHERE (m.player1_id=$1 OR m.player2_id=$1) AND m.status='complete'
+       ORDER BY m.started_at DESC LIMIT 20`,
+      [playerId]
+    );
+
+    // Resolve opponent names from socketPlayers (live) or player_stats table
+    const oppIds = [...new Set(history.rows.map(r => r.opponent_id).filter(Boolean))];
+    const oppNames = {};
+    for (const id of oppIds) {
+      // Check live sockets first
+      for (const sp of socketPlayers.values()) {
+        if (sp.playerId === id) { oppNames[id] = sp.playerName; break; }
+      }
+    }
+
+    res.json({
+      stats: stats.rows[0] || { elo: 1200, matches_played: 0, matches_won: 0 },
+      history: history.rows.map(r => ({
+        matchId:     r.uuid,
+        date:        r.started_at,
+        opponentId:  r.opponent_id,
+        opponentName: oppNames[r.opponent_id] || 'Unknown',
+        won:         r.winner_id === playerId,
+        eloChange:   (r.my_elo_after || 0) - (r.my_elo_before || 0),
+        myEloAfter:  r.my_elo_after,
+      })),
+    });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
 
 app.get('/health', (_, res) => res.json({
   ok: true,
