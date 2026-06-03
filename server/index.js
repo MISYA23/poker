@@ -591,6 +591,26 @@ app.get('/api/match/:matchUuid/replay', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+app.post('/auth/google/exchange', async (req, res) => {
+  const { code, redirectUri, codeVerifier } = req.body;
+  const params = new URLSearchParams({
+    code,
+    client_id: '1056319941649-g1feki5rvo6bm7jltur6eo4oanrn1tvo.apps.googleusercontent.com',
+    client_secret: process.env.GOOGLE_CLIENT_SECRET,
+    redirect_uri: redirectUri,
+    grant_type: 'authorization_code',
+  });
+  if (codeVerifier) params.set('code_verifier', codeVerifier);
+  const resp = await fetch('https://oauth2.googleapis.com/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: params.toString(),
+  });
+  const data = await resp.json();
+  if (!resp.ok) return res.status(400).json(data);
+  res.json({ access_token: data.access_token });
+});
+
 app.get('/health', (_, res) => res.json({
   ok: true,
   matches: matches.size,
