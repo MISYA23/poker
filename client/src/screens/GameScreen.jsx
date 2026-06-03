@@ -144,7 +144,7 @@ function PlayerPod({ player, isMe, turnDeadline, lastAction, win, displayChips, 
 
 // ─── Main Screen ─────────────────────────────────────────────────────────────
 export default function GameScreen() {
-  const { gameState, myId, onAction, onLeave, onRematch, emit, matchOver, navigationRef } = useContext(GameContext);
+  const { gameState, myId, onAction, onLeave, onRematch, onLogout, emit, matchOver, navigationRef } = useContext(GameContext);
 
   const [deckStyle, setDeckStyle] = useState('regular');
   const [menuOpen,  setMenuOpen]  = useState(false);
@@ -261,8 +261,8 @@ export default function GameScreen() {
               <Pressable style={s.menuItem} onPress={() => { setMenuOpen(false); onLeave(); }}>
                 <Text style={s.menuItemTxt}>🚪 Leave Table</Text>
               </Pressable>
-              <Pressable style={[s.menuItem, s.menuItemRed]} onPress={() => { setMenuOpen(false); handleReset(); }}>
-                <Text style={[s.menuItemTxt, { color: '#f87171' }]}>🔄 Reset</Text>
+              <Pressable style={[s.menuItem, s.menuItemRed]} onPress={() => { setMenuOpen(false); onLeave(); onLogout?.(); }}>
+                <Text style={[s.menuItemTxt, { color: '#f87171' }]}>🔓 Log Out</Text>
               </Pressable>
             </View>
           </Pressable>
