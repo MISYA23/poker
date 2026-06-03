@@ -1,1 +1,15 @@
-export const SERVER_URL = process.env.EXPO_PUBLIC_SERVER_URL || 'https://poker-production-d726.up.railway.app';
+import { Platform } from 'react-native';
+
+const envUrl = process.env.EXPO_PUBLIC_SERVER_URL;
+const prodUrl = 'https://poker-production-d726.up.railway.app';
+
+// Android emulator can't reach host machine via 'localhost' — must use 10.0.2.2
+function resolveUrl(url) {
+  if (!url) return prodUrl;
+  if (Platform.OS === 'android' && url.includes('localhost')) {
+    return url.replace('localhost', '10.0.2.2');
+  }
+  return url;
+}
+
+export const SERVER_URL = resolveUrl(envUrl);
