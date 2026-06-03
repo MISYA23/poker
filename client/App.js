@@ -20,7 +20,8 @@ export default function App() {
   const [gameState, setGameState] = useState(null);
   const [error, setError]         = useState(null);
   const [inQueue, setInQueue]     = useState(false);
-  const [matchList, setMatchList] = useState([]);
+  const [matchList, setMatchList]       = useState([]);
+  const [onlinePlayers, setOnlinePlayers] = useState([]);
   const [myElo, setMyElo]         = useState(null);
   const [matchOver, setMatchOver] = useState(null);
   const [playerInfo, setPlayerInfo] = useState(null); // { playerId, name, avatarId }
@@ -37,7 +38,7 @@ export default function App() {
       setMatchOver(null);
       navigationRef.navigate('Game');
     },
-    'match-list':  ({ matches })     => setMatchList(matches || []),
+    'match-list':  ({ matches, onlinePlayers: op }) => { setMatchList(matches || []); setOnlinePlayers(op || []); },
     'game-state':  (state)           => {
       setGameState(state);
       if (state.atTable || state.observing) navigationRef.navigate('Game');
@@ -115,7 +116,7 @@ export default function App() {
 
   return (
     <GameContext.Provider value={{
-      gameState, myId, error, inQueue, matchList, myElo, matchOver, playerInfo,
+      gameState, myId, error, inQueue, matchList, onlinePlayers, myElo, matchOver, playerInfo,
       emit, onLogin, onLogout, onFindMatch, onCancelMatch,
       onObserve, onAction, onLeave, onRematch,
     }}>

@@ -9,7 +9,7 @@ import { VERSION } from '../config';
 
 export default function LobbyScreen() {
   const { onFindMatch, onCancelMatch, onObserve, onLogout,
-          error, matchList, inQueue, myElo, playerInfo } = useContext(GameContext);
+          error, matchList, onlinePlayers, inQueue, myElo, playerInfo } = useContext(GameContext);
 
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -64,9 +64,9 @@ export default function LobbyScreen() {
               </Pressable>
             )}
 
-            {/* Active tables — always shown */}
-            <View style={s.tablesSection}>
-              <Text style={s.tablesLabel}>Active Tables:</Text>
+            {/* Active tables */}
+            <View style={s.section}>
+              <Text style={s.sectionLabel}>Active Tables:</Text>
               {matchList.map(m => (
                 <Pressable key={m.id} style={s.matchRow} onPress={() => onObserve(m.id)}>
                   <View style={s.matchInfo}>
@@ -77,6 +77,16 @@ export default function LobbyScreen() {
                   </View>
                   <Text style={s.watchTxt}>Watch →</Text>
                 </Pressable>
+              ))}
+            </View>
+
+            {/* Players online */}
+            <View style={s.section}>
+              <Text style={s.sectionLabel}>Players Online Now:</Text>
+              {onlinePlayers.map(p => (
+                <View key={p.id} style={s.playerRow}>
+                  <Text style={s.playerName}>{p.name}</Text>
+                </View>
               ))}
             </View>
 
@@ -111,8 +121,10 @@ const s = StyleSheet.create({
   queueTxt: { color: colors.white, fontSize: 18, fontWeight: '600' },
   cancelBtn: { paddingHorizontal: 24, paddingVertical: 10, borderRadius: 10, borderWidth: 1, borderColor: 'rgba(255,255,255,0.3)' },
   cancelTxt: { color: colors.white, fontSize: 14 },
-  tablesSection: { width: '100%', maxWidth: 420, gap: 10 },
-  tablesLabel: { color: colors.gray, fontSize: 12, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 1 },
+  section: { width: '100%', maxWidth: 420, gap: 10 },
+  sectionLabel: { color: colors.white, fontSize: 16, fontWeight: '800' },
+  playerRow: { paddingVertical: 8, paddingHorizontal: 14, backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: 10, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' },
+  playerName: { color: colors.white, fontSize: 14, fontWeight: '600' },
   matchRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.06)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)', borderRadius: 12, padding: 14, gap: 8 },
   matchInfo: { flex: 1 },
   matchNames: { color: colors.white, fontSize: 14, fontWeight: '700' },

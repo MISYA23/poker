@@ -123,7 +123,18 @@ function broadcastMatchList() {
     phase:   m.game.phase,
     handCount: m.handCount || 0,
   }));
-  io.emit('match-list', { matches: list });
+
+  // Deduplicated list of all connected players
+  const seen = new Set();
+  const online = [];
+  for (const sp of socketPlayers.values()) {
+    if (sp.playerName && !seen.has(sp.playerId)) {
+      seen.add(sp.playerId);
+      online.push({ id: sp.playerId, name: sp.playerName, avatarId: sp.avatarId });
+    }
+  }
+
+  io.emit('match-list', { matches: list, onlinePlayers: online });
 }
 
 // ── Hand lifecycle ────────────────────────────────────────────────────────────
