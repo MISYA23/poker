@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useContext } from 'react';
-import { Platform } from 'react-native';
 import {
   View, Text, TextInput, Pressable, Image, ImageBackground,
   ScrollView, StyleSheet, KeyboardAvoidingView, Platform, ActivityIndicator,
@@ -105,25 +104,22 @@ export default function LoginScreen() {
               </View>
 
               <View style={s.card}>
-                {/* Google — mobile only (web OAuth requires extra Google Console setup) */}
-                {Platform.OS !== 'web' && (
-                  <>
-                    <Pressable
-                      style={[s.googleBtn, (googleLoading || !request) && s.dim]}
-                      onPress={() => { setGoogleLoading(true); promptAsync({ createTask: false }).finally(() => setGoogleLoading(false)); }}
-                      disabled={googleLoading || !request}
-                    >
-                      {googleLoading
-                        ? <ActivityIndicator color="#444" size="small" />
-                        : <><Text style={s.googleG}>G</Text><Text style={s.googleTxt}>Log in with Google</Text></>
-                      }
-                    </Pressable>
+                {/* Google */}
+                <Pressable
+                  style={[s.googleBtn, (googleLoading || !request) && s.dim]}
+                  onPress={() => { setGoogleLoading(true); promptAsync({ createTask: false }).finally(() => setGoogleLoading(false)); }}
+                  disabled={googleLoading || !request}
+                >
+                  {googleLoading
+                    ? <ActivityIndicator color="#444" size="small" />
+                    : <><Text style={s.googleG}>G</Text><Text style={s.googleTxt}>Log in with Google</Text></>
+                  }
+                </Pressable>
 
-                    <View style={s.divider}>
-                      <View style={s.divLine} /><Text style={s.divTxt}>or</Text><View style={s.divLine} />
-                    </View>
-                  </>
-                )}
+                {/* Divider */}
+                <View style={s.divider}>
+                  <View style={s.divLine} /><Text style={s.divTxt}>or</Text><View style={s.divLine} />
+                </View>
 
                 {/* Guest */}
                 <Text style={s.sectionLabel}>Play as Guest</Text>
