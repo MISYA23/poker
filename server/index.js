@@ -192,6 +192,12 @@ function scheduleNextHand(m, delay = 5000) {
 // ── Match end + ELO ───────────────────────────────────────────────────────────
 
 async function getOrCreateStats(playerId) {
+  // Ensure player row exists first (required for FK)
+  await db.query(
+    `INSERT INTO players (id, display_name, is_guest) VALUES ($1, $1, true)
+     ON CONFLICT (id) DO UPDATE SET last_seen_at=NOW()`,
+    [playerId]
+  );
   const { rows } = await db.query(
     `INSERT INTO player_stats (player_id) VALUES ($1)
      ON CONFLICT (player_id) DO UPDATE SET player_id=EXCLUDED.player_id
@@ -233,7 +239,10 @@ async function endMatch(m, winnerId) {
         `INSERT INTO matches (uuid,player1_id,player2_id,status,ended_at,winner_id,
           player1_elo_before,player2_elo_before,player1_elo_after,player2_elo_after)
          VALUES ($1,$2,$3,'complete',NOW(),$4,$5,$6,$7,$8)
-         ON CONFLICT (uuid) DO NOTHING`,
+         ON CONFLICT (uuid) DO UPDATE SET
+           status='complete', ended_at=NOW(), winner_id=$4,
+           player1_elo_before=$5, player2_elo_before=$6,
+           player1_elo_after=$7, player2_elo_after=$8`,
         [m.id, winner.playerId, loser.playerId, winnerId,
          wStats.elo, lStats.elo, wNewElo, lNewElo]
       ),
@@ -422,43 +431,40 @@ io.on('connection', (socket) => {
 app.get('/api/player/:playerId/profile', async (req, res) => {
   try {
     const { playerId } = req.params;
-    const stats = await db.query(
-      'SELECT elo, matches_played, matches_won FROM player_stats WHERE player_id=$1',
-      [playerId]
-    );
-    const history = await db.query(
-      `SELECT m.uuid, m.started_at, m.ended_at,
-        CASE WHEN m.player1_id=$1 THEN m.player2_id ELSE m.player1_id END AS opponent_id,
-        CASE WHEN m.player1_id=$1 THEN m.player2_elo_before ELSE m.player1_elo_before END AS opp_elo,
-        CASE WHEN m.player1_id=$1 THEN m.player1_elo_after ELSE m.player2_elo_after END AS my_elo_after,
-        CASE WHEN m.player1_id=$1 THEN m.player1_elo_before ELSE m.player2_elo_before END AS my_elo_before,
-        m.winner_id
-       FROM matches m
-       WHERE (m.player1_id=$1 OR m.player2_id=$1) AND m.status='complete'
-       ORDER BY m.started_at DESC LIMIT 20`,
-      [playerId]
-    );
 
-    // Resolve opponent names from socketPlayers (live) or player_stats table
-    const oppIds = [...new Set(history.rows.map(r => r.opponent_id).filter(Boolean))];
-    const oppNames = {};
-    for (const id of oppIds) {
-      // Check live sockets first
-      for (const sp of socketPlayers.values()) {
-        if (sp.playerId === id) { oppNames[id] = sp.playerName; break; }
-      }
+    const [statsRes, histRes] = await Promise.all([
+      db.query('SELECT elo, matches_played, matches_won FROM player_stats WHERE player_id=$1', [playerId]),
+      db.query(
+        `SELECT m.uuid, m.started_at,
+          CASE WHEN m.player1_id=$1 THEN m.player2_id ELSE m.player1_id END AS opponent_id,
+          CASE WHEN m.player1_id=$1 THEN m.player1_elo_after  ELSE m.player2_elo_after  END AS my_elo_after,
+          CASE WHEN m.player1_id=$1 THEN m.player1_elo_before ELSE m.player2_elo_before END AS my_elo_before,
+          m.winner_id
+         FROM matches m
+         WHERE (m.player1_id=$1 OR m.player2_id=$1) AND m.status='complete'
+         ORDER BY m.started_at DESC LIMIT 20`,
+        [playerId]
+      ),
+    ]);
+
+    // Resolve opponent names from players table (canonical)
+    const oppIds = [...new Set(histRes.rows.map(r => r.opponent_id).filter(Boolean))];
+    const names = {};
+    if (oppIds.length) {
+      const { rows } = await db.query('SELECT id, display_name FROM players WHERE id = ANY($1)', [oppIds]);
+      rows.forEach(p => { names[p.id] = p.display_name; });
     }
 
     res.json({
-      stats: stats.rows[0] || { elo: 1200, matches_played: 0, matches_won: 0 },
-      history: history.rows.map(r => ({
-        matchId:     r.uuid,
-        date:        r.started_at,
-        opponentId:  r.opponent_id,
-        opponentName: oppNames[r.opponent_id] || 'Unknown',
-        won:         r.winner_id === playerId,
-        eloChange:   (r.my_elo_after || 0) - (r.my_elo_before || 0),
-        myEloAfter:  r.my_elo_after,
+      stats: statsRes.rows[0] || { elo: 1200, matches_played: 0, matches_won: 0 },
+      history: histRes.rows.map(r => ({
+        matchId:      r.uuid,
+        date:         r.started_at,
+        opponentId:   r.opponent_id,
+        opponentName: names[r.opponent_id] || 'Unknown',
+        won:          r.winner_id === playerId,
+        eloChange:    (r.my_elo_after || 0) - (r.my_elo_before || 0),
+        myEloAfter:   r.my_elo_after,
       })),
     });
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -468,42 +474,49 @@ app.get('/api/player/:playerId/profile', async (req, res) => {
 app.get('/api/match/:matchUuid/replay', async (req, res) => {
   try {
     const { matchUuid } = req.params;
+    const { rows: matchRows } = await db.query('SELECT id FROM matches WHERE uuid=$1', [matchUuid]);
+    if (!matchRows.length) return res.json([]);
+    const matchDbId = matchRows[0].id;
 
-    // Get the tables row for this match UUID
-    const { rows: tableRows } = await db.query(
-      'SELECT id FROM tables WHERE uuid=$1 LIMIT 1', [matchUuid]
-    );
-    if (!tableRows.length) return res.json([]);
-    const tableId = tableRows[0].id;
-
-    // Get all hands for this table, ordered
     const { rows: hands } = await db.query(
-      `SELECT id, hand_number, hand_uuid, community_cards, winner_name, winning_hand
-       FROM hands WHERE table_id=$1 ORDER BY hand_number`,
-      [tableId]
+      `SELECT id, hand_number, hand_uuid, community_cards, winner_id, winning_hand
+       FROM hands WHERE match_id=$1 ORDER BY hand_number`,
+      [matchDbId]
     );
 
-    // For each hand, get all logged events from the metadata column
+    // Collect all player IDs across all events for name lookup
     const result = await Promise.all(hands.map(async h => {
       const { rows: events } = await db.query(
-        `SELECT action_type, player_name, player_id, amount, phase, sequence_number, metadata
-         FROM actions WHERE hand_id=$1 ORDER BY sequence_number`,
+        `SELECT sequence_num, event_type, player_id, amount, phase, data
+         FROM hand_events WHERE hand_id=$1 ORDER BY sequence_num`,
         [h.id]
       );
+
+      // Resolve player names from players table
+      const playerIds = [...new Set(events.map(e => e.player_id).filter(Boolean))];
+      const names = {};
+      if (playerIds.length) {
+        const { rows: pRows } = await db.query(
+          `SELECT id, display_name FROM players WHERE id = ANY($1)`, [playerIds]
+        );
+        pRows.forEach(p => { names[p.id] = p.display_name; });
+      }
+
       return {
-        handNumber:    h.hand_number,
-        handUuid:      h.hand_uuid,
+        handNumber:     h.hand_number,
+        handUuid:       h.hand_uuid,
         communityCards: h.community_cards || [],
-        winnerName:    h.winner_name,
-        winningHand:   h.winning_hand,
+        winnerId:       h.winner_id,
+        winnerName:     names[h.winner_id] || null,
+        winningHand:    h.winning_hand,
         events: events.map(e => ({
-          seq:        e.sequence_number,
-          type:       e.action_type,
-          playerName: e.player_name,
+          seq:        e.sequence_num,
+          type:       e.event_type,
           playerId:   e.player_id,
+          playerName: names[e.player_id] || null,
           amount:     e.amount,
           phase:      e.phase,
-          data:       e.metadata || {},
+          data:       e.data || {},
         })),
       };
     }));
@@ -530,21 +543,43 @@ app.get('/api/matches', (_, res) => {
 // Kept for TableSelectScreen backward compat — returns empty
 app.get('/api/rooms', (_, res) => res.json([]));
 
-app.post('/api/player/guest', (_, res) => res.json({ ok: true }));
+// Guest registration — upsert into players
+app.post('/api/player/guest', async (req, res) => {
+  try {
+    const { playerId, name, avatarId } = req.body;
+    if (!playerId) return res.status(400).json({ error: 'Missing playerId' });
+    await db.query(
+      `INSERT INTO players (id, display_name, avatar_id, is_guest)
+       VALUES ($1, $2, $3, true)
+       ON CONFLICT (id) DO UPDATE SET
+         display_name=$2, avatar_id=$3, last_seen_at=NOW()`,
+      [playerId, (name || 'Guest').trim().slice(0, 20), avatarId || 'dk']
+    );
+    res.json({ ok: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
 
+// Google auth — upsert into players with is_guest=false
 app.post('/auth/google', async (req, res) => {
   try {
     const { token } = req.body;
-    const r = await fetch(`https://www.googleapis.com/userinfo/v2/me`, {
+    const r = await fetch('https://www.googleapis.com/userinfo/v2/me', {
       headers: { Authorization: `Bearer ${token}` },
     });
     const profile = await r.json();
-    const playerId = `g_${profile.id}`;
-    const name = profile.given_name || profile.name || '';
-    res.json({ playerId, name, avatarId: null });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
+    const playerId  = `g_${profile.id}`;
+    const name      = profile.given_name || profile.name || '';
+    const avatarId  = 'dk';
+
+    await db.query(
+      `INSERT INTO players (id, display_name, avatar_id, is_guest)
+       VALUES ($1, $2, $3, false)
+       ON CONFLICT (id) DO UPDATE SET
+         display_name=$2, last_seen_at=NOW(), is_guest=false`,
+      [playerId, name.trim().slice(0, 20), avatarId]
+    );
+    res.json({ playerId, name, avatarId });
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 function doReset() {

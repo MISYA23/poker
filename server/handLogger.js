@@ -4,16 +4,19 @@ const { logEvent, getHandEvents, clearHandEvents, setSnapshot } = require('./red
 
 const db = new Pool({ connectionString: process.env.DATABASE_URL });
 
-// roomId → integer table ID in Postgres (cached after first lookup)
-const tableIdCache = {};
+// matchUuid → integer matches.id (cached)
+const matchIdCache = {};
 
-async function getOrCreateDbTableId(roomUuid) {
-  if (tableIdCache[roomUuid]) return tableIdCache[roomUuid];
+async function getOrCreateMatchRow(matchUuid, p1Id, p2Id) {
+  if (matchIdCache[matchUuid]) return matchIdCache[matchUuid];
   const { rows } = await db.query(
-    'INSERT INTO tables (uuid, status) VALUES ($1, $2) ON CONFLICT (uuid) DO UPDATE SET status=$2 RETURNING id',
-    [roomUuid, 'active']
+    `INSERT INTO matches (uuid, player1_id, player2_id, status)
+     VALUES ($1, $2, $3, 'active')
+     ON CONFLICT (uuid) DO UPDATE SET status='active'
+     RETURNING id`,
+    [matchUuid, p1Id, p2Id]
   );
-  tableIdCache[roomUuid] = rows[0].id;
+  matchIdCache[matchUuid] = rows[0].id;
   return rows[0].id;
 }
 
@@ -23,43 +26,37 @@ async function startHand(room, game) {
   const seq = { n: 0 };
   const next = () => ++seq.n;
 
-  // hand_start
   await logEvent(room.id, handUuid, {
     type: 'hand_start', seq: next(), ts: Date.now(), handUuid,
     players: game.players.map(p => ({ id: p.id, name: p.name, chips: p.chips })),
   });
 
-  // private deals
   for (const p of game.players) {
     if (p.holeCards?.length) {
       await logEvent(room.id, handUuid, {
         type: 'deal', seq: next(), ts: Date.now(),
-        playerId: p.id, playerName: p.name,
+        playerId: p.id,
         cards: p.holeCards.map(c => `${c.rank}${c.suit}`),
       });
     }
   }
 
-  // blinds (inferred from roundBet at start)
   for (const p of game.players) {
     if (p.roundBet > 0) {
-      const blindType = p.isSmallBlind ? 'small' : 'big';
       await logEvent(room.id, handUuid, {
-        type: 'blind', seq: next(), ts: Date.now(),
-        playerId: p.id, playerName: p.name,
-        blindType, amount: p.roundBet,
+        type: p.isSmallBlind ? 'blind_small' : 'blind_big',
+        seq: next(), ts: Date.now(),
+        playerId: p.id, amount: p.roundBet,
       });
     }
   }
 
-  // snapshot
   await setSnapshot(room.id, buildSnapshot(room, game));
-
   return handUuid;
 }
 
 // Called after every player-action.
-async function logAction(room, game, playerId, playerName, action, amount, prevCommunityCount) {
+async function logAction(room, game, playerId, action, amount, prevCommunityCount) {
   const handUuid = room.currentHandUuid;
   if (!handUuid) return;
 
@@ -67,20 +64,24 @@ async function logAction(room, game, playerId, playerName, action, amount, prevC
 
   await logEvent(room.id, handUuid, {
     type: 'action', seq, ts: Date.now(),
-    playerId, playerName, action,
+    playerId, action,
     amount: amount || 0,
     phase: game.phase,
+    data: { action, amount: amount || 0 },
   });
 
-  // Community cards revealed since last action
+  // Community cards newly revealed
   const newCards = game.communityCards.slice(prevCommunityCount);
   if (newCards.length > 0) {
     const commSeq = room.handEventSeq = (room.handEventSeq || 0) + 1;
     await logEvent(room.id, handUuid, {
       type: 'community', seq: commSeq, ts: Date.now(),
-      cards: newCards.map(c => `${c.rank}${c.suit}`),
       phase: game.phase,
-      allCards: game.communityCards.map(c => `${c.rank}${c.suit}`),
+      data: {
+        cards: newCards.map(c => `${c.rank}${c.suit}`),
+        allCards: game.communityCards.map(c => `${c.rank}${c.suit}`),
+        phase: game.phase,
+      },
     });
   }
 
@@ -89,66 +90,70 @@ async function logAction(room, game, playerId, playerName, action, amount, prevC
     const sdSeq = room.handEventSeq = (room.handEventSeq || 0) + 1;
     await logEvent(room.id, handUuid, {
       type: 'showdown', seq: sdSeq, ts: Date.now(),
-      hands: game.players.map(p => ({
-        playerId: p.id, playerName: p.name,
-        cards: p.holeCards?.map(c => `${c.rank}${c.suit}`) || [],
-      })),
-      winners: game.winners.map(w => ({
-        playerId: w.playerId,
-        amount: w.amount,
-        handName: w.handName,
-      })),
+      data: {
+        hands: game.players.map(p => ({
+          playerId: p.id,
+          cards: p.holeCards?.map(c => `${c.rank}${c.suit}`) || [],
+        })),
+        winners: game.winners.map(w => ({
+          playerId: w.playerId,
+          amount: w.amount,
+          handName: w.handName,
+        })),
+      },
     });
   }
 
   await setSnapshot(room.id, buildSnapshot(room, game));
 }
 
-// Called when hand ends. Flushes Redis log → Postgres.
+// Called when hand ends — flush Redis log → Postgres.
 async function flushHandToDb(room, game) {
   const handUuid = room.currentHandUuid;
   if (!handUuid) return;
 
   try {
-    const tableId = await getOrCreateDbTableId(room.id);
     const events = await getHandEvents(room.id, handUuid);
 
+    // Determine player IDs from the hand
+    const p1Id = room.p1?.playerId;
+    const p2Id = room.p2?.playerId;
+    if (!p1Id || !p2Id) { await clearHandEvents(room.id, handUuid); return; }
+
+    const matchDbId = await getOrCreateMatchRow(room.id, p1Id, p2Id);
     const winner = game.winners?.[0];
+
     const { rows: [hand] } = await db.query(
-      `INSERT INTO hands (table_id, room_uuid, hand_uuid, hand_number, ended_at, pot, community_cards, winner_name, winning_hand)
-       VALUES ($1, $2, $3, $4, NOW(), $5, $6, $7, $8) RETURNING id`,
+      `INSERT INTO hands (match_id, hand_uuid, hand_number, ended_at, pot, community_cards, winner_id, winning_hand)
+       VALUES ($1, $2, $3, NOW(), $4, $5, $6, $7) RETURNING id`,
       [
-        tableId, room.id, handUuid,
-        room.handCount || 1,
+        matchDbId, handUuid, room.handCount || 1,
         game.pot || 0,
         JSON.stringify(game.communityCards?.map(c => `${c.rank}${c.suit}`) || []),
-        winner ? (game.players.find(p => p.id === winner.playerId)?.name || '') : null,
+        winner?.playerId || null,
         winner?.handName || null,
       ]
     );
 
-    // Bulk insert all events as action rows
+    // Bulk insert events — player_id only, no name
     for (const ev of events) {
-      if (ev.type === 'action' || ev.type === 'blind') {
+      if (['action', 'blind_small', 'blind_big', 'deal', 'community', 'showdown', 'hand_start'].includes(ev.type)) {
         await db.query(
-          `INSERT INTO actions (hand_id, table_id, player_id, player_name, action_type, amount, phase, sequence_number, metadata)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+          `INSERT INTO hand_events (hand_id, sequence_num, event_type, player_id, amount, phase, data)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)`,
           [
-            hand.id, tableId,
+            hand.id, ev.seq || 0, ev.type,
             ev.playerId || null,
-            ev.playerName || null,
-            ev.type === 'blind' ? `blind_${ev.blindType}` : ev.action,
             ev.amount || 0,
             ev.phase || null,
-            ev.seq,
-            JSON.stringify(ev),
+            JSON.stringify(ev.data || ev),
           ]
         );
       }
     }
 
     await clearHandEvents(room.id, handUuid);
-    console.log(`[hand] flushed ${events.length} events for hand ${handUuid} to DB`);
+    console.log(`[hand] flushed ${events.length} events → DB (hand ${handUuid.slice(0, 8)})`);
   } catch (err) {
     console.error('[hand] flush failed:', err.message);
   }
