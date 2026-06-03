@@ -80,12 +80,13 @@ export default function LoginScreen() {
     const codeVerifier = sessionStorage.getItem('pkce_code_verifier');
     window.history.replaceState({}, '', '/');
 
+    console.log('[google-web] exchanging code, redirectUri:', redirectUri, 'hasVerifier:', !!codeVerifier);
     AuthSession.exchangeCodeAsync(
       { clientId: GOOGLE_CLIENT_ID, code, redirectUri, extraParams: codeVerifier ? { code_verifier: codeVerifier } : {} },
       GOOGLE_DISCOVERY
     )
       .then(tokens => finishGoogleLogin(tokens.accessToken))
-      .catch(() => {})
+      .catch(e => console.error('[google-web] exchange failed:', JSON.stringify(e)))
       .finally(() => setGoogleLoading(false));
   }, []);
 
