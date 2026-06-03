@@ -3,15 +3,30 @@
 ## Session startup (do this at the start of EVERY session)
 
 1. **Greet and recap** — Show the last 5 commits so the user knows where things left off
-2. **Confirm who's here** — Ask: "Who's working today?" (Brian works on `main`; there is at least one other collaborator)
-3. **Confirm branch** — Ask which branch to work on, then run `git checkout <branch> && git pull origin <branch>` to make sure we're up to date
+2. **Confirm who's here** — Ask: "Who's working today?" (see Team below)
+3. **Confirm branch** — Ask which branch to work on, then `git checkout <branch> && git pull origin <branch>`
 4. **Confirm server state** — Check if local server is running (`lsof -i:3843`) and offer to start it if not
 
 Example opening:
 > Here's where we left off: [last 5 commits]
 > Who's working today, and which branch?
 
-Do not skip this. Do not assume it's Brian or that we're on `main` without asking first.
+Do not skip this. Do not assume who is working or what branch without asking first.
+
+---
+
+## Team
+
+| Person | GitHub | Usual branch | Notes |
+|---|---|---|---|
+| Brian Danilo | briandanilo | `main` | Owner, primary dev. Email: brian.danilo@gmail.com. Expo account: coinburst |
+| Thibault (MISYA23) | MISYA23 | feature branches | Collaborator |
+
+**Working style:**
+- Always prod server — no local/prod split until scale demands it
+- Bump `VERSION` in `client/src/config.js` on every single commit
+- Push to GitHub after every change — Railway auto-deploys from `main`
+- Never use `pkill -f expo` (kills the emulator). Kill Metro only: `lsof -ti:8081 | xargs kill -9`
 
 ---
 
