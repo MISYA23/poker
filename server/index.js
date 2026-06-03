@@ -15,7 +15,7 @@ app.get('/', (_, res) => res.json({ status: 'ok', service: 'poker-server' }));
 const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: '*', methods: ['GET', 'POST'] } });
 
-const db = new Pool({ connectionString: process.env.DATABASE_URL || process.env.DATABASE_PUBLIC_URL });
+const db = new Pool({ connectionString: process.env.DATABASE_URL });
 
 const GAME_OPTIONS = { startingChips: 1000, bigBlind: 20, smallBlind: 10 };
 const TURN_SECONDS = 20;
