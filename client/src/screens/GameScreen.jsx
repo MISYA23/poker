@@ -222,7 +222,7 @@ export default function GameScreen() {
 
   const [deckStyle, setDeckStyle] = useState('regular');
   const [menuOpen, setMenuOpen] = useState(false);
-  const [ovalSize, setOvalSize] = useState({ width: 320, height: 148 });
+  const [ovalSize, setOvalSize] = useState({ width: 320, height: 420 });
 
   const me = gameState?.players?.find(p => p.id === myId);
   const opponents = gameState?.players?.filter(p => p.id !== myId) || [];
@@ -519,8 +519,8 @@ const s = StyleSheet.create({
   menuBtnTxt: { color: colors.white, fontSize: 16, fontWeight: '700' },
 
   // Stage / oval
-  stage: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 24, paddingVertical: 70 },
-  ovalWrap: { width: '100%', aspectRatio: 2.1, position: 'relative' },
+  stage: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 24, paddingVertical: 80 },
+  ovalWrap: { width: '100%', flex: 1 },
   felt: { position: 'absolute', inset: 0, borderRadius: 500, backgroundColor: '#0d2148', borderWidth: 14, borderColor: '#3a1f10', shadowColor: '#000', shadowOpacity: 0.6, shadowRadius: 16, shadowOffset: { width: 0, height: 6 }, elevation: 10 },
 
   // Center
