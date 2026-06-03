@@ -5,6 +5,8 @@ const { Server } = require('socket.io');
 const cors = require('cors');
 const { Pool } = require('pg');
 const { PokerGame } = require('./game/PokerGame');
+const { redis } = require('./redis');
+const { startHand: logStartHand, logAction, flushHandToDb } = require('./handLogger');
 
 const app = express();
 app.use(cors());
@@ -118,14 +120,21 @@ function broadcastLobbyState(socketId) {
   io.to(socketId).emit('lobby-state', { tables: tableList, activeSeats: [] });
 }
 
+async function beginHand(r) {
+  r.handCount = (r.handCount || 0) + 1;
+  r.handEventSeq = 0;
+  r.game.startHand();
+  r.currentHandUuid = await logStartHand(r, r.game).catch(() => null);
+}
+
 function tryAutoStart(r) {
   if (r.autoStartTimer) return;
   const ready = r.game.players.filter(p => p.isActive && p.chips > 0);
   if (ready.length >= 2 && r.game.phase === 'waiting' && !r.game.gameOver) {
-    r.autoStartTimer = setTimeout(() => {
+    r.autoStartTimer = setTimeout(async () => {
       r.autoStartTimer = null;
       if (r.game.phase === 'waiting' && r.game.canStart()) {
-        r.game.startHand();
+        await beginHand(r);
         broadcastRoomState(r);
       }
     }, 3000);
@@ -134,11 +143,15 @@ function tryAutoStart(r) {
 
 function scheduleNextHand(r, delay = 5000) {
   if (r.nextHandTimer) { clearTimeout(r.nextHandTimer); }
-  r.nextHandTimer = setTimeout(() => {
+  r.nextHandTimer = setTimeout(async () => {
     r.nextHandTimer = null;
+    // Flush completed hand to DB
+    await flushHandToDb(r, r.game).catch(e => console.error('[hand] flush error:', e.message));
+    r.currentHandUuid = null;
+    r.handEventSeq = 0;
+
     const withChips = r.game.players.filter(p => p.isActive && p.chips > 0);
     const activePlayers = r.game.players.filter(p => p.isActive);
-    // Game over: only one player has chips left
     if (activePlayers.length >= 2 && withChips.length === 1) {
       r.game.phase = 'waiting';
       r.game.gameOver = true;
@@ -147,7 +160,7 @@ function scheduleNextHand(r, delay = 5000) {
       return;
     }
     if (withChips.length >= 2 && r.game.canStart()) {
-      try { r.game.startHand(); } catch (err) { r.game.phase = 'waiting'; }
+      try { await beginHand(r); } catch (err) { r.game.phase = 'waiting'; }
     } else {
       r.game.phase = 'waiting';
     }
@@ -203,7 +216,11 @@ io.on('connection', (socket) => {
     const r = rooms.get(player.roomId);
     if (!r) return;
     try {
+      const prevCommunityCount = r.game.communityCards?.length || 0;
       r.game.handleAction(player.id, action, amount);
+      // Log action + any newly revealed community cards to Redis
+      logAction(r, r.game, player.id, player.name, action, amount, prevCommunityCount)
+        .catch(e => console.error('[hand] logAction error:', e.message));
       broadcastRoomState(r);
       if (r.game.phase === 'showdown') scheduleNextHand(r, 5000);
     } catch (err) {
@@ -306,6 +323,7 @@ app.post('/auth/google', async (req, res) => {
 });
 
 const PORT = process.env.PORT || 3843;
+redis.connect().catch(e => console.error('[redis] initial connect failed:', e.message));
 loadRooms()
   .then(() => server.listen(PORT, () => console.log(`Poker server on port ${PORT}`)))
   .catch(err => {
