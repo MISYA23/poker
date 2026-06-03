@@ -10,10 +10,12 @@ const { redis }      = require('./redis');
 const { startHand: logStartHand, logAction, flushHandToDb } = require('./handLogger');
 const { enqueue, dequeue, tryPair, calcElo } = require('./matchmaker');
 
+const path = require('path');
+
 const app = express();
 app.use(cors());
 app.use(express.json());
-app.get('/', (_, res) => res.json({ status: 'ok', service: 'poker-server' }));
+app.get('/health', (_, res) => res.json({ status: 'ok', service: 'poker-server' }));
 
 const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: '*', methods: ['GET', 'POST'] } });
@@ -629,6 +631,11 @@ function doReset() {
 
 app.get('/reset', (_, res) => { doReset(); res.json({ ok: true }); });
 app.post('/admin/reset', (_, res) => { doReset(); res.json({ ok: true }); });
+
+// ── Web client (SPA) ──────────────────────────────────────────────────────────
+const distDir = path.join(__dirname, '..', 'client', 'dist');
+app.use(express.static(distDir));
+app.get('*', (_, res) => res.sendFile(path.join(distDir, 'index.html')));
 
 // ── Start ─────────────────────────────────────────────────────────────────────
 

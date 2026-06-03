@@ -2,7 +2,7 @@
   "name": "poker-game",
   "version": "1.0.0",
   "scripts": {
-    "build": "npm install --prefix server",
+    "build": "npm install --prefix server && npm install --prefix client && (cd client && ./node_modules/.bin/expo export --platform web)",
     "start": "node server/index.js",
     "dev": "npm start --prefix client"
   },
