@@ -713,7 +713,13 @@ app.post('/admin/reset', (_, res) => { doReset(); res.json({ ok: true }); });
 // ── Web client (SPA) ──────────────────────────────────────────────────────────
 const distDir = path.join(__dirname, '..', 'client', 'dist');
 app.use(express.static(distDir));
-app.get('*', (_, res) => res.sendFile(path.join(distDir, 'index.html')));
+// Catch-all for SPA — but never intercept API, auth, or admin routes
+app.get('*', (req, res) => {
+  if (req.path.startsWith('/api/') || req.path.startsWith('/auth/') || req.path.startsWith('/admin/') || req.path.startsWith('/health')) {
+    return res.status(404).json({ error: 'Not found' });
+  }
+  res.sendFile(path.join(distDir, 'index.html'));
+});
 
 // ── Start ─────────────────────────────────────────────────────────────────────
 
