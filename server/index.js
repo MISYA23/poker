@@ -33,6 +33,9 @@ const socketPlayers = new Map();
 // playerId → { timer, matchId } — players mid-match who lost connection
 const pendingDisconnects = new Map();
 
+// playerId → elo — in-memory cache updated after each match
+const eloCache = {};
+
 // ── Match helpers ─────────────────────────────────────────────────────────────
 
 function createMatch(p1, p2) {
@@ -119,11 +122,15 @@ function broadcastMatchState(m) {
 
 function broadcastMatchList() {
   const list = [...matches.values()].filter(m => !m.ended).map(m => ({
-    id:      m.id,
-    player1: m.p1?.playerName || '?',
-    player2: m.p2?.playerName || '?',
-    phase:   m.game.phase,
-    handCount: m.handCount || 0,
+    id:         m.id,
+    player1:    m.p1?.playerName || '?',
+    player2:    m.p2?.playerName || '?',
+    player1Id:  m.p1?.playerId,
+    player2Id:  m.p2?.playerId,
+    player1Elo: eloCache[m.p1?.playerId] || 1200,
+    player2Elo: eloCache[m.p2?.playerId] || 1200,
+    phase:      m.game.phase,
+    handCount:  m.handCount || 0,
   }));
 
   // Deduplicated list of all connected players
@@ -238,6 +245,10 @@ async function endMatch(m, winnerId) {
     const { winnerGain, loserLoss } = calcElo(wStats.elo, lStats.elo);
     const wNewElo = wStats.elo + winnerGain;
     const lNewElo = lStats.elo - loserLoss;
+
+    // Update in-memory ELO cache for match list
+    eloCache[winner.playerId] = wNewElo;
+    eloCache[loser.playerId]  = lNewElo;
 
     await Promise.all([
       db.query(

@@ -36,12 +36,29 @@ function RecentTab({ matches, navigationRef }) {
   );
 }
 
-function FriendsTab() {
-  return <Text style={s.tabEmpty}>Friends coming soon</Text>;
+function FriendsTab({ onlinePlayers }) {
+  return (
+    <View style={s.tabContent}>
+      <Text style={s.tabSubLabel}>Friends</Text>
+      <Text style={s.tabEmpty}>Coming soon</Text>
+      {onlinePlayers?.length > 0 && (
+        <>
+          <Text style={[s.tabSubLabel, { marginTop: 8 }]}>Players Online</Text>
+          {onlinePlayers.map(p => (
+            <View key={p.id} style={s.onlineRow}>
+              <Image source={AVATAR_IMAGES[p.avatarId] || AVATAR_IMAGES.dk} style={s.onlineAvatar} />
+              <Text style={s.onlineName}>{p.name}</Text>
+              <View style={s.onlineDot} />
+            </View>
+          ))}
+        </>
+      )}
+    </View>
+  );
 }
 
 function LeaderboardTab({ navigationRef }) {
-  const [data, setData]     = useState(null);
+  const [data, setData]       = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -69,6 +86,44 @@ function LeaderboardTab({ navigationRef }) {
       ))}
       <Pressable onPress={() => navigationRef.navigate('Leaderboard')}>
         <Text style={s.lbMore}>View full leaderboard →</Text>
+      </Pressable>
+    </View>
+  );
+}
+
+function FeaturedMatch({ matchList, onObserve }) {
+  if (!matchList?.length) return null;
+  // Pick the match with the highest-ELO player
+  const featured = matchList.reduce((best, m) => {
+    const topElo = Math.max(m.player1Elo || 1200, m.player2Elo || 1200);
+    const bestElo = Math.max(best?.player1Elo || 0, best?.player2Elo || 0);
+    return topElo > bestElo ? m : best;
+  }, matchList[0]);
+
+  if (!featured) return null;
+
+  return (
+    <View style={s.featuredSection}>
+      <Text style={s.featuredLabel}>Featured Match</Text>
+      <Pressable style={s.featuredCard} onPress={() => onObserve(featured.id)}>
+        <View style={s.featuredPlayers}>
+          <View style={s.featuredPlayer}>
+            <Text style={s.featuredName} numberOfLines={1}>{featured.player1}</Text>
+            <Text style={s.featuredElo}>{featured.player1Elo}</Text>
+          </View>
+          <Text style={s.featuredVs}>VS</Text>
+          <View style={[s.featuredPlayer, { alignItems: 'flex-end' }]}>
+            <Text style={s.featuredName} numberOfLines={1}>{featured.player2}</Text>
+            <Text style={s.featuredElo}>{featured.player2Elo}</Text>
+          </View>
+        </View>
+        <View style={s.featuredFooter}>
+          <View style={[s.phaseDot, featured.phase === 'waiting' ? s.dotWaiting : s.dotActive]} />
+          <Text style={s.featuredPhase}>
+            {featured.phase === 'waiting' ? 'Starting…' : `Hand ${featured.handCount} · ${featured.phase}`}
+          </Text>
+          <Text style={s.watchTxt}>Watch →</Text>
+        </View>
       </Pressable>
     </View>
   );
@@ -145,36 +200,13 @@ export default function LobbyScreen() {
               </View>
               <View style={s.tabPanel}>
                 {activeTab === 0 && <RecentTab matches={myRecentMatches} navigationRef={navigationRef} />}
-                {activeTab === 1 && <FriendsTab />}
+                {activeTab === 1 && <FriendsTab onlinePlayers={onlinePlayers} />}
                 {activeTab === 2 && <LeaderboardTab navigationRef={navigationRef} />}
               </View>
             </View>
 
-            {/* Active tables */}
-            <View style={s.section}>
-              <Text style={s.sectionLabel}>Active Tables:</Text>
-              {matchList.map(m => (
-                <Pressable key={m.id} style={s.matchRow} onPress={() => onObserve(m.id)}>
-                  <View style={s.matchInfo}>
-                    <Text style={s.matchNames}>{m.player1} vs {m.player2}</Text>
-                    <Text style={s.matchPhase}>
-                      {m.phase === 'waiting' ? 'Starting…' : `Hand ${m.handCount} · ${m.phase}`}
-                    </Text>
-                  </View>
-                  <Text style={s.watchTxt}>Watch →</Text>
-                </Pressable>
-              ))}
-            </View>
-
-            {/* Players online */}
-            <View style={s.section}>
-              <Text style={s.sectionLabel}>Players Online Now:</Text>
-              {onlinePlayers.map(p => (
-                <View key={p.id} style={s.playerRow}>
-                  <Text style={s.playerName}>{p.name}</Text>
-                </View>
-              ))}
-            </View>
+            {/* Featured match */}
+            <FeaturedMatch matchList={matchList} onObserve={onObserve} />
 
           </ScrollView>
         </SafeAreaView>
@@ -193,7 +225,7 @@ const s = StyleSheet.create({
   hamburger: { width: 40, height: 40, borderRadius: 10, backgroundColor: 'rgba(0,0,0,0.45)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center' },
   hamburgerTxt: { color: colors.white, fontSize: 18 },
   menuOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 50 },
-  menuPanel: { position: 'absolute', top: 60, right: 16, width: 180, backgroundColor: '#111', borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)', borderRadius: 14, overflow: 'hidden', elevation: 8, shadowColor: '#000', shadowOpacity: 0.5, shadowRadius: 12 },
+  menuPanel: { position: 'absolute', top: 60, right: 16, width: 180, backgroundColor: '#111', borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)', borderRadius: 14, overflow: 'hidden', elevation: 8 },
   menuItem: { paddingHorizontal: 16, paddingVertical: 14 },
   menuItemTxt: { color: 'rgba(255,255,255,0.9)', fontSize: 14 },
   scroll: { flexGrow: 1, alignItems: 'center', padding: 24, gap: 24, paddingTop: 16 },
@@ -209,7 +241,7 @@ const s = StyleSheet.create({
   cancelTxt: { color: colors.white, fontSize: 14 },
 
   // Tabs
-  tabsContainer: { width: '100%', maxWidth: 420, gap: 0 },
+  tabsContainer: { width: '100%', maxWidth: 420 },
   tabBar: { flexDirection: 'row', backgroundColor: 'rgba(0,0,0,0.3)', borderRadius: 12, padding: 4, gap: 2 },
   tabBtn: { flex: 1, paddingVertical: 8, borderRadius: 9, alignItems: 'center' },
   tabBtnActive: { backgroundColor: 'rgba(255,255,255,0.12)' },
@@ -217,7 +249,8 @@ const s = StyleSheet.create({
   tabLabelActive: { color: colors.white, fontWeight: '800' },
   tabPanel: { backgroundColor: 'rgba(255,255,255,0.04)', borderBottomLeftRadius: 12, borderBottomRightRadius: 12, borderWidth: 1, borderTopWidth: 0, borderColor: 'rgba(255,255,255,0.08)', minHeight: 80, padding: 14 },
   tabContent: { gap: 8 },
-  tabEmpty: { color: colors.gray, fontSize: 13, fontStyle: 'italic', textAlign: 'center', paddingVertical: 8 },
+  tabEmpty: { color: colors.gray, fontSize: 13, fontStyle: 'italic', textAlign: 'center', paddingVertical: 4 },
+  tabSubLabel: { color: colors.gray, fontSize: 10, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 1 },
 
   // Recent tab
   recentRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
@@ -230,6 +263,12 @@ const s = StyleSheet.create({
   eloPos: { color: '#4ade80' },
   eloNeg: { color: '#f87171' },
 
+  // Friends tab
+  onlineRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  onlineAvatar: { width: 24, height: 24, borderRadius: 12 },
+  onlineName: { flex: 1, color: colors.white, fontSize: 13, fontWeight: '600' },
+  onlineDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#4ade80' },
+
   // Leaderboard tab
   lbRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   lbRank: { width: 28, textAlign: 'center', fontSize: 14, color: colors.gray, fontWeight: '700' },
@@ -238,13 +277,19 @@ const s = StyleSheet.create({
   lbElo: { color: colors.goldLight, fontSize: 13, fontWeight: '800' },
   lbMore: { color: colors.gold, fontSize: 12, textAlign: 'center', marginTop: 4 },
 
-  section: { width: '100%', maxWidth: 420, gap: 10 },
-  sectionLabel: { color: colors.white, fontSize: 16, fontWeight: '800' },
-  playerRow: { paddingVertical: 8, paddingHorizontal: 14, backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: 10, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' },
-  playerName: { color: colors.white, fontSize: 14, fontWeight: '600' },
-  matchRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.06)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)', borderRadius: 12, padding: 14, gap: 8 },
-  matchInfo: { flex: 1 },
-  matchNames: { color: colors.white, fontSize: 14, fontWeight: '700' },
-  matchPhase: { color: colors.gray, fontSize: 11, marginTop: 2 },
+  // Featured match
+  featuredSection: { width: '100%', maxWidth: 420, gap: 8 },
+  featuredLabel: { color: colors.white, fontSize: 16, fontWeight: '800' },
+  featuredCard: { backgroundColor: 'rgba(255,255,255,0.06)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)', borderRadius: 14, padding: 14, gap: 10 },
+  featuredPlayers: { flexDirection: 'row', alignItems: 'center' },
+  featuredPlayer: { flex: 1 },
+  featuredVs: { color: 'rgba(255,255,255,0.3)', fontSize: 12, fontWeight: '800', paddingHorizontal: 10 },
+  featuredName: { color: colors.white, fontSize: 15, fontWeight: '800' },
+  featuredElo: { color: colors.goldLight, fontSize: 12, fontWeight: '600', marginTop: 2 },
+  featuredFooter: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  phaseDot: { width: 7, height: 7, borderRadius: 4 },
+  dotWaiting: { backgroundColor: '#facc15' },
+  dotActive: { backgroundColor: '#4ade80' },
+  featuredPhase: { flex: 1, color: colors.gray, fontSize: 12 },
   watchTxt: { color: colors.gold, fontSize: 12, fontWeight: '700' },
 });
