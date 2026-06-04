@@ -115,7 +115,6 @@ function broadcastMatchState(m) {
       matchId: m.id, turnDeadline: m.turnDeadline,
     });
   }
-  broadcastMatchList();
 }
 
 function broadcastMatchList() {
@@ -137,7 +136,9 @@ function broadcastMatchList() {
     }
   }
 
-  io.emit('match-list', { matches: list, onlinePlayers: online });
+  for (const [sid, sp] of socketPlayers.entries()) {
+    if (sp.matchId === null) io.to(sid).emit('match-list', { matches: list, onlinePlayers: online });
+  }
 }
 
 // ── Hand lifecycle ────────────────────────────────────────────────────────────
@@ -275,6 +276,7 @@ async function endMatch(m, winnerId) {
   } catch (err) {
     console.error('[match] endMatch error:', err.message);
   }
+  broadcastMatchList();
 }
 
 // ── Socket handlers ───────────────────────────────────────────────────────────
@@ -348,6 +350,7 @@ io.on('connection', (socket) => {
       io.to(pair.p2.socketId).emit('match-found', { matchId: m.id, opponent: { name: pair.p1.playerName } });
 
       broadcastMatchState(m);
+      broadcastMatchList();
       tryAutoStart(m);
     } else {
       socket.emit('in-queue', {});
@@ -457,6 +460,7 @@ io.on('connection', (socket) => {
     }
     sp.matchId = null;
     socket.emit('reset');
+    broadcastMatchList();
   });
 
   socket.on('disconnect', () => {
