@@ -179,7 +179,7 @@ export default function LoginScreen() {
                 </ScrollView>
 
                 <Pressable style={[s.joinBtn, !name.trim() && s.dim]} onPress={handleGuestJoin} disabled={!name.trim()}>
-                  <Text style={s.joinTxt}>Join</Text>
+                  <Text style={s.joinTxt}>Play as Guest</Text>
                 </Pressable>
               </View>
 
