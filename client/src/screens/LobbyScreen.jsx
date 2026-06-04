@@ -256,7 +256,7 @@ const s = StyleSheet.create({
   tabBtnActive: { backgroundColor: colors.gold },
   tabLabel: { color: 'rgba(255,255,255,0.5)', fontSize: 13, fontWeight: '700' },
   tabLabelActive: { color: '#000', fontWeight: '800' },
-  tabPanel: { backgroundColor: 'rgba(255,255,255,0.04)', borderBottomLeftRadius: 12, borderBottomRightRadius: 12, borderWidth: 1, borderTopWidth: 0, borderColor: 'rgba(255,255,255,0.08)', minHeight: 80, padding: 14 },
+  tabPanel: { backgroundColor: 'rgba(0,0,0,0.55)', borderBottomLeftRadius: 12, borderBottomRightRadius: 12, borderWidth: 1, borderTopWidth: 0, borderColor: 'rgba(255,255,255,0.1)', minHeight: 80, padding: 14 },
   tabContent: { gap: 8 },
   tabEmpty: { color: colors.gray, fontSize: 13, fontStyle: 'italic', textAlign: 'center', paddingVertical: 4 },
   tabSubLabel: { color: colors.gray, fontSize: 10, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 1 },
