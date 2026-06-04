@@ -39,11 +39,12 @@ function PlayerRow({ player, action, actionLabel, actionColor, secondAction, sec
 export default function FriendsTab({ onlinePlayers }) {
   const { playerInfo, emit, incomingChallenge, setIncomingChallenge, setPendingFriendRequests } = useContext(GameContext);
 
-  const [friends, setFriends]         = useState(null);
-  const [loading, setLoading]         = useState(true);
-  const [searchQ, setSearchQ]         = useState('');
+  const [friends, setFriends]             = useState(null);
+  const [loading, setLoading]             = useState(true);
+  const [searchQ, setSearchQ]             = useState('');
   const [searchResults, setSearchResults] = useState(null);
-  const [searching, setSearching]     = useState(false);
+  const [searching, setSearching]         = useState(false);
+  const [sentIds, setSentIds]             = useState(new Set()); // track who we just added
 
   const loadFriends = useCallback(() => {
     if (!playerInfo?.playerId) return;
@@ -75,11 +76,18 @@ export default function FriendsTab({ onlinePlayers }) {
   }, [searchQ]);
 
   const sendRequest = async (addresseeId) => {
-    await fetch(`${SERVER_URL}/api/friends/request`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ requesterId: playerInfo.playerId, addresseeId }),
-    });
-    loadFriends();
+    if (!playerInfo?.playerId) return;
+    setSentIds(prev => new Set([...prev, addresseeId]));
+    try {
+      const res = await fetch(`${SERVER_URL}/api/friends/request`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ requesterId: playerInfo.playerId, addresseeId }),
+      });
+      if (!res.ok) throw new Error('Failed');
+      loadFriends();
+    } catch {
+      setSentIds(prev => { const s = new Set(prev); s.delete(addresseeId); return s; });
+    }
   };
 
   const accept = async (requesterId) => {
@@ -163,9 +171,9 @@ export default function FriendsTab({ onlinePlayers }) {
             ? <Text style={s.empty}>No players found</Text>
             : searchResults.filter(r => r.id !== playerInfo?.playerId).map(r => (
               <PlayerRow key={r.id} player={r}
-                action={friendIds.has(r.id) ? null : () => sendRequest(r.id)}
-                actionLabel="Add"
-                actionColor={colors.gold} />
+                action={friendIds.has(r.id) || sentIds.has(r.id) ? null : () => sendRequest(r.id)}
+                actionLabel={sentIds.has(r.id) ? 'Sent ✓' : 'Add'}
+                actionColor={sentIds.has(r.id) ? '#22c55e' : colors.gold} />
             ))
           }
         </View>
@@ -204,7 +212,9 @@ export default function FriendsTab({ onlinePlayers }) {
           {otherOnline.map(p => (
             <PlayerRow key={p.id}
               player={{ displayName: p.name, avatarId: p.avatarId, online: true }}
-              action={() => sendRequest(p.id)} actionLabel="+ Add" actionColor={colors.gold} />
+              action={sentIds.has(p.id) ? null : () => sendRequest(p.id)}
+              actionLabel={sentIds.has(p.id) ? 'Sent ✓' : '+ Add'}
+              actionColor={sentIds.has(p.id) ? '#22c55e' : colors.gold} />
           ))}
         </View>
       )}

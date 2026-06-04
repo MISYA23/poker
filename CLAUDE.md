@@ -23,6 +23,7 @@ Do not skip this. Do not assume who is working or what branch without asking fir
 | Thibault (MISYA23) | MISYA23 | feature branches | Collaborator |
 
 **Working style:**
+- **ALL work on feature branches — never commit directly to `main`.** If on main, stop and warn the user before doing anything. Branch → work → merge to main → delete branch.
 - Always prod server — no local/prod split until scale demands it
 - Bump `VERSION` in `client/src/config.js` on every single commit
 - Push to GitHub after every change — Railway auto-deploys from `main`
