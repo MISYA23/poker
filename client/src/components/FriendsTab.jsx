@@ -67,7 +67,7 @@ export default function FriendsTab({ onlinePlayers }) {
       setSearching(true);
       fetch(`${SERVER_URL}/api/players/search?q=${encodeURIComponent(searchQ)}`)
         .then(r => r.json())
-        .then(setSearchResults)
+        .then(d => setSearchResults(Array.isArray(d) ? d : []))
         .catch(() => setSearchResults([]))
         .finally(() => setSearching(false));
     }, 400);
