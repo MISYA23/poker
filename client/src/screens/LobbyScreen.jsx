@@ -92,7 +92,16 @@ function LeaderboardTab({ navigationRef }) {
 }
 
 function FeaturedMatch({ matchList, onObserve }) {
-  if (!matchList?.length) return null;
+  if (!matchList?.length) {
+    return (
+      <View style={s.featuredSection}>
+        <Text style={s.featuredLabel}>Featured Match</Text>
+        <View style={s.featuredCard}>
+          <Text style={s.tabEmpty}>No games right now</Text>
+        </View>
+      </View>
+    );
+  }
   // Pick the match with the highest-ELO player
   const featured = matchList.reduce((best, m) => {
     const topElo = Math.max(m.player1Elo || 1200, m.player2Elo || 1200);
