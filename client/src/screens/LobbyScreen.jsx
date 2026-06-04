@@ -3,6 +3,7 @@ import {
   View, Text, Pressable, ScrollView, StyleSheet, ImageBackground,
   Image, ActivityIndicator,
 } from 'react-native';
+import FriendsTabComponent from '../components/FriendsTab';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { GameContext } from '../context/GameContext';
 import { colors } from '../theme';
@@ -15,7 +16,7 @@ const AVATAR_IMAGES = {
   jazz:  require('../../assets/jazz.png'),
 };
 
-const TABS = ['Recent', 'Friends', 'Leaderboard'];
+const TAB_LABELS = (pending) => ['Recent', pending > 0 ? `Friends (${pending})` : 'Friends', 'Leaderboard'];
 
 function RecentTab({ matches, navigationRef }) {
   if (!matches?.length) return <Text style={s.tabEmpty}>No matches yet — play your first game!</Text>;
@@ -37,24 +38,7 @@ function RecentTab({ matches, navigationRef }) {
 }
 
 function FriendsTab({ onlinePlayers }) {
-  return (
-    <View style={s.tabContent}>
-      <Text style={s.tabSubLabel}>Friends</Text>
-      <Text style={s.tabEmpty}>Coming soon</Text>
-      {onlinePlayers?.length > 0 && (
-        <>
-          <Text style={[s.tabSubLabel, { marginTop: 8 }]}>Players Online</Text>
-          {onlinePlayers.map(p => (
-            <View key={p.id} style={s.onlineRow}>
-              <Image source={AVATAR_IMAGES[p.avatarId] || AVATAR_IMAGES.dk} style={s.onlineAvatar} />
-              <Text style={s.onlineName}>{p.name}</Text>
-              <View style={s.onlineDot} />
-            </View>
-          ))}
-        </>
-      )}
-    </View>
-  );
+  return <FriendsTabComponent onlinePlayers={onlinePlayers} />;
 }
 
 function LeaderboardTab({ navigationRef }) {
@@ -141,7 +125,7 @@ function FeaturedMatch({ matchList, onObserve }) {
 export default function LobbyScreen() {
   const { onFindMatch, onCancelMatch, onObserve, onLogout,
           error, matchList, onlinePlayers, inQueue, myElo, playerInfo, navigationRef,
-          myRecentMatches } = useContext(GameContext);
+          myRecentMatches, pendingFriendRequests } = useContext(GameContext);
 
   const [menuOpen, setMenuOpen] = useState(false);
   const [activeTab, setActiveTab] = useState(0);
@@ -200,7 +184,7 @@ export default function LobbyScreen() {
             {/* Dashboard tabs */}
             <View style={s.tabsContainer}>
               <View style={s.tabBar}>
-                {TABS.map((tab, i) => (
+                {TAB_LABELS(pendingFriendRequests).map((tab, i) => (
                   <Pressable key={i} style={[s.tabBtn, activeTab === i && s.tabBtnActive]}
                     onPress={() => setActiveTab(i)}>
                     <Text style={[s.tabLabel, activeTab === i && s.tabLabelActive]}>{tab}</Text>

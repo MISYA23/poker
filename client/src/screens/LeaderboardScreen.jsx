@@ -1,8 +1,9 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useContext } from 'react';
 import {
-  View, Text, Pressable, ScrollView, StyleSheet, ActivityIndicator, Image,
+  View, Text, Pressable, ScrollView, StyleSheet, ActivityIndicator, Image, Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { GameContext } from '../context/GameContext';
 import { colors } from '../theme';
 import { SERVER_URL } from '../config';
 
@@ -16,8 +17,10 @@ const AVATAR_IMAGES = {
 const RANK_COLORS = ['#FFD700', '#C0C0C0', '#CD7F32'];
 
 export default function LeaderboardScreen({ navigation }) {
-  const [data, setData]       = useState(null);
-  const [loading, setLoading] = useState(true);
+  const { playerInfo } = useContext(GameContext);
+  const [data, setData]         = useState(null);
+  const [loading, setLoading]   = useState(true);
+  const [selected, setSelected] = useState(null); // player tapped for action sheet
 
   const load = useCallback(() => {
     setLoading(true);
@@ -52,7 +55,8 @@ export default function LeaderboardScreen({ navigation }) {
           </View>
 
           {data?.map(p => (
-            <View key={p.playerId} style={[s.row, p.rank <= 3 && s.rowTop]}>
+            <Pressable key={p.playerId} style={[s.row, p.rank <= 3 && s.rowTop]}
+              onPress={() => p.playerId !== playerInfo?.playerId && setSelected(p)}>
               <Text style={[s.col, s.colRank, { color: RANK_COLORS[p.rank - 1] || colors.gray }]}>
                 {p.rank <= 3 ? ['🥇','🥈','🥉'][p.rank - 1] : p.rank}
               </Text>
@@ -66,7 +70,7 @@ export default function LeaderboardScreen({ navigation }) {
               <Text style={[s.col, s.colElo, s.eloTxt]}>{p.elo}</Text>
               <Text style={[s.col, s.colStat, s.winTxt]}>{p.wins}</Text>
               <Text style={[s.col, s.colStat, s.lossTxt]}>{p.losses}</Text>
-            </View>
+            </Pressable>
           ))}
 
           {data?.length === 0 && (
@@ -74,6 +78,30 @@ export default function LeaderboardScreen({ navigation }) {
           )}
         </ScrollView>
       )}
+
+      {/* Action sheet for tapped player */}
+      <Modal visible={!!selected} transparent animationType="slide" onRequestClose={() => setSelected(null)}>
+        <Pressable style={s.sheetOverlay} onPress={() => setSelected(null)}>
+          <View style={s.sheet}>
+            <Text style={s.sheetName}>{selected?.displayName}</Text>
+            <Text style={s.sheetElo}>ELO {selected?.elo}</Text>
+            <Pressable style={s.sheetBtn} onPress={() => {
+              if (selected && playerInfo?.playerId) {
+                fetch(`${SERVER_URL}/api/friends/request`, {
+                  method: 'POST', headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ requesterId: playerInfo.playerId, addresseeId: selected.playerId }),
+                });
+              }
+              setSelected(null);
+            }}>
+              <Text style={s.sheetBtnTxt}>+ Add Friend</Text>
+            </Pressable>
+            <Pressable style={[s.sheetBtn, s.sheetBtnCancel]} onPress={() => setSelected(null)}>
+              <Text style={[s.sheetBtnTxt, { color: colors.gray }]}>Cancel</Text>
+            </Pressable>
+          </View>
+        </Pressable>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -100,4 +128,11 @@ const s = StyleSheet.create({
   winTxt: { color: '#4ade80', fontWeight: '700' },
   lossTxt: { color: '#f87171', fontWeight: '700' },
   empty: { color: colors.gray, textAlign: 'center', marginTop: 40, fontStyle: 'italic' },
+  sheetOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
+  sheet: { backgroundColor: '#111', borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 24, gap: 12, borderWidth: 1, borderBottomWidth: 0, borderColor: 'rgba(255,255,255,0.1)' },
+  sheetName: { color: colors.white, fontSize: 18, fontWeight: '900', textAlign: 'center' },
+  sheetElo: { color: colors.goldLight, fontSize: 14, textAlign: 'center', marginBottom: 4 },
+  sheetBtn: { backgroundColor: colors.gold, borderRadius: 12, paddingVertical: 14, alignItems: 'center' },
+  sheetBtnCancel: { backgroundColor: 'rgba(255,255,255,0.08)' },
+  sheetBtnTxt: { color: '#000', fontSize: 15, fontWeight: '800' },
 });

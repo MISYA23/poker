@@ -36,6 +36,9 @@ const pendingDisconnects = new Map();
 // playerId → elo — in-memory cache updated after each match
 const eloCache = {};
 
+// `${fromId}:${toId}` → { timer } — pending direct challenges
+const challenges = new Map();
+
 // ── Match helpers ─────────────────────────────────────────────────────────────
 
 function createMatch(p1, p2) {
@@ -510,6 +513,71 @@ io.on('connection', (socket) => {
     socketPlayers.delete(socket.id);
     broadcastMatchList();
   });
+
+  // ── Challenge flow ───────────────────────────────────────────────────────────
+
+  socket.on('challenge-send', ({ toId }) => {
+    const sp = socketPlayers.get(socket.id);
+    if (!sp) return;
+    if (sp.matchId) { socket.emit('error', { message: 'Finish your current match first.' }); return; }
+
+    // Find target socket
+    const toSocket = [...socketPlayers.entries()].find(([, s]) => s.playerId === toId);
+    if (!toSocket) { socket.emit('error', { message: 'Player is not online.' }); return; }
+    const [toSocketId, toSp] = toSocket;
+    if (toSp.matchId) { socket.emit('error', { message: 'That player is in a match.' }); return; }
+
+    const key = `${sp.playerId}:${toId}`;
+    // Clear any existing challenge
+    if (challenges.has(key)) { clearTimeout(challenges.get(key).timer); challenges.delete(key); }
+
+    const timer = setTimeout(() => {
+      challenges.delete(key);
+      socket.emit('challenge-expired', { toId });
+    }, 30000);
+    challenges.set(key, { timer, fromSocketId: socket.id, toSocketId });
+
+    io.to(toSocketId).emit('challenge-received', {
+      fromId: sp.playerId, fromName: sp.playerName, fromAvatarId: sp.avatarId,
+    });
+    socket.emit('challenge-sent', { toId, toName: toSp.playerName });
+  });
+
+  socket.on('challenge-accept', ({ fromId }) => {
+    const sp = socketPlayers.get(socket.id);
+    if (!sp) return;
+    const key = `${fromId}:${sp.playerId}`;
+    const ch  = challenges.get(key);
+    if (!ch) { socket.emit('error', { message: 'Challenge expired.' }); return; }
+
+    clearTimeout(ch.timer);
+    challenges.delete(key);
+
+    const fromSp = socketPlayers.get(ch.fromSocketId);
+    if (!fromSp) { socket.emit('error', { message: 'Challenger disconnected.' }); return; }
+
+    // Create direct match
+    const p1 = { playerId: fromSp.playerId, playerName: fromSp.playerName, avatarId: fromSp.avatarId, socketId: ch.fromSocketId };
+    const p2 = { playerId: sp.playerId, playerName: sp.playerName, avatarId: sp.avatarId, socketId: socket.id };
+    const m  = createMatch(p1, p2);
+    fromSp.matchId = m.id;
+    sp.matchId     = m.id;
+    m.game.addPlayer(p1.playerId, p1.playerName, p1.avatarId);
+    m.game.addPlayer(p2.playerId, p2.playerName, p2.avatarId);
+
+    io.to(ch.fromSocketId).emit('match-found', { matchId: m.id, opponent: { name: sp.playerName } });
+    io.to(socket.id).emit('match-found', { matchId: m.id, opponent: { name: fromSp.playerName } });
+    broadcastMatchState(m);
+    tryAutoStart(m);
+  });
+
+  socket.on('challenge-decline', ({ fromId }) => {
+    const sp  = socketPlayers.get(socket.id);
+    const key = `${fromId}:${sp?.playerId}`;
+    const ch  = challenges.get(key);
+    if (ch) { clearTimeout(ch.timer); challenges.delete(key); }
+    if (ch) io.to(ch.fromSocketId).emit('challenge-declined', { byName: sp?.playerName });
+  });
 });
 
 // ── HTTP routes ───────────────────────────────────────────────────────────────
@@ -689,6 +757,123 @@ app.get('/api/leaderboard', async (req, res) => {
       losses:        r.matches_played - r.matches_won,
       matchesPlayed: r.matches_played,
     })));
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ── Friends API ───────────────────────────────────────────────────────────────
+
+// Search players by username
+app.get('/api/players/search', async (req, res) => {
+  try {
+    const q = (req.query.q || '').trim();
+    if (!q) return res.json([]);
+    const { rows } = await db.query(
+      `SELECT id, display_name, avatar_id FROM players
+       WHERE display_name ILIKE $1 LIMIT 20`,
+      [`%${q}%`]
+    );
+    res.json(rows.map(r => ({ id: r.id, displayName: r.display_name, avatarId: r.avatar_id })));
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Get friends + pending requests for a player
+app.get('/api/friends/:playerId', async (req, res) => {
+  try {
+    const { playerId } = req.params;
+    const { rows } = await db.query(
+      `SELECT f.id, f.status, f.requester_id, f.addressee_id,
+              p.display_name, p.avatar_id,
+              COALESCE(ps.elo, 1200) AS elo
+       FROM friendships f
+       JOIN players p ON p.id = CASE WHEN f.requester_id=$1 THEN f.addressee_id ELSE f.requester_id END
+       LEFT JOIN player_stats ps ON ps.player_id = p.id
+       WHERE (f.requester_id=$1 OR f.addressee_id=$1) AND f.status != 'declined'
+       ORDER BY f.status, p.display_name`,
+      [playerId]
+    );
+    // Annotate online status
+    const onlineIds = new Set([...socketPlayers.values()].map(s => s.playerId));
+    res.json(rows.map(r => {
+      const friendId = r.requester_id === playerId ? r.addressee_id : r.requester_id;
+      return {
+        friendshipId: r.id,
+        friendId,
+        displayName:  r.display_name,
+        avatarId:     r.avatar_id,
+        elo:          r.elo,
+        status:       r.status,
+        isRequester:  r.requester_id === playerId,
+        online:       onlineIds.has(friendId),
+      };
+    }));
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Send friend request
+app.post('/api/friends/request', async (req, res) => {
+  try {
+    const { requesterId, addresseeId } = req.body;
+    if (requesterId === addresseeId) return res.status(400).json({ error: 'Cannot friend yourself.' });
+    await db.query(
+      `INSERT INTO friendships (requester_id, addressee_id) VALUES ($1, $2)
+       ON CONFLICT (requester_id, addressee_id) DO NOTHING`,
+      [requesterId, addresseeId]
+    );
+    // Notify addressee if online
+    const target = [...socketPlayers.entries()].find(([, s]) => s.playerId === addresseeId);
+    if (target) {
+      const requester = [...socketPlayers.values()].find(s => s.playerId === requesterId);
+      io.to(target[0]).emit('friend-request', {
+        fromId: requesterId, fromName: requester?.playerName || 'Someone', fromAvatarId: requester?.avatarId,
+      });
+    }
+    res.json({ ok: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Accept friend request
+app.post('/api/friends/accept', async (req, res) => {
+  try {
+    const { requesterId, addresseeId } = req.body;
+    await db.query(
+      `UPDATE friendships SET status='accepted', updated_at=NOW()
+       WHERE requester_id=$1 AND addressee_id=$2`,
+      [requesterId, addresseeId]
+    );
+    // Notify requester if online
+    const target = [...socketPlayers.entries()].find(([, s]) => s.playerId === requesterId);
+    if (target) {
+      const accepter = [...socketPlayers.values()].find(s => s.playerId === addresseeId);
+      io.to(target[0]).emit('friend-accepted', {
+        byId: addresseeId, byName: accepter?.playerName || 'Someone', byAvatarId: accepter?.avatarId,
+      });
+    }
+    res.json({ ok: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Decline / unfriend
+app.post('/api/friends/decline', async (req, res) => {
+  try {
+    const { requesterId, addresseeId } = req.body;
+    await db.query(
+      `UPDATE friendships SET status='declined', updated_at=NOW()
+       WHERE requester_id=$1 AND addressee_id=$2`,
+      [requesterId, addresseeId]
+    );
+    res.json({ ok: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.delete('/api/friends/:requesterId/:addresseeId', async (req, res) => {
+  try {
+    const { requesterId, addresseeId } = req.params;
+    await db.query(
+      `DELETE FROM friendships
+       WHERE (requester_id=$1 AND addressee_id=$2) OR (requester_id=$2 AND addressee_id=$1)`,
+      [requesterId, addresseeId]
+    );
+    res.json({ ok: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

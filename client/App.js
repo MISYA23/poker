@@ -30,8 +30,10 @@ export default function App() {
   const [deckStyle, setDeckStyle]           = useState('regular');
   const [matchOver, setMatchOver]           = useState(null);
   const [myRecentMatches, setMyRecentMatches] = useState([]);
-  const [opponentDisconnected, setOpponentDisconnected] = useState(null); // deadline timestamp or null
-  const [playerInfo, setPlayerInfo] = useState(null); // { playerId, name, avatarId }
+  const [opponentDisconnected, setOpponentDisconnected] = useState(null);
+  const [playerInfo, setPlayerInfo] = useState(null);
+  const [incomingChallenge, setIncomingChallenge] = useState(null); // { fromId, fromName, fromAvatarId }
+  const [pendingFriendRequests, setPendingFriendRequests] = useState(0);
 
   const navigationRef = useNavigationContainerRef();
   const matchIdRef    = useRef(null);
@@ -60,8 +62,13 @@ export default function App() {
     'rematch-pending': ({ from })    => {
       setMatchOver(prev => prev ? { ...prev, opponentWantsRematch: from } : prev);
     },
-    'opponent-disconnected': ({ deadline }) => setOpponentDisconnected(deadline),
-    'opponent-reconnected':  ()             => setOpponentDisconnected(null),
+    'opponent-disconnected':  ({ deadline }) => setOpponentDisconnected(deadline),
+    'opponent-reconnected':   ()             => setOpponentDisconnected(null),
+    'challenge-received':     (data)         => setIncomingChallenge(data),
+    'challenge-declined':     ()             => setIncomingChallenge(null),
+    'challenge-expired':      ()             => {},
+    'friend-request':         ()             => setPendingFriendRequests(n => n + 1),
+    'friend-accepted':        ()             => {},
     error:         ({ message })     => setError(message),
     reset:         ()                => {
       setMyId(null); setGameState(null);
@@ -150,6 +157,7 @@ export default function App() {
     <GameContext.Provider value={{
       gameState, myId, error, inQueue, matchList, onlinePlayers, myElo, matchOver,
       playerInfo, myRecentMatches, deckStyle, setDeckStyle, opponentDisconnected,
+      incomingChallenge, setIncomingChallenge, pendingFriendRequests, setPendingFriendRequests,
       emit, onLogin, onLogout, onUpdateProfile, onFindMatch, onCancelMatch,
       onObserve, onAction, onLeave, onRematch, navigationRef,
     }}>

@@ -156,7 +156,7 @@ function PlayerPod({ player, isMe, turnDeadline, lastAction, win, displayChips, 
 
 // ─── Main Screen ─────────────────────────────────────────────────────────────
 export default function GameScreen() {
-  const { gameState, myId, onAction, onLeave, onRematch, onLogout, emit, matchOver, navigationRef, deckStyle, opponentDisconnected } = useContext(GameContext);
+  const { gameState, myId, onAction, onLeave, onRematch, onLogout, emit, matchOver, navigationRef, deckStyle, opponentDisconnected, playerInfo } = useContext(GameContext);
 
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -396,6 +396,20 @@ export default function GameScreen() {
                 // Neither voted yet
                 <>
                   <Text style={s.modalSub}>One more for the road?</Text>
+                  {/* Add Friend button — only show if not already friends (best effort) */}
+                  {matchOver.winnerId !== myId || true ? (
+                    <Pressable style={s.addFriendBtn} onPress={() => {
+                      const opponentId = gameState?.players?.find(p => p.id !== myId)?.id;
+                      if (opponentId && playerInfo?.playerId) {
+                        fetch(`${SERVER_URL}/api/friends/request`, {
+                          method: 'POST', headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ requesterId: playerInfo.playerId, addresseeId: opponentId }),
+                        });
+                      }
+                    }}>
+                      <Text style={s.addFriendTxt}>+ Add {matchOver.winnerName && matchOver.winnerId !== myId ? matchOver.winnerName : 'Opponent'} as Friend</Text>
+                    </Pressable>
+                  ) : null}
                   <View style={s.modalBtns}>
                     <Pressable style={[s.modalBtn, s.modalBtnNo]} onPress={() => onRematch(false)}>
                       <Text style={s.modalBtnTxt}>Leave</Text>
@@ -511,6 +525,8 @@ const s = StyleSheet.create({
   eloNeg: { color: '#f87171' },
   eloNew: { color: colors.gray, fontSize: 16 },
   modalSub: { color: 'rgba(255,255,255,0.6)', fontSize: 14 },
+  addFriendBtn: { paddingVertical: 8, paddingHorizontal: 16, borderRadius: 8, borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)', alignItems: 'center' },
+  addFriendTxt: { color: 'rgba(255,255,255,0.7)', fontSize: 13 },
   modalWaiting: { color: colors.gray, fontSize: 14, fontStyle: 'italic' },
   modalBtns: { flexDirection: 'row', gap: 12, marginTop: 4 },
   modalBtn: { flex: 1, paddingVertical: 12, borderRadius: 12, alignItems: 'center' },
