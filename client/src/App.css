@@ -220,14 +220,14 @@ html, body {
 .win-flight-down { animation: win-fly-down 900ms cubic-bezier(0.25,0.46,0.45,0.94) forwards; }
 
 @keyframes win-fly-up {
-  0%   { top: 50%; opacity: 1; transform: translate(-50%, -50%) scale(1);   }
-  85%  { top: 4%;  opacity: 1; transform: translate(-50%, -50%) scale(1.15);}
-  100% { top: -8%; opacity: 0; transform: translate(-50%, -50%) scale(0.6); }
+  0%   { top: 50%; opacity: 1; transform: translate(-50%, -50%) scale(1);    }
+  78%  { top: 4%;  opacity: 1; transform: translate(-50%, -50%) scale(1.15); }
+  100% { top: 4%;  opacity: 0; transform: translate(-50%, -50%) scale(1);    }
 }
 @keyframes win-fly-down {
-  0%   { top: 50%;  opacity: 1; transform: translate(-50%, -50%) scale(1);   }
-  85%  { top: 96%;  opacity: 1; transform: translate(-50%, -50%) scale(1.15);}
-  100% { top: 108%; opacity: 0; transform: translate(-50%, -50%) scale(0.6); }
+  0%   { top: 50%; opacity: 1; transform: translate(-50%, -50%) scale(1);    }
+  78%  { top: 96%; opacity: 1; transform: translate(-50%, -50%) scale(1.15); }
+  100% { top: 96%; opacity: 0; transform: translate(-50%, -50%) scale(1);    }
 }
 
 /* ─── Game over modal ──────────────────────────────────────── */
@@ -338,6 +338,34 @@ html, body {
   from { opacity: 0; transform: scale(0.85); }
   to   { opacity: 1; transform: scale(1); }
 }
+
+/* ─── Card deal animation ────────────────────────────────────
+   Outer .fan-slot holds the resting fan rotation (matches the
+   original layout). Inner .card-deal does the entry animation,
+   ending at translate(0,0) so the card lands inside the fan-slot.
+*/
+.fan-slot { transform-origin: bottom center; display: inline-block; }
+.fan-slot-1 { transform: rotate(-6deg) translateX(6px); z-index: 1; }
+.fan-slot-2 { transform: rotate(6deg) translateX(-6px); z-index: 0; }
+
+.card-deal { display: inline-block; will-change: transform, opacity; }
+
+@keyframes card-deal-me {
+  0%   { transform: translate(0, -180px) rotate(-12deg) scale(0.6); opacity: 0; }
+  60%  { opacity: 1; }
+  100% { transform: translate(0, 0) rotate(0) scale(1); opacity: 1; }
+}
+@keyframes card-deal-opp {
+  0%   { transform: translate(0, 180px) rotate(12deg) scale(0.6); opacity: 0; }
+  60%  { opacity: 1; }
+  100% { transform: translate(0, 0) rotate(0) scale(1); opacity: 1; }
+}
+
+.card-deal-me  { animation: card-deal-me  420ms cubic-bezier(0.22, 0.65, 0.36, 1) backwards; }
+.card-deal-opp { animation: card-deal-opp 420ms cubic-bezier(0.22, 0.65, 0.36, 1) backwards; }
+
+.card-deal-1 { animation-delay: 60ms; }
+.card-deal-2 { animation-delay: 240ms; }
 
 /* ─── Banana silhouette on card back ────────────────────────── */
 .card-back-pattern::after {
@@ -528,6 +556,72 @@ html, body {
   letter-spacing: 2px;
   text-transform: uppercase;
   text-shadow: 0 0 10px rgba(212,160,23,0.9);
+}
+/* ─── Win speech bubble ──────────────────────────────────── */
+/* Anchor wrapper places the BUBBLE'S TAIL TIP at the avatar's center.
+   Avatar geometry (in oval-stage coords):
+     opp center = (calc(50% - 116px), -12px)
+     me  center = (calc(50% + 116px), calc(100% - 48px))
+   Tail tip sits 21px from the bubble's left (or right) edge and 14px below
+   the bubble. The wrapper's translate shifts by its own dimensions so the
+   tip lands exactly on the anchor coordinate regardless of bubble width. */
+.win-bubble-anchor {
+  position: absolute;
+  z-index: 25;
+  pointer-events: none;
+}
+.win-bubble-anchor-opp {
+  left: calc(50% - 116px);
+  top: -12px;
+  transform: translate(-21px, calc(-100% - 14px));
+}
+.win-bubble-anchor-me {
+  left: calc(50% + 116px);
+  top: calc(100% - 48px);
+  transform: translate(calc(-100% + 21px), calc(-100% - 14px));
+}
+.win-bubble {
+  position: relative;
+  background: linear-gradient(180deg, #fff8e3, #ffe9a8);
+  color: #2d1b0a;
+  border: 2px solid var(--gold);
+  border-radius: 14px;
+  padding: 6px 12px;
+  font-weight: 800;
+  font-size: 0.85rem;
+  letter-spacing: 0.3px;
+  white-space: nowrap;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.45);
+  animation: bubble-pop 360ms cubic-bezier(0.34, 1.56, 0.64, 1) backwards;
+}
+.win-bubble::after {
+  content: '';
+  position: absolute;
+  width: 0;
+  height: 0;
+  border: 7px solid transparent;
+  border-top-color: var(--gold);
+  bottom: -14px;
+}
+.win-bubble-opp::after { left: 14px; }
+.win-bubble-me::after  { right: 14px; }
+@keyframes bubble-pop {
+  0%   { opacity: 0; transform: scale(0.4) translateY(6px); }
+  60%  { opacity: 1; transform: scale(1.08) translateY(-2px); }
+  100% { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+.np-chips-increment {
+  color: #7fff8a;
+  font-size: 1.05rem;
+  letter-spacing: 0.5px;
+  text-shadow: 0 0 8px rgba(127,255,138,0.6);
+  animation: increment-pulse 280ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+@keyframes increment-pulse {
+  0%   { transform: scale(0.7); opacity: 0; }
+  60%  { transform: scale(1.1); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
 }
 .np-avatar { display: flex; align-items: center; justify-content: center; }
 .np-phantom { width: 32px; height: 32px; flex-shrink: 0; }

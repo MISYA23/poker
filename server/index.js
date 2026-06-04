@@ -39,6 +39,59 @@ let rematchVotes = {}; // { playerId: true|false }
 
 const TURN_SECONDS = 20;
 
+const BOT_ID = 'bot-monkey';
+const BOT_NAME = 'Bobo';
+let botTimer = null;
+
+function ensureBotSeat() {
+  if (game.players.find(p => p.id === BOT_ID)) return;
+  if (game.players.length >= TABLE_MAX) return;
+  if (game.phase !== 'waiting') return;
+  game.addPlayer(BOT_ID, BOT_NAME, 'jazz');
+}
+
+function botCanAct() {
+  return game.currentPlayerId === BOT_ID
+    && !['waiting', 'showdown', 'game-over'].includes(game.phase);
+}
+
+let lastBotPhase = null;
+function scheduleBotAction() {
+  if (botTimer || !botCanAct()) return;
+  // If the street just advanced, hold the bot for long enough that the client's
+  // community-card reveal animation finishes first. Flop reveal ≈ 2.4s, turn/
+  // river ≈ 1.4s (matches GameTable's reveal timing). Add a small buffer.
+  const isNewStreet = game.phase !== lastBotPhase && ['flop', 'turn', 'river'].includes(game.phase);
+  lastBotPhase = game.phase;
+  const delay = isNewStreet
+    ? (game.phase === 'flop' ? 2800 : 1800)
+    : 1000;
+  botTimer = setTimeout(() => {
+    botTimer = null;
+    if (!botCanAct()) return;
+    try {
+      const bot = game.players.find(p => p.id === BOT_ID);
+      if (!bot) return;
+      const callAmount = Math.max(0, game.currentBet - bot.roundBet);
+      const r = Math.random();
+      let action;
+      if (callAmount === 0) {
+        // Loose-passive: never raises voluntarily — always checks free cards.
+        action = 'check';
+      } else {
+        // Loose-passive: pre-flop plays 75% of hands; post-flop calls 50% of the time.
+        const callRate = game.phase === 'pre-flop' ? 0.75 : 0.50;
+        action = r < callRate ? 'call' : 'fold';
+      }
+      game.handleAction(BOT_ID, action);
+      broadcastState();
+      if (game.phase === 'showdown') scheduleNextHand(8000);
+    } catch (e) {
+      try { game.handleAction(BOT_ID, 'fold'); broadcastState(); } catch {}
+    }
+  }, delay);
+}
+
 function startTurnTimer() {
   const pid = game.currentPlayerId;
   if (pid === timerPlayerId) return;
@@ -68,6 +121,7 @@ function startTurnTimer() {
 
 function broadcastState() {
   startTurnTimer();
+  scheduleBotAction();
   const allSocketIds = [...socketPlayers.keys()];
   for (const socketId of allSocketIds) {
     const player = socketPlayers.get(socketId);
@@ -90,6 +144,34 @@ function broadcastState() {
       rematchVotesCount: Object.keys(rematchVotes).length,
     });
   }
+}
+
+function resetHandState() {
+  if (botTimer) { clearTimeout(botTimer); botTimer = null; }
+  if (turnTimer) { clearTimeout(turnTimer); turnTimer = null; }
+  if (autoStartTimer) { clearTimeout(autoStartTimer); autoStartTimer = null; }
+  if (nextHandTimer) { clearTimeout(nextHandTimer); nextHandTimer = null; }
+  timerPlayerId = null;
+  turnDeadline = null;
+  for (const p of game.players) {
+    p.chips = game.startingChips;
+    p.isActive = true;
+    p.folded = false;
+    p.allIn = false;
+    p.holeCards = [];
+    p.roundBet = 0;
+    p.totalBet = 0;
+  }
+  gameOver = false;
+  rematchVotes = {};
+  game.phase = 'waiting';
+  game.communityCards = [];
+  game.pot = 0;
+  game.currentBet = 0;
+  game.lastAction = null;
+  game.winners = null;
+  game.dealerIndex = -1;
+  game.currentPlayerId = null;
 }
 
 function tryAutoStart() {
@@ -200,11 +282,43 @@ io.on('connection', (socket) => {
     }
   });
 
+  socket.on('add-bot', () => {
+    ensureBotSeat();
+    const bot = game.players.find(p => p.id === BOT_ID);
+    const human = game.players.find(p => p.id !== BOT_ID);
+    if (bot && human) bot.avatarId = human.avatarId === 'jazz' ? 'alfie' : 'jazz';
+    broadcastState();
+    tryAutoStart();
+  });
+
+  socket.on('remove-bot', () => {
+    const idx = game.players.findIndex(p => p.id === BOT_ID);
+    if (idx === -1) return;
+    game.players.splice(idx, 1);
+    // Removing the bot fully resets the table so the human starts fresh
+    resetHandState();
+    broadcastState();
+  });
+
+  socket.on('leave', () => {
+    const player = socketPlayers.get(socket.id);
+    socketPlayers.delete(socket.id);
+    if (player) {
+      const idx = game.players.findIndex(p => p.id === player.id);
+      if (idx !== -1) game.players.splice(idx, 1);
+    }
+    // Heads-up only: leaving closes the game. Wipe everything (including any bot).
+    game = new PokerGame('table', GAME_OPTIONS);
+    resetHandState();
+    waitlist.length = 0;
+  });
+
   socket.on('rematch-vote', ({ vote }) => {
     const player = socketPlayers.get(socket.id);
     if (!player || !gameOver) return;
 
     rematchVotes[player.id] = vote === true;
+    if (game.players.some(p => p.id === BOT_ID)) rematchVotes[BOT_ID] = true;
 
     const allVoted = game.players.every(p => p.id in rematchVotes);
     if (!allVoted) {
@@ -270,6 +384,7 @@ function doReset() {
   if (nextHandTimer) { clearTimeout(nextHandTimer);  nextHandTimer = null; }
   timerPlayerId = null;
   turnDeadline  = null;
+  if (botTimer) { clearTimeout(botTimer); botTimer = null; }
   game = new PokerGame('table', GAME_OPTIONS);
   waitlist.length = 0;
   socketPlayers.clear();

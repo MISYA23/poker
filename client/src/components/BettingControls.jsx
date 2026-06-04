@@ -20,10 +20,11 @@ function Btn({ visible, className, children, onClick }) {
   );
 }
 
-export default function BettingControls({ gameState, myId, onAction, raiseAmount, canRaise }) {
+export default function BettingControls({ gameState, myId, onAction, raiseAmount, canRaise, canAct = true }) {
   const me = gameState?.players?.find(p => p.id === myId);
 
-  const isMyTurn = gameState?.currentPlayerId === myId &&
+  const isMyTurn = canAct &&
+    gameState?.currentPlayerId === myId &&
     !['waiting', 'showdown'].includes(gameState?.phase);
 
   const currentBet = gameState?.currentBet || 0;

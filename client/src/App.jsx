@@ -50,10 +50,21 @@ export default function App() {
   }, [emit]);
 
   const handleLeave = useCallback(() => {
+    emit('leave');
     setScreen('lobby');
     setMyId(null);
     setGameState(null);
     setError(null);
+  }, [emit]);
+
+  const handleToggleDeckStyle = useCallback(() => {
+    setDeckStyle(ds => ds === 'four-color' ? 'regular' : 'four-color');
+  }, []);
+
+  const handleAddBot = useCallback(() => emit('add-bot'), [emit]);
+  const handleRemoveBot = useCallback(() => emit('remove-bot'), [emit]);
+  const handleReset = useCallback(() => {
+    fetch('/admin/reset', { method: 'POST' }).then(() => window.location.href = '/');
   }, []);
 
   if (screen === 'lobby') {
@@ -78,6 +89,10 @@ export default function App() {
       onLeave={handleLeave}
       onRematchVote={handleRematchVote}
       deckStyle={deckStyle}
+      onToggleDeckStyle={handleToggleDeckStyle}
+      onAddBot={handleAddBot}
+      onRemoveBot={handleRemoveBot}
+      onReset={handleReset}
     />
   );
 }

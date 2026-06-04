@@ -199,7 +199,10 @@ class PokerGame {
     } else if (action === 'raise' || action === 'all-in') {
       const wasOpening = this.currentBet === 0;
       const totalBet = action === 'all-in' ? player.roundBet + player.chips : amount;
-      if (totalBet < this.currentBet + this.minRaise && player.chips > 0) {
+      // An all-in (committing the entire remaining stack) is always legal,
+      // even if it falls short of the minimum raise threshold.
+      const isAllInCommit = totalBet >= player.roundBet + player.chips;
+      if (!isAllInCommit && totalBet < this.currentBet + this.minRaise) {
         throw new Error(`Minimum raise is to ${this.currentBet + this.minRaise}`);
       }
       const raiseAmt = Math.min(totalBet - player.roundBet, player.chips);

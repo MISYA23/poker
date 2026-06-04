@@ -1,9 +1,9 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import Card from './Card.jsx';
 import Avatar from './Avatar.jsx';
 import BettingControls from './BettingControls.jsx';
 import { ChipStack } from './PokerChip.jsx';
-import { useActionFlash } from './PlayerSeat.jsx';
+import { useActionFlash, useBetFlash } from './PlayerSeat.jsx';
 
 const TURN_DURATION_MS = 20000;
 
@@ -53,17 +53,23 @@ function useCountdown(deadline) {
 }
 
 /* Nameplate (no cards) — sits at the oval edge */
-function NameplateOnly({ player, isMe, turnDeadline, lastAction, win, winFlightDone, displayChips }) {
+function NameplateOnly({ player, isMe, turnDeadline, lastAction, win, winFlightDone, winLabelDone, winIncrementDone, winAmount, displayChips, showPositions }) {
   const timeLeft = useCountdown(turnDeadline);
-  const actionLabel = useActionFlash(player, lastAction);
+  const actionLabel = useActionFlash(player, lastAction, winFlightDone);
   if (!player) return null;
-  // Once the win-flight has finished delivering bananas, swap WINNER label for the new chip count
-  const showWinLabel = win && !winFlightDone;
+  // "Winner" lingers for 2s (covers the flight and a beat after)
+  const showWinLabel = win && !winLabelDone;
+  // After Winner clears, briefly show "+amount" before the chip count rolls in
+  const showAwardIncrement = win && winLabelDone && !winIncrementDone && winAmount > 0;
   const chipsToShow = displayChips ?? player.chips;
 
-  const elapsedMs = turnDeadline
-    ? Math.min(TURN_DURATION_MS, TURN_DURATION_MS - Math.max(0, turnDeadline - Date.now()))
-    : 0;
+  // Snapshot elapsed-at-mount once per turn. Recomputing on every parent
+  // re-render (e.g., socket broadcasts) would re-apply animation-delay and
+  // cause the CSS bar to jump in chunks instead of decaying smoothly.
+  const elapsedMs = useMemo(() => {
+    if (!turnDeadline) return 0;
+    return Math.min(TURN_DURATION_MS, TURN_DURATION_MS - Math.max(0, turnDeadline - Date.now()));
+  }, [turnDeadline]);
   const showCountdown = timeLeft !== null && timeLeft <= 10;
   const folded = player.folded;
   const isActive = player.isCurrentPlayer && !folded;
@@ -79,11 +85,21 @@ function NameplateOnly({ player, isMe, turnDeadline, lastAction, win, winFlightD
           <div className="np-text">
             <span className="np-name">
               {player.name}
-              {player.isSmallBlind && <span className="badge badge-sb">SB</span>}
-              {player.isBigBlind && <span className="badge badge-bb">BB</span>}
+              {showPositions && player.isSmallBlind && <span className="badge badge-sb">SB</span>}
+              {showPositions && player.isBigBlind && <span className="badge badge-bb">BB</span>}
             </span>
-            <span className={`np-chips ${actionLabel ? 'np-chips-action' : ''} ${showWinLabel ? 'np-chips-winner' : ''}`}>
-              {showWinLabel ? 'Winner' : (actionLabel || chipsToShow.toLocaleString())}
+            <span className={`np-chips ${actionLabel ? 'np-chips-action' : ''} ${showWinLabel ? 'np-chips-winner' : ''} ${showAwardIncrement ? 'np-chips-increment' : ''}`}>
+              {showWinLabel
+                ? 'Winner'
+                : showAwardIncrement
+                  ? (
+                      <span className="inline-flex items-center gap-1">
+                        <span>+</span>
+                        <img src="/assets/bananas.png" alt="" aria-hidden="true" style={{ width: 22, height: 14, objectFit: 'contain' }} draggable={false} />
+                        <span>{winAmount.toLocaleString()}</span>
+                      </span>
+                    )
+                  : (actionLabel || chipsToShow.toLocaleString())}
             </span>
           </div>
           <div className="np-avatar np-avatar-big">
@@ -108,7 +124,7 @@ function NameplateOnly({ player, isMe, turnDeadline, lastAction, win, winFlightD
   );
 }
 
-function HoleCardsRow({ player, deckStyle }) {
+function HoleCardsRow({ player, deckStyle, isMe, dealKey }) {
   const folded = player?.folded;
   const hasCards = player?.holeCards?.length > 0;
   return (
@@ -117,22 +133,56 @@ function HoleCardsRow({ player, deckStyle }) {
       style={{ visibility: (hasCards && !folded) ? 'visible' : 'hidden' }}
     >
       {[0, 1].map(i => (
-        <Card
-          key={i}
-          card={player?.holeCards?.[i]}
-          size="md"
-          deckStyle={deckStyle}
-          faceDown={!player?.holeCards?.[i] || player.holeCards[i]?.hidden}
-        />
+        <div key={`${dealKey}-${i}`} className={`fan-slot fan-slot-${i + 1}`}>
+          <div
+            className={`card-deal ${isMe ? 'card-deal-me' : 'card-deal-opp'} card-deal-${i + 1}`}
+          >
+            <Card
+              card={player?.holeCards?.[i]}
+              size="md"
+              deckStyle={deckStyle}
+              faceDown={!player?.holeCards?.[i] || player.holeCards[i]?.hidden}
+            />
+          </div>
+        </div>
       ))}
     </div>
   );
 }
 
-export default function GameTable({ gameState, myId, onAction, onLeave, onRematchVote, deckStyle = 'regular' }) {
+function MenuItem({ label, onClick, disabled, danger }) {
+  const base = 'w-full text-left h-12 px-4 rounded-lg text-[15px] font-semibold tracking-wide active:scale-[0.98] transition-transform';
+  const tone = disabled
+    ? 'text-white/40'
+    : danger
+      ? 'text-red-300 hover:bg-red-500/10'
+      : 'text-white/90 hover:bg-white/5';
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onClick}
+      className={`${base} ${tone}`}
+      role="menuitem"
+    >
+      {label}
+    </button>
+  );
+}
+
+export default function GameTable({
+  gameState, myId, onAction, onLeave, onRematchVote, deckStyle = 'regular',
+  onToggleDeckStyle, onAddBot, onRemoveBot, onReset,
+}) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const hasBot = !!(gameState?.players || []).find(p => p.id?.startsWith('bot-'));
+  const closeAnd = (fn) => () => { setMenuOpen(false); fn?.(); };
   const me = gameState?.players?.find(p => p.id === myId);
   const others = gameState?.players?.filter(p => p.id !== myId) || [];
   const opponent = others[0];
+  const bothSeated = !!me && !!opponent;
+  const myBetDisplay = useBetFlash(me, gameState?.lastAction);
+  const oppBetDisplay = useBetFlash(opponent, gameState?.lastAction);
   const waitlistCount = gameState?.waitlistCount || 0;
 
   // Server's `pot` already includes all committed chips (round bets are accounted for at
@@ -154,7 +204,9 @@ export default function GameTable({ gameState, myId, onAction, onLeave, onRematc
     if (revealedCount >= targetCommunityCount) return;
 
     const timers = [];
-    let acc = 0;
+    // Hold off the first card of any new street (in non-showdown play) so the
+    // round's bet bananas dismiss before the community cards animate in.
+    let acc = isShowdownPhase ? 0 : 1400;
     for (let i = revealedCount; i < targetCommunityCount; i++) {
       const idx = i;
       timers.push(setTimeout(() => setRevealedCount(idx + 1), acc));
@@ -190,8 +242,13 @@ export default function GameTable({ gameState, myId, onAction, onLeave, onRematc
   }
   const myWin = winnerMap[myId];
 
+  // Hold back the player's turn UI (buttons + countdown bar) until every
+  // currently-dealt community card is on the felt. Without this, betting
+  // controls appear during the flop reveal animation.
+  const cardsFullyRevealed = (gameState?.communityCards?.length || 0) <= revealedCount;
   const isMyTurn = gameState?.currentPlayerId === myId &&
-    !['waiting', 'showdown'].includes(gameState?.phase);
+    !['waiting', 'showdown'].includes(gameState?.phase) &&
+    cardsFullyRevealed;
 
   const myTurnDeadline = isMyTurn ? gameState?.turnDeadline : null;
   const opponentTurnDeadline = opponent?.isCurrentPlayer ? gameState?.turnDeadline : null;
@@ -215,13 +272,39 @@ export default function GameTable({ gameState, myId, onAction, onLeave, onRematc
   const canRaise = isMyTurn && (me?.chips || 0) > callAmount;
 
   const [raiseAmount, setRaiseAmount] = useState(effectiveMin);
+  const [betInputStr, setBetInputStr] = useState(String(effectiveMin || 0));
   const sliderRef = useRef(null);
 
-  // Reset the slider position only when a new turn begins
+  // Reset the slider position + input only when a new turn begins
   useEffect(() => {
     setRaiseAmount(effectiveMin);
+    setBetInputStr(String(effectiveMin || 0));
     if (sliderRef.current) sliderRef.current.value = String(effectiveMin);
   }, [gameState?.currentPlayerId]);
+
+  // Re-key the hole cards each time a new hand starts.
+  // Trigger on phase entering 'pre-flop' — the server resets and re-deals hole
+  // cards within a single tick between hands, so the count never visibly drops
+  // to zero. Phase is the reliable "new hand" signal.
+  const [dealKey, setDealKey] = useState(0);
+  const phase = gameState?.phase;
+  const prevPhase = useRef(null);
+  useEffect(() => {
+    if (phase === 'pre-flop' && prevPhase.current !== 'pre-flop') {
+      setDealKey(k => k + 1);
+    }
+    prevPhase.current = phase;
+  }, [phase]);
+
+  const commitBetInput = (str) => {
+    const v = parseInt(str, 10);
+    const lo = effectiveMin || 0;
+    const hi = Math.max(maxRaise, lo, 1);
+    const clamped = Number.isNaN(v) ? lo : Math.max(lo, Math.min(hi, v));
+    setRaiseAmount(clamped);
+    setBetInputStr(String(clamped));
+    if (sliderRef.current) sliderRef.current.value = String(clamped);
+  };
 
   // Win flight cinematic — fires once the 2s pause is over
   const [winFlightKey, setWinFlightKey] = useState(0);
@@ -231,9 +314,7 @@ export default function GameTable({ gameState, myId, onAction, onLeave, onRematc
     }
   }, [showWinners]);
 
-  const showdownWinner = showWinners && gameState?.winners?.[0];
-  const winnerIsMe = showdownWinner?.playerId === myId;
-  const winFlightAmount = showdownWinner?.amount || totalPot;
+  const winnersList = (showWinners && gameState?.winners) || [];
 
   // Track when the win-flight has finished (bananas delivered to the winner)
   const [winFlightDone, setWinFlightDone] = useState(false);
@@ -245,6 +326,40 @@ export default function GameTable({ gameState, myId, onAction, onLeave, onRematc
     const t = setTimeout(() => setWinFlightDone(true), 900); // matches CSS animation duration
     return () => clearTimeout(t);
   }, [showWinners]);
+
+  // Random speech-bubble message per winner when their share is > 100
+  const WIN_MESSAGES = ["Easy bananas!", "I love this game!", "Oh yeah!", "It's poker baby!"];
+  const [winBubbles, setWinBubbles] = useState({});
+  useEffect(() => {
+    if (!showWinners || !gameState?.winners?.length) {
+      setWinBubbles({});
+      return;
+    }
+    const bubbles = {};
+    for (const w of gameState.winners) {
+      if (w.amount > 100) {
+        bubbles[w.playerId] = WIN_MESSAGES[Math.floor(Math.random() * WIN_MESSAGES.length)];
+      }
+    }
+    setWinBubbles(bubbles);
+  }, [showWinners]);
+
+  // "Winner" label stays for 2s total (covers the flight, then lingers)
+  const [winLabelDone, setWinLabelDone] = useState(false);
+  useEffect(() => {
+    if (!showWinners) { setWinLabelDone(false); return; }
+    const t = setTimeout(() => setWinLabelDone(true), 2000);
+    return () => clearTimeout(t);
+  }, [showWinners]);
+
+  // After "Winner" clears, show "+amount" on the winner's nameplate for 2s,
+  // then reveal the new chip stack.
+  const [winIncrementDone, setWinIncrementDone] = useState(false);
+  useEffect(() => {
+    if (!winLabelDone) { setWinIncrementDone(false); return; }
+    const t = setTimeout(() => setWinIncrementDone(true), 2000);
+    return () => clearTimeout(t);
+  }, [winLabelDone]);
 
   // Snapshot chips + pot just before showdown so winner info doesn't leak
   // (server zeros pot and credits winner the instant showdown is broadcast).
@@ -282,20 +397,68 @@ export default function GameTable({ gameState, myId, onAction, onLeave, onRematc
           </span>
         )}
       </div>
-      <div className="absolute top-2 right-2 z-50 flex items-center gap-2">
+      <div className="absolute top-2 right-2 z-50">
         <button
-          className="h-9 min-w-[44px] px-3 rounded-lg bg-black/55 border border-white/20 text-white/90 text-xs font-semibold active:scale-95 transition-transform"
-          onClick={onLeave}
+          aria-label="Menu"
+          className="h-10 w-10 rounded-lg bg-black/55 border border-white/20 text-white/90 active:scale-95 transition-transform flex items-center justify-center"
+          onClick={() => setMenuOpen(true)}
         >
-          Leave
-        </button>
-        <button
-          className="h-9 min-w-[44px] px-3 rounded-lg bg-black/55 border border-red-500/40 text-red-300 text-xs font-semibold active:scale-95 transition-transform"
-          onClick={() => fetch('/admin/reset', { method: 'POST' }).then(() => window.location.href = '/')}
-        >
-          Reset
+          <svg width="20" height="14" viewBox="0 0 20 14" fill="none" aria-hidden="true">
+            <rect width="20" height="2" rx="1" fill="currentColor" />
+            <rect y="6" width="20" height="2" rx="1" fill="currentColor" />
+            <rect y="12" width="20" height="2" rx="1" fill="currentColor" />
+          </svg>
         </button>
       </div>
+
+      {menuOpen && (
+        <div
+          className="absolute inset-0 z-[60] bg-black/65 backdrop-blur-sm flex items-end sm:items-center justify-center"
+          onClick={() => setMenuOpen(false)}
+        >
+          <div
+            className="w-full max-w-[360px] bg-[#1b1208]/95 border border-[color:var(--gold)]/40 rounded-t-2xl sm:rounded-2xl shadow-2xl p-2 mb-0 sm:mb-4"
+            onClick={(e) => e.stopPropagation()}
+            role="menu"
+          >
+            <div className="flex items-center justify-between px-3 py-2">
+              <span className="text-[color:var(--gold-light)] text-sm font-extrabold tracking-widest uppercase">Options</span>
+              <button
+                aria-label="Close menu"
+                className="text-white/70 text-2xl leading-none px-2 active:scale-95"
+                onClick={() => setMenuOpen(false)}
+              >
+                ×
+              </button>
+            </div>
+
+            <MenuItem
+              disabled={hasBot}
+              onClick={closeAnd(onAddBot)}
+              label={hasBot ? 'AI Opponent Added' : 'Add AI Opponent'}
+            />
+            <MenuItem
+              disabled={!hasBot}
+              onClick={closeAnd(onRemoveBot)}
+              label="Remove AI Opponent"
+            />
+            <MenuItem
+              onClick={closeAnd(onToggleDeckStyle)}
+              label={`4-Color Deck${deckStyle === 'four-color' ? '  ✓' : ''}`}
+            />
+            <div className="h-px bg-white/10 my-1 mx-2" />
+            <MenuItem
+              onClick={closeAnd(onLeave)}
+              label="Leave Table"
+            />
+            <MenuItem
+              onClick={closeAnd(onReset)}
+              label="Reset Game"
+              danger
+            />
+          </div>
+        </div>
+      )}
 
       {/* PLAY AREA: oval with nameplates at edges, opponent's cards above the nameplate */}
       <div className="flex-1 relative min-h-0 px-3 flex items-center justify-center" style={{ paddingTop: 130, paddingBottom: 28 }}>
@@ -304,15 +467,32 @@ export default function GameTable({ gameState, myId, onAction, onLeave, onRematc
           {/* Felt oval */}
           <div className="felt-oval absolute inset-0" />
 
-          {/* Win-flight cinematic — bananas fly from pot to winner's nameplate */}
-          {showdownWinner && (
-            <div key={winFlightKey} className={`win-flight win-flight-${winnerIsMe ? 'down' : 'up'}`}>
-              <Bananas amount={winFlightAmount} size={28} />
+          {/* Win-flight cinematic — bananas fly from pot to each winner's nameplate.
+              For split pots, both directions fire simultaneously. */}
+          {winnersList.map((w, i) => (
+            <div
+              key={`${winFlightKey}-${i}`}
+              className={`win-flight win-flight-${w.playerId === myId ? 'down' : 'up'}`}
+            >
+              <Bananas amount={w.amount} size={28} />
+            </div>
+          ))}
+
+          {/* Celebratory speech bubble for pots > 100. Anchor wrapper aligns
+              the bubble's tail tip with the avatar's center. */}
+          {opponent && winBubbles[opponent.id] && (
+            <div className="win-bubble-anchor win-bubble-anchor-opp" key={`opp-${winFlightKey}`}>
+              <div className="win-bubble win-bubble-opp">{winBubbles[opponent.id]}</div>
+            </div>
+          )}
+          {me && winBubbles[me.id] && (
+            <div className="win-bubble-anchor win-bubble-anchor-me" key={`me-${winFlightKey}`}>
+              <div className="win-bubble win-bubble-me">{winBubbles[me.id]}</div>
             </div>
           )}
 
           {/* Dealer button on the felt (top-right next to opponent's cards) */}
-          {opponent?.isDealer && (
+          {bothSeated && opponent?.isDealer && (
             <div
               className="dealer-button-felt absolute z-10"
               style={{ top: 70, right: 'calc(50% - 105px)' }}
@@ -321,7 +501,7 @@ export default function GameTable({ gameState, myId, onAction, onLeave, onRematc
           )}
 
           {/* Dealer button on the felt (bottom player → top-left of player area, spaced from cards) */}
-          {me?.isDealer && (
+          {bothSeated && me?.isDealer && (
             <div
               className="dealer-button-felt absolute z-10"
               style={{ bottom: 100, left: 'calc(50% - 120px)' }}
@@ -332,7 +512,7 @@ export default function GameTable({ gameState, myId, onAction, onLeave, onRematc
           {/* Opponent hole cards — closer to the left avatar, ~6 px gap from frame */}
           <div className="absolute z-10" style={{ top: -58, left: '50%', transform: 'translateX(calc(-50% + 18px))' }}>
             {opponent ? (
-              <HoleCardsRow player={opponent} deckStyle={deckStyle} />
+              <HoleCardsRow player={opponent} deckStyle={deckStyle} isMe={false} dealKey={dealKey} />
             ) : (
               <div className="text-white/60 text-sm bg-black/40 rounded-lg px-3 py-1 whitespace-nowrap">Waiting for opponent…</div>
             )}
@@ -341,12 +521,12 @@ export default function GameTable({ gameState, myId, onAction, onLeave, onRematc
           {/* Opponent bet — close to opponent's nameplate */}
           <div
             className="absolute left-1/2 -translate-x-1/2 z-10 flex items-center gap-1.5 whitespace-nowrap"
-            style={{ top: 70, visibility: (opponent?.roundBet > 0 || opponent?.allIn) ? 'visible' : 'hidden' }}
+            style={{ top: 70, visibility: (oppBetDisplay > 0 || opponent?.allIn) ? 'visible' : 'hidden' }}
           >
-            {opponent?.roundBet > 0 && (
+            {oppBetDisplay > 0 && (
               <>
-                <CurrencyStack amount={opponent?.roundBet || 0} size={20} />
-                <span className="felt-bet-amount text-sm">{(opponent?.roundBet || 0).toLocaleString()}</span>
+                <CurrencyStack amount={oppBetDisplay} size={20} />
+                <span className="felt-bet-amount text-sm">{oppBetDisplay.toLocaleString()}</span>
               </>
             )}
             {opponent?.allIn && <span className="all-in-triangle" aria-label="All In"><span>ALL</span><span>IN</span></span>}
@@ -374,11 +554,11 @@ export default function GameTable({ gameState, myId, onAction, onLeave, onRematc
             </div>
 
             <div
-              className="flex items-center gap-2 bg-black/45 border border-white/10 rounded-lg px-3 py-1 whitespace-nowrap"
-              style={{ visibility: showPotInMiddle ? 'visible' : 'hidden', minHeight: 30 }}
+              className="flex items-center gap-1.5 bg-black/55 border border-[color:var(--gold)]/30 rounded-lg px-3 py-1 whitespace-nowrap shadow-[0_2px_6px_rgba(0,0,0,0.4)]"
+              style={{ visibility: showPotInMiddle ? 'visible' : 'hidden', minHeight: 32 }}
             >
               <CurrencyStack amount={displayedPot || 0} size={20} />
-              <span className="text-sm font-extrabold text-[color:var(--gold-light)]">
+              <span className="text-[15px] font-extrabold text-[color:var(--gold-light)] tracking-tight">
                 {(displayedPot || 0).toLocaleString()}
               </span>
             </div>
@@ -391,12 +571,12 @@ export default function GameTable({ gameState, myId, onAction, onLeave, onRematc
           {/* My bet — close to my cards */}
           <div
             className="absolute left-1/2 -translate-x-1/2 z-10 flex items-center gap-1.5 whitespace-nowrap"
-            style={{ bottom: 125, visibility: ((me?.roundBet > 0 || me?.allIn) && !myWin) ? 'visible' : 'hidden' }}
+            style={{ bottom: 125, visibility: ((myBetDisplay > 0 || me?.allIn) && !myWin) ? 'visible' : 'hidden' }}
           >
-            {me?.roundBet > 0 && (
+            {myBetDisplay > 0 && (
               <>
-                <CurrencyStack amount={me?.roundBet || 0} size={20} />
-                <span className="felt-bet-amount text-sm">{(me?.roundBet || 0).toLocaleString()}</span>
+                <CurrencyStack amount={myBetDisplay} size={20} />
+                <span className="felt-bet-amount text-sm">{myBetDisplay.toLocaleString()}</span>
               </>
             )}
             {me?.allIn && <span className="all-in-triangle" aria-label="All In"><span>ALL</span><span>IN</span></span>}
@@ -404,7 +584,7 @@ export default function GameTable({ gameState, myId, onAction, onLeave, onRematc
 
           {/* My hole cards — closer still to the avatar */}
           <div className="absolute z-10" style={{ bottom: 48, left: '50%', transform: 'translateX(calc(-50% - 8px))' }}>
-            {me && <HoleCardsRow player={me} deckStyle={deckStyle} />}
+            {me && <HoleCardsRow player={me} deckStyle={deckStyle} isMe={true} dealKey={dealKey} />}
           </div>
 
           {/* Opponent nameplate AT top edge of oval */}
@@ -417,7 +597,11 @@ export default function GameTable({ gameState, myId, onAction, onLeave, onRematc
                 lastAction={gameState?.lastAction}
                 win={winnerMap[opponent.id]}
                 winFlightDone={winFlightDone}
+                winLabelDone={winLabelDone}
+                winIncrementDone={winIncrementDone}
+                winAmount={winnerMap[opponent.id]?.amount || 0}
                 displayChips={chipsFor(opponent)}
+                showPositions={bothSeated}
               />
             )}
           </div>
@@ -432,7 +616,11 @@ export default function GameTable({ gameState, myId, onAction, onLeave, onRematc
                 lastAction={gameState?.lastAction}
                 win={myWin}
                 winFlightDone={winFlightDone}
+                winLabelDone={winLabelDone}
+                winIncrementDone={winIncrementDone}
+                winAmount={myWin?.amount || 0}
                 displayChips={chipsFor(me)}
+                showPositions={bothSeated}
               />
             )}
           </div>
@@ -507,13 +695,35 @@ export default function GameTable({ gameState, myId, onAction, onLeave, onRematc
             defaultValue={effectiveMin || 0}
             onInput={e => {
               const v = parseInt(e.target.value, 10);
-              if (!Number.isNaN(v)) setRaiseAmount(v);
+              if (!Number.isNaN(v)) {
+                setRaiseAmount(v);
+                setBetInputStr(String(v));
+              }
             }}
             disabled={!canRaise}
           />
-          <div className="min-w-[64px] text-right text-[color:var(--gold-light)] font-extrabold text-base">
-            {(raiseAmount || 0).toLocaleString()}
-          </div>
+          <input
+            type="text"
+            inputMode="numeric"
+            pattern="[0-9]*"
+            aria-label="Bet amount"
+            value={betInputStr}
+            onChange={e => {
+              const cleaned = e.target.value.replace(/[^0-9]/g, '');
+              setBetInputStr(cleaned);
+              const v = parseInt(cleaned, 10);
+              if (!Number.isNaN(v)) {
+                const lo = effectiveMin || 0;
+                const hi = Math.max(maxRaise, lo, 1);
+                const clamped = Math.max(lo, Math.min(hi, v));
+                setRaiseAmount(clamped);
+                if (sliderRef.current) sliderRef.current.value = String(clamped);
+              }
+            }}
+            onBlur={e => commitBetInput(e.target.value)}
+            disabled={!canRaise}
+            className="bet-input w-20 h-9 text-right text-[color:var(--gold-light)] font-extrabold text-base bg-black/40 border border-white/15 rounded-md px-2 focus:border-[color:var(--gold)] outline-none"
+          />
         </div>
 
         <div className="flex gap-2 items-center">
@@ -523,6 +733,7 @@ export default function GameTable({ gameState, myId, onAction, onLeave, onRematc
             onAction={onAction}
             raiseAmount={raiseAmount}
             canRaise={canRaise}
+            canAct={cardsFullyRevealed}
           />
         </div>
       </section>
