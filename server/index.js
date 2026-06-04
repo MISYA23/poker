@@ -286,9 +286,14 @@ io.on('connection', (socket) => {
     if (playerId && playerName) {
       const safeAvatar = VALID_AVATARS.includes(avatarId) ? avatarId : VALID_AVATARS[0];
       const existing = socketPlayers.get(socket.id);
-      if (!existing) {
-        socketPlayers.set(socket.id, { playerId, playerName: playerName.trim().slice(0, 20), avatarId: safeAvatar, matchId: null, socketId: socket.id });
-      }
+      socketPlayers.set(socket.id, {
+        matchId: existing?.matchId ?? null,
+        ...existing,
+        playerId,
+        playerName: playerName.trim().slice(0, 20),
+        avatarId: safeAvatar,
+        socketId: socket.id,
+      });
 
       // Rejoin an active match if this player was in a disconnect grace period
       const pending = pendingDisconnects.get(playerId);
@@ -493,6 +498,22 @@ io.on('connection', (socket) => {
 });
 
 // ── HTTP routes ───────────────────────────────────────────────────────────────
+
+app.put('/api/player/:playerId/profile', async (req, res) => {
+  try {
+    const { playerId } = req.params;
+    const { displayName, avatarId } = req.body;
+    if (!displayName || typeof displayName !== 'string') return res.status(400).json({ error: 'displayName required' });
+    const safeName   = displayName.trim().slice(0, 20);
+    const safeAvatar = VALID_AVATARS.includes(avatarId) ? avatarId : null;
+    if (!safeName) return res.status(400).json({ error: 'displayName cannot be empty' });
+    const sets  = ['display_name=$2'];
+    const vals  = [playerId, safeName];
+    if (safeAvatar) { sets.push(`avatar_id=$${vals.length + 1}`); vals.push(safeAvatar); }
+    await db.query(`UPDATE players SET ${sets.join(', ')} WHERE id=$1`, vals);
+    res.json({ ok: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
 
 app.get('/api/player/:playerId/profile', async (req, res) => {
   try {

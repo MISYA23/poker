@@ -37,7 +37,14 @@ export default function ProfileScreen({ navigation }) {
     const trimmed = name.trim();
     if (!trimmed) return;
     setSaving(true);
-    await setUser({ name: trimmed, avatarId });
+    await Promise.all([
+      setUser({ name: trimmed, avatarId }),
+      fetch(`${SERVER_URL}/api/player/${playerInfo.playerId}/profile`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ displayName: trimmed, avatarId }),
+      }),
+    ]);
     onUpdateProfile(trimmed, avatarId);
     setSaving(false);
     navigation.goBack();

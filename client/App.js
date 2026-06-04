@@ -101,8 +101,12 @@ export default function App() {
   }, []);
 
   const onUpdateProfile = useCallback((name, avatarId) => {
-    setPlayerInfo(p => ({ ...p, name, avatarId }));
-  }, []);
+    setPlayerInfo(p => {
+      const updated = { ...p, name, avatarId };
+      emit('enter-lobby', { playerId: updated.playerId, playerName: name, avatarId });
+      return updated;
+    });
+  }, [emit]);
 
   const onFindMatch = useCallback((name, avatarId, playerId) => {
     setError(null);
