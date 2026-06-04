@@ -37,6 +37,7 @@ export default function App() {
 
   const navigationRef = useNavigationContainerRef();
   const matchIdRef    = useRef(null);
+  const isObserverRef = useRef(false);
 
   const emit = useSocket({
     'in-queue':        ()            => { setInQueue(true); setError(null); },
@@ -51,9 +52,11 @@ export default function App() {
     'match-list':  ({ matches, onlinePlayers: op }) => { setMatchList(matches || []); setOnlinePlayers(op || []); },
     'game-state':  (state)           => {
       setGameState(state);
-      // Clear match-over modal when rematch starts
       if (state.atTable && !state.gameOver) setMatchOver(null);
-      if (state.atTable || state.observing) navigationRef.navigate('Game');
+      // Only navigate to Game if we're still supposed to be there
+      if (state.atTable || (state.observing && isObserverRef.current)) {
+        navigationRef.navigate('Game');
+      }
     },
     'match-over':  (data)            => {
       setMatchOver({ ...data, myVote: null, opponentWantsRematch: null });
@@ -75,6 +78,7 @@ export default function App() {
       setInQueue(false); setMatchOver(null);
       setOpponentDisconnected(null);
       matchIdRef.current = null;
+      isObserverRef.current = false;
       navigationRef.reset({ index: 0, routes: [{ name: 'Lobby' }] });
     },
   });
@@ -131,6 +135,7 @@ export default function App() {
 
   const onObserve = useCallback((matchId) => {
     matchIdRef.current = matchId;
+    isObserverRef.current = true;
     emit('observe', { matchId });
     navigationRef.navigate('Game');
   }, [emit]);
@@ -140,7 +145,12 @@ export default function App() {
   }, [emit]);
 
   const onLeave = useCallback(() => {
-    emit('leave-table', {});
+    if (isObserverRef.current) {
+      emit('unobserve', { matchId: matchIdRef.current });
+    } else {
+      emit('leave-table', {});
+    }
+    isObserverRef.current = false;
     setMyId(null); setGameState(null); setMatchOver(null);
     matchIdRef.current = null;
     navigationRef.reset({ index: 0, routes: [{ name: 'Lobby' }] });

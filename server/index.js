@@ -475,6 +475,8 @@ io.on('connection', (socket) => {
 
   socket.on('disconnect', () => {
     const sp = socketPlayers.get(socket.id);
+    // Always clean socket out of any match observer sets
+    for (const m of matches.values()) m.observers.delete(socket.id);
     if (!sp) return;
     socketPlayers.delete(socket.id);
     dequeue(sp.playerId);
