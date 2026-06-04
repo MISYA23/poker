@@ -130,7 +130,9 @@ export default function FriendsTab({ onlinePlayers }) {
   const accepted  = friends?.filter(f => f.status === 'accepted') || [];
   const incoming  = friends?.filter(f => f.status === 'pending' && !f.isRequester) || [];
   const outgoing  = friends?.filter(f => f.status === 'pending' && f.isRequester) || [];
-  const friendIds = new Set(accepted.map(f => f.friendId));
+  // Anyone we have ANY relationship with — no Add button for these people
+  const knownIds  = new Set((friends || []).map(f => f.friendId));
+  const friendIds = knownIds; // kept for challenge logic (checks accepted status inline)
 
   // Non-friend online players
   const otherOnline = (onlinePlayers || []).filter(p =>
@@ -201,14 +203,20 @@ export default function FriendsTab({ onlinePlayers }) {
       {/* Friends */}
       <View style={s.section}>
         <Text style={s.sectionLabel}>Friends {accepted.length > 0 ? `(${accepted.length})` : ''}</Text>
-        {accepted.length === 0
+        {accepted.length === 0 && outgoing.length === 0
           ? <Text style={s.empty}>No friends yet — search above or add someone after a match</Text>
-          : accepted.map(f => (
-            <PlayerRow key={f.friendId} player={f}
-              action={f.online ? () => challenge(f.friendId) : null}
-              actionLabel="⚔️ Challenge" actionColor="#7c3aed"
-              secondAction={() => unfriend(f.friendId)} secondLabel="✕" />
-          ))
+          : <>
+              {outgoing.map(f => (
+                <PlayerRow key={f.friendId} player={{ ...f, displayName: f.displayName }}
+                  actionLabel="Pending…" actionColor="rgba(255,255,255,0.2)" />
+              ))}
+              {accepted.map(f => (
+                <PlayerRow key={f.friendId} player={f}
+                  action={f.online ? () => challenge(f.friendId) : null}
+                  actionLabel="⚔️ Challenge" actionColor="#7c3aed"
+                  secondAction={() => unfriend(f.friendId)} secondLabel="✕" />
+              ))}
+            </>
         }
       </View>
 
