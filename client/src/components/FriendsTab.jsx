@@ -134,9 +134,13 @@ export default function FriendsTab({ onlinePlayers }) {
   const knownIds  = new Set((friends || []).map(f => f.friendId));
   const friendIds = knownIds; // kept for challenge logic (checks accepted status inline)
 
-  // Non-friend online players
+  // Non-friend online players (and those with pending requests shown separately)
   const otherOnline = (onlinePlayers || []).filter(p =>
     p.id !== playerInfo?.playerId && !friendIds.has(p.id)
+  );
+  // Online players with outgoing pending requests (known but not yet accepted)
+  const pendingOnline = (onlinePlayers || []).filter(p =>
+    outgoing.some(f => f.friendId === p.id)
   );
 
   if (loading) return <ActivityIndicator color={colors.gold} style={{ marginTop: 10 }} />;
@@ -221,16 +225,24 @@ export default function FriendsTab({ onlinePlayers }) {
       </View>
 
       {/* Players Online */}
-      {otherOnline.length > 0 && (
+      {(otherOnline.length > 0 || pendingOnline.length > 0) && (
         <View style={s.section}>
           <Text style={s.sectionLabel}>Players Online</Text>
-          {otherOnline.map(p => (
+          {pendingOnline.map(p => (
             <PlayerRow key={p.id}
               player={{ displayName: p.name, avatarId: p.avatarId, online: true }}
-              action={sentIds.has(p.id) ? null : () => sendRequest(p.id)}
-              actionLabel={sentIds.has(p.id) ? 'Sent ✓' : '+ Add'}
-              actionColor={sentIds.has(p.id) ? '#22c55e' : colors.gold} />
+              actionLabel="⏳ Pending" actionColor="rgba(255,255,255,0.15)" />
           ))}
+          {otherOnline.map(p => {
+            const isPending = sentIds.has(p.id);
+            return (
+              <PlayerRow key={p.id}
+                player={{ displayName: p.name, avatarId: p.avatarId, online: true }}
+                action={isPending ? null : () => sendRequest(p.id)}
+                actionLabel={isPending ? '⏳ Pending' : '+ Add'}
+                actionColor={isPending ? 'rgba(255,255,255,0.15)' : colors.gold} />
+            );
+          })}
         </View>
       )}
     </View>
