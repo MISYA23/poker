@@ -1,11 +1,78 @@
-import React, { useContext, useState } from 'react';
+import React, { useContext, useState, useEffect } from 'react';
 import {
   View, Text, Pressable, ScrollView, StyleSheet, ImageBackground,
+  Image, ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { GameContext } from '../context/GameContext';
 import { colors } from '../theme';
-import { VERSION } from '../config';
+import { VERSION, SERVER_URL } from '../config';
+
+const AVATAR_IMAGES = {
+  dk:    require('../../assets/dk.png'),
+  diddy: require('../../assets/diddy.webp'),
+  alfie: require('../../assets/alfie.png'),
+  jazz:  require('../../assets/jazz.png'),
+};
+
+const TABS = ['Recent', 'Friends', 'Leaderboard'];
+
+function RecentTab({ matches, navigationRef }) {
+  if (!matches?.length) return <Text style={s.tabEmpty}>No matches yet — play your first game!</Text>;
+  return (
+    <View style={s.tabContent}>
+      {matches.map((m, i) => (
+        <Pressable key={i} style={s.recentRow}
+          onPress={() => navigationRef.navigate('HandReplay', { matchId: m.matchId, matchLabel: `vs ${m.opponentName}` })}>
+          <View style={[s.resultDot, m.won ? s.dotWin : s.dotLoss]} />
+          <Text style={s.recentOpp} numberOfLines={1}>vs {m.opponentName}</Text>
+          <Text style={[s.recentElo, m.eloChange >= 0 ? s.eloPos : s.eloNeg]}>
+            {m.eloChange >= 0 ? '+' : ''}{m.eloChange}
+          </Text>
+          <Text style={s.replayArrow}>▶</Text>
+        </Pressable>
+      ))}
+    </View>
+  );
+}
+
+function FriendsTab() {
+  return <Text style={s.tabEmpty}>Friends coming soon</Text>;
+}
+
+function LeaderboardTab({ navigationRef }) {
+  const [data, setData]     = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch(`${SERVER_URL}/api/leaderboard`)
+      .then(r => r.json())
+      .then(d => setData(Array.isArray(d) ? d.slice(0, 5) : []))
+      .catch(() => setData([]))
+      .finally(() => setLoading(false));
+  }, []);
+
+  if (loading) return <ActivityIndicator color={colors.gold} style={{ marginTop: 8 }} />;
+  if (!data?.length) return <Text style={s.tabEmpty}>No players yet</Text>;
+
+  return (
+    <View style={s.tabContent}>
+      {data.map(p => (
+        <View key={p.playerId} style={s.lbRow}>
+          <Text style={[s.lbRank, p.rank <= 3 && { color: ['#FFD700','#C0C0C0','#CD7F32'][p.rank-1] }]}>
+            {p.rank <= 3 ? ['🥇','🥈','🥉'][p.rank-1] : p.rank}
+          </Text>
+          <Image source={AVATAR_IMAGES[p.avatarId] || AVATAR_IMAGES.dk} style={s.lbAvatar} />
+          <Text style={s.lbName} numberOfLines={1}>{p.displayName}</Text>
+          <Text style={s.lbElo}>{p.elo}</Text>
+        </View>
+      ))}
+      <Pressable onPress={() => navigationRef.navigate('Leaderboard')}>
+        <Text style={s.lbMore}>View full leaderboard →</Text>
+      </Pressable>
+    </View>
+  );
+}
 
 export default function LobbyScreen() {
   const { onFindMatch, onCancelMatch, onObserve, onLogout,
@@ -13,6 +80,7 @@ export default function LobbyScreen() {
           myRecentMatches } = useContext(GameContext);
 
   const [menuOpen, setMenuOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState(0);
 
   return (
     <ImageBackground source={require('../../assets/jungle.png')} style={s.bg} resizeMode="cover">
@@ -21,9 +89,7 @@ export default function LobbyScreen() {
 
           {/* Top bar */}
           <View style={s.topBar}>
-            <View>
-              <Text style={s.logo}>♠ Poker Monkey ♣ <Text style={s.logoVersion}>{VERSION}</Text></Text>
-            </View>
+            <Text style={s.logo}>♠ Poker Monkey ♣ <Text style={s.logoVersion}>{VERSION}</Text></Text>
             <Pressable style={s.hamburger} onPress={() => setMenuOpen(o => !o)}>
               <Text style={s.hamburgerTxt}>☰</Text>
             </Pressable>
@@ -43,7 +109,7 @@ export default function LobbyScreen() {
             </Pressable>
           )}
 
-          <ScrollView contentContainerStyle={s.scroll}>
+          <ScrollView contentContainerStyle={s.scroll} keyboardShouldPersistTaps="handled">
 
             {/* Greeting */}
             <View style={s.greeting}>
@@ -52,38 +118,6 @@ export default function LobbyScreen() {
             </View>
 
             {error && <Text style={s.error}>{error}</Text>}
-
-            {/* Dashboard cards */}
-            <View style={s.dashboard}>
-              {/* Recent games */}
-              <Pressable style={s.dashCard} onPress={() => navigationRef.navigate('Profile')}>
-                <Text style={s.dashCardTitle}>Recent Games</Text>
-                {myRecentMatches?.length ? (
-                  myRecentMatches.slice(0, 2).map((m, i) => (
-                    <Text key={i} style={s.dashCardRow}>
-                      {m.won ? '✅' : '❌'} vs {m.opponentName}
-                      {'  '}<Text style={m.eloChange >= 0 ? s.eloPos : s.eloNeg}>
-                        {m.eloChange >= 0 ? '+' : ''}{m.eloChange}
-                      </Text>
-                    </Text>
-                  ))
-                ) : (
-                  <Text style={s.dashCardEmpty}>No games yet</Text>
-                )}
-              </Pressable>
-
-              {/* Friends */}
-              <View style={s.dashCard}>
-                <Text style={s.dashCardTitle}>Friends</Text>
-                <Text style={s.dashCardEmpty}>Coming soon</Text>
-              </View>
-
-              {/* Leaderboard */}
-              <Pressable style={s.dashCard} onPress={() => navigationRef.navigate('Leaderboard')}>
-                <Text style={s.dashCardTitle}>Leaderboard</Text>
-                <Text style={s.dashCardEmpty}>Top players →</Text>
-              </Pressable>
-            </View>
 
             {/* PLAY button */}
             {inQueue ? (
@@ -98,6 +132,23 @@ export default function LobbyScreen() {
                 <Text style={s.playTxt}>PLAY!</Text>
               </Pressable>
             )}
+
+            {/* Dashboard tabs */}
+            <View style={s.tabsContainer}>
+              <View style={s.tabBar}>
+                {TABS.map((tab, i) => (
+                  <Pressable key={i} style={[s.tabBtn, activeTab === i && s.tabBtnActive]}
+                    onPress={() => setActiveTab(i)}>
+                    <Text style={[s.tabLabel, activeTab === i && s.tabLabelActive]}>{tab}</Text>
+                  </Pressable>
+                ))}
+              </View>
+              <View style={s.tabPanel}>
+                {activeTab === 0 && <RecentTab matches={myRecentMatches} navigationRef={navigationRef} />}
+                {activeTab === 1 && <FriendsTab />}
+                {activeTab === 2 && <LeaderboardTab navigationRef={navigationRef} />}
+              </View>
+            </View>
 
             {/* Active tables */}
             <View style={s.section}>
@@ -145,7 +196,7 @@ const s = StyleSheet.create({
   menuPanel: { position: 'absolute', top: 60, right: 16, width: 180, backgroundColor: '#111', borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)', borderRadius: 14, overflow: 'hidden', elevation: 8, shadowColor: '#000', shadowOpacity: 0.5, shadowRadius: 12 },
   menuItem: { paddingHorizontal: 16, paddingVertical: 14 },
   menuItemTxt: { color: 'rgba(255,255,255,0.9)', fontSize: 14 },
-  scroll: { flexGrow: 1, alignItems: 'center', padding: 24, gap: 28, paddingTop: 16 },
+  scroll: { flexGrow: 1, alignItems: 'center', padding: 24, gap: 24, paddingTop: 16 },
   greeting: { alignItems: 'center', gap: 4 },
   hi: { fontSize: 36, fontWeight: '900', color: colors.white, textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 8 },
   elo: { fontSize: 14, color: colors.gray, fontWeight: '600' },
@@ -156,13 +207,37 @@ const s = StyleSheet.create({
   queueTxt: { color: colors.white, fontSize: 18, fontWeight: '600' },
   cancelBtn: { paddingHorizontal: 24, paddingVertical: 10, borderRadius: 10, borderWidth: 1, borderColor: 'rgba(255,255,255,0.3)' },
   cancelTxt: { color: colors.white, fontSize: 14 },
-  dashboard: { flexDirection: 'row', width: '100%', maxWidth: 420, gap: 8 },
-  dashCard: { flex: 1, backgroundColor: 'rgba(255,255,255,0.06)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)', borderRadius: 12, padding: 10, gap: 5, minHeight: 80 },
-  dashCardTitle: { color: colors.goldLight, fontSize: 11, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 2 },
-  dashCardRow: { color: colors.white, fontSize: 11 },
-  dashCardEmpty: { color: colors.gray, fontSize: 11, fontStyle: 'italic' },
-  eloPos: { color: '#4ade80', fontWeight: '700' },
-  eloNeg: { color: '#f87171', fontWeight: '700' },
+
+  // Tabs
+  tabsContainer: { width: '100%', maxWidth: 420, gap: 0 },
+  tabBar: { flexDirection: 'row', backgroundColor: 'rgba(0,0,0,0.3)', borderRadius: 12, padding: 4, gap: 2 },
+  tabBtn: { flex: 1, paddingVertical: 8, borderRadius: 9, alignItems: 'center' },
+  tabBtnActive: { backgroundColor: 'rgba(255,255,255,0.12)' },
+  tabLabel: { color: colors.gray, fontSize: 13, fontWeight: '600' },
+  tabLabelActive: { color: colors.white, fontWeight: '800' },
+  tabPanel: { backgroundColor: 'rgba(255,255,255,0.04)', borderBottomLeftRadius: 12, borderBottomRightRadius: 12, borderWidth: 1, borderTopWidth: 0, borderColor: 'rgba(255,255,255,0.08)', minHeight: 80, padding: 14 },
+  tabContent: { gap: 8 },
+  tabEmpty: { color: colors.gray, fontSize: 13, fontStyle: 'italic', textAlign: 'center', paddingVertical: 8 },
+
+  // Recent tab
+  recentRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  resultDot: { width: 8, height: 8, borderRadius: 4, flexShrink: 0 },
+  dotWin: { backgroundColor: '#4ade80' },
+  dotLoss: { backgroundColor: '#f87171' },
+  recentOpp: { flex: 1, color: colors.white, fontSize: 13, fontWeight: '600' },
+  recentElo: { fontSize: 13, fontWeight: '700' },
+  replayArrow: { color: colors.gold, fontSize: 11 },
+  eloPos: { color: '#4ade80' },
+  eloNeg: { color: '#f87171' },
+
+  // Leaderboard tab
+  lbRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  lbRank: { width: 28, textAlign: 'center', fontSize: 14, color: colors.gray, fontWeight: '700' },
+  lbAvatar: { width: 24, height: 24, borderRadius: 12 },
+  lbName: { flex: 1, color: colors.white, fontSize: 13, fontWeight: '600' },
+  lbElo: { color: colors.goldLight, fontSize: 13, fontWeight: '800' },
+  lbMore: { color: colors.gold, fontSize: 12, textAlign: 'center', marginTop: 4 },
+
   section: { width: '100%', maxWidth: 420, gap: 10 },
   sectionLabel: { color: colors.white, fontSize: 16, fontWeight: '800' },
   playerRow: { paddingVertical: 8, paddingHorizontal: 14, backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: 10, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' },
