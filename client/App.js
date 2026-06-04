@@ -85,10 +85,14 @@ export default function App() {
     setPlayerInfo({ name, avatarId, playerId });
     setError(null);
     emit('enter-lobby', { playerId, playerName: name, avatarId });
-    // Fetch recent matches for dashboard
+    // Fetch profile + pending friend request count on login
     fetch(`${SERVER_URL}/api/player/${playerId}/profile`)
       .then(r => r.json())
       .then(d => { setMyRecentMatches(d.history?.slice(0, 3) || []); if (d.stats?.elo) setMyElo(d.stats.elo); })
+      .catch(() => {});
+    fetch(`${SERVER_URL}/api/friends/${playerId}`)
+      .then(r => r.json())
+      .then(d => { if (Array.isArray(d)) setPendingFriendRequests(d.filter(f => f.status === 'pending' && !f.isRequester).length); })
       .catch(() => {});
     navigationRef.navigate('Lobby');
   }, [emit]);

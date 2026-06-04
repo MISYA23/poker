@@ -16,7 +16,7 @@ const AVATAR_IMAGES = {
   jazz:  require('../../assets/jazz.png'),
 };
 
-const TAB_LABELS = (pending) => ['Recent', pending > 0 ? `Friends (${pending})` : 'Friends', 'Leaderboard'];
+const TAB_NAMES = ['Recent', 'Friends', 'Leaderboard'];
 
 function RecentTab({ matches, navigationRef }) {
   if (!matches?.length) return <Text style={s.tabEmpty}>No matches yet — play your first game!</Text>;
@@ -184,10 +184,17 @@ export default function LobbyScreen() {
             {/* Dashboard tabs */}
             <View style={s.tabsContainer}>
               <View style={s.tabBar}>
-                {TAB_LABELS(pendingFriendRequests).map((tab, i) => (
+                {TAB_NAMES.map((tab, i) => (
                   <Pressable key={i} style={[s.tabBtn, activeTab === i && s.tabBtnActive]}
                     onPress={() => setActiveTab(i)}>
-                    <Text style={[s.tabLabel, activeTab === i && s.tabLabelActive]}>{tab}</Text>
+                    <View style={s.tabBtnInner}>
+                      <Text style={[s.tabLabel, activeTab === i && s.tabLabelActive]}>{tab}</Text>
+                      {i === 1 && pendingFriendRequests > 0 && (
+                        <View style={s.badge}>
+                          <Text style={s.badgeTxt}>{pendingFriendRequests}</Text>
+                        </View>
+                      )}
+                    </View>
                   </Pressable>
                 ))}
               </View>
@@ -237,6 +244,9 @@ const s = StyleSheet.create({
   tabsContainer: { width: '100%', maxWidth: 420 },
   tabBar: { flexDirection: 'row', backgroundColor: 'rgba(0,0,0,0.55)', borderRadius: 12, padding: 4, gap: 2, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' },
   tabBtn: { flex: 1, paddingVertical: 9, borderRadius: 9, alignItems: 'center' },
+  tabBtnInner: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  badge: { backgroundColor: '#ef4444', borderRadius: 8, minWidth: 16, height: 16, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4 },
+  badgeTxt: { color: '#fff', fontSize: 10, fontWeight: '800' },
   tabBtnActive: { backgroundColor: colors.gold },
   tabLabel: { color: 'rgba(255,255,255,0.5)', fontSize: 13, fontWeight: '700' },
   tabLabelActive: { color: '#000', fontWeight: '800' },

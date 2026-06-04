@@ -179,17 +179,24 @@ export default function FriendsTab({ onlinePlayers }) {
         </View>
       )}
 
-      {/* Incoming requests */}
-      {incoming.length > 0 && (
-        <View style={s.section}>
-          <Text style={s.sectionLabel}>Friend Requests</Text>
-          {incoming.map(f => (
-            <PlayerRow key={f.friendId} player={{ ...f, displayName: f.displayName }}
-              action={() => accept(f.friendId)} actionLabel="Accept" actionColor="#22c55e"
-              secondAction={() => decline(f.friendId)} secondLabel="Decline" />
-          ))}
+      {/* Incoming requests — prominent cards at top */}
+      {incoming.map(f => (
+        <View key={f.friendId} style={s.requestCard}>
+          <Image source={AVATAR_IMAGES[f.avatarId] || AVATAR_IMAGES.dk} style={s.requestAvatar} />
+          <View style={s.requestInfo}>
+            <Text style={s.requestName}>{f.displayName}</Text>
+            <Text style={s.requestSub}>wants to be your friend</Text>
+          </View>
+          <View style={s.requestBtns}>
+            <Pressable style={s.requestDecline} onPress={() => decline(f.friendId)}>
+              <Text style={s.requestBtnTxt}>✕</Text>
+            </Pressable>
+            <Pressable style={s.requestAccept} onPress={() => accept(f.friendId)}>
+              <Text style={s.requestBtnTxt}>✓</Text>
+            </Pressable>
+          </View>
         </View>
-      )}
+      ))}
 
       {/* Friends */}
       <View style={s.section}>
@@ -224,6 +231,15 @@ export default function FriendsTab({ onlinePlayers }) {
 
 const s = StyleSheet.create({
   wrap: { gap: 12 },
+  requestCard: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: 'rgba(34,197,94,0.1)', borderRadius: 12, borderWidth: 1, borderColor: 'rgba(34,197,94,0.3)', padding: 10 },
+  requestAvatar: { width: 36, height: 36, borderRadius: 18 },
+  requestInfo: { flex: 1 },
+  requestName: { color: colors.white, fontSize: 14, fontWeight: '700' },
+  requestSub: { color: 'rgba(255,255,255,0.5)', fontSize: 11 },
+  requestBtns: { flexDirection: 'row', gap: 6 },
+  requestDecline: { width: 32, height: 32, borderRadius: 16, backgroundColor: 'rgba(239,68,68,0.2)', borderWidth: 1, borderColor: '#ef4444', alignItems: 'center', justifyContent: 'center' },
+  requestAccept: { width: 32, height: 32, borderRadius: 16, backgroundColor: 'rgba(34,197,94,0.2)', borderWidth: 1, borderColor: '#22c55e', alignItems: 'center', justifyContent: 'center' },
+  requestBtnTxt: { color: colors.white, fontSize: 14, fontWeight: '800' },
   challengeBanner: { backgroundColor: 'rgba(124,58,237,0.25)', borderRadius: 10, borderWidth: 1, borderColor: '#7c3aed', padding: 10, gap: 8 },
   challengeTxt: { color: colors.white, fontSize: 14, fontWeight: '700', textAlign: 'center' },
   challengeBtns: { flexDirection: 'row', gap: 8 },
