@@ -251,11 +251,11 @@ const s = StyleSheet.create({
 
   // Tabs
   tabsContainer: { width: '100%', maxWidth: 420 },
-  tabBar: { flexDirection: 'row', backgroundColor: 'rgba(0,0,0,0.3)', borderRadius: 12, padding: 4, gap: 2 },
-  tabBtn: { flex: 1, paddingVertical: 8, borderRadius: 9, alignItems: 'center' },
-  tabBtnActive: { backgroundColor: 'rgba(255,255,255,0.12)' },
-  tabLabel: { color: colors.gray, fontSize: 13, fontWeight: '600' },
-  tabLabelActive: { color: colors.white, fontWeight: '800' },
+  tabBar: { flexDirection: 'row', backgroundColor: 'rgba(0,0,0,0.55)', borderRadius: 12, padding: 4, gap: 2, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' },
+  tabBtn: { flex: 1, paddingVertical: 9, borderRadius: 9, alignItems: 'center' },
+  tabBtnActive: { backgroundColor: colors.gold },
+  tabLabel: { color: 'rgba(255,255,255,0.5)', fontSize: 13, fontWeight: '700' },
+  tabLabelActive: { color: '#000', fontWeight: '800' },
   tabPanel: { backgroundColor: 'rgba(255,255,255,0.04)', borderBottomLeftRadius: 12, borderBottomRightRadius: 12, borderWidth: 1, borderTopWidth: 0, borderColor: 'rgba(255,255,255,0.08)', minHeight: 80, padding: 14 },
   tabContent: { gap: 8 },
   tabEmpty: { color: colors.gray, fontSize: 13, fontStyle: 'italic', textAlign: 'center', paddingVertical: 4 },
