@@ -14,7 +14,8 @@ import LoginScreen   from './src/screens/LoginScreen';
 import LobbyScreen   from './src/screens/LobbyScreen';
 import GameScreen    from './src/screens/GameScreen';
 import ProfileScreen    from './src/screens/ProfileScreen';
-import HandReplayScreen from './src/screens/HandReplayScreen';
+import HandReplayScreen   from './src/screens/HandReplayScreen';
+import LeaderboardScreen  from './src/screens/LeaderboardScreen';
 
 const Stack = createStackNavigator();
 
@@ -157,7 +158,8 @@ export default function App() {
               <Stack.Screen name="Lobby"   component={LobbyScreen} />
               <Stack.Screen name="Game"    component={GameScreen} />
               <Stack.Screen name="Profile"    component={ProfileScreen} />
-              <Stack.Screen name="HandReplay" component={HandReplayScreen} />
+              <Stack.Screen name="HandReplay"   component={HandReplayScreen} />
+              <Stack.Screen name="Leaderboard" component={LeaderboardScreen} />
             </Stack.Navigator>
           </NavigationContainer>
         </SafeAreaProvider>

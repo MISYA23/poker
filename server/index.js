@@ -629,6 +629,33 @@ app.get('/api/matches', (_, res) => {
 // Kept for TableSelectScreen backward compat — returns empty
 app.get('/api/rooms', (_, res) => res.json([]));
 
+// Leaderboard — all players ranked by ELO
+app.get('/api/leaderboard', async (req, res) => {
+  try {
+    const { rows } = await db.query(
+      `SELECT p.id, p.display_name, p.avatar_id, p.is_guest,
+              COALESCE(ps.elo, 1200) AS elo,
+              COALESCE(ps.matches_played, 0) AS matches_played,
+              COALESCE(ps.matches_won, 0) AS matches_won
+       FROM players p
+       LEFT JOIN player_stats ps ON ps.player_id = p.id
+       ORDER BY elo DESC, matches_played DESC
+       LIMIT 100`
+    );
+    res.json(rows.map((r, i) => ({
+      rank:          i + 1,
+      playerId:      r.id,
+      displayName:   r.display_name,
+      avatarId:      r.avatar_id,
+      isGuest:       r.is_guest,
+      elo:           r.elo,
+      wins:          r.matches_won,
+      losses:        r.matches_played - r.matches_won,
+      matchesPlayed: r.matches_played,
+    })));
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 // Guest registration — upsert into players
 app.post('/api/player/guest', async (req, res) => {
   try {

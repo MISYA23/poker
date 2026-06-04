@@ -79,10 +79,10 @@ export default function LobbyScreen() {
               </View>
 
               {/* Leaderboard */}
-              <View style={s.dashCard}>
+              <Pressable style={s.dashCard} onPress={() => navigationRef.navigate('Leaderboard')}>
                 <Text style={s.dashCardTitle}>Leaderboard</Text>
-                <Text style={s.dashCardEmpty}>Coming soon</Text>
-              </View>
+                <Text style={s.dashCardEmpty}>Top players →</Text>
+              </Pressable>
             </View>
 
             {/* PLAY button */}
