@@ -20,9 +20,10 @@ const io = new Server(server, { cors: { origin: '*', methods: ['GET', 'POST'] } 
 
 const db = new Pool({ connectionString: process.env.DATABASE_URL });
 
-const GAME_OPTIONS  = { startingChips: 1000, bigBlind: 20, smallBlind: 10 };
-const TURN_SECONDS  = 20;
 const VALID_AVATARS = ['dk', 'diddy', 'alfie', 'jazz'];
+
+// Populated from game_config table on startup — never mutate directly
+let cfg = {};
 
 // matchId → { id, game, p1, p2, observers, rematchVotes, timers... }
 const matches = new Map();
@@ -45,7 +46,7 @@ function createMatch(p1, p2) {
   const id = randomUUID();
   const m = {
     id,
-    game: new PokerGame(id, GAME_OPTIONS),
+    game: new PokerGame(id, { startingChips: cfg.starting_chips, bigBlind: cfg.big_blind, smallBlind: cfg.small_blind }),
     p1, p2,                  // { playerId, playerName, avatarId, socketId }
     observers: new Set(),    // socketIds watching
     rematchVotes: new Set(),
@@ -71,7 +72,7 @@ function resetRoom(m) {
   m.timerPlayerId = null;
   m.turnDeadline = null;
   m.rematchVotes = new Set();
-  m.game = new PokerGame(m.id, GAME_OPTIONS);
+  m.game = new PokerGame(m.id, { startingChips: cfg.starting_chips, bigBlind: cfg.big_blind, smallBlind: cfg.small_blind });
 }
 
 // ── Turn timer ────────────────────────────────────────────────────────────────
@@ -83,7 +84,7 @@ function startTurnTimer(m) {
   m.timerPlayerId = pid;
   m.turnDeadline  = null;
   if (!pid || m.game.phase === 'waiting' || m.game.phase === 'showdown') return;
-  m.turnDeadline = Date.now() + TURN_SECONDS * 1000;
+  m.turnDeadline = Date.now() + cfg.turn_seconds * 1000;
   m.turnTimer = setTimeout(() => {
     m.turnTimer = null;
     if (m.game.currentPlayerId !== pid) return;
@@ -92,9 +93,9 @@ function startTurnTimer(m) {
     try {
       m.game.handleAction(pid, 'fold');
       broadcastMatchState(m);
-      if (m.game.phase === 'showdown') scheduleNextHand(m, 5000);
+      if (m.game.phase === 'showdown') scheduleNextHand(m, cfg.inter_hand_delay_ms);
     } catch (e) {}
-  }, TURN_SECONDS * 1000);
+  }, cfg.turn_seconds * 1000);
 }
 
 // ── Broadcast ─────────────────────────────────────────────────────────────────
@@ -171,7 +172,7 @@ function tryAutoStart(m) {
         await beginHand(m);
         broadcastMatchState(m);
       }
-    }, 3000);
+    }, cfg.auto_start_delay_ms);
   }
 }
 
@@ -405,7 +406,7 @@ io.on('connection', (socket) => {
       logAction(m, m.game, sp.playerId, sp.playerName, action, amount, prevCC)
         .catch(e => console.error('[hand] logAction:', e.message));
       broadcastMatchState(m);
-      if (m.game.phase === 'showdown') scheduleNextHand(m, 5000);
+      if (m.game.phase === 'showdown') scheduleNextHand(m, cfg.inter_hand_delay_ms);
     } catch (err) {
       socket.emit('error', { message: err.message });
     }
@@ -942,8 +943,67 @@ app.get('*', (req, res) => {
   res.sendFile(path.join(distDir, 'index.html'));
 });
 
+// ── Game config ───────────────────────────────────────────────────────────────
+
+async function loadGameConfig() {
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS game_config (
+      key         TEXT PRIMARY KEY,
+      value       NUMERIC NOT NULL,
+      description TEXT
+    )
+  `);
+
+  const defaults = [
+    ['starting_chips',     1000, 'Starting chip count per player'],
+    ['big_blind',            20, 'Big blind amount'],
+    ['small_blind',          10, 'Small blind amount'],
+    ['turn_seconds',         20, 'Seconds a player has to act'],
+    ['inter_hand_delay_ms', 5000, 'Pause between hands (ms)'],
+    ['auto_start_delay_ms', 3000, 'Delay before first hand starts (ms)'],
+  ];
+
+  for (const [key, value, description] of defaults) {
+    await db.query(
+      `INSERT INTO game_config (key, value, description) VALUES ($1, $2, $3) ON CONFLICT (key) DO NOTHING`,
+      [key, value, description]
+    );
+  }
+
+  const { rows } = await db.query('SELECT key, value FROM game_config');
+  const loaded = {};
+  for (const { key, value } of rows) loaded[key] = Number(value);
+  console.log('[config] loaded:', loaded);
+  return loaded;
+}
+
+app.get('/admin/config', async (_, res) => {
+  try {
+    const { rows } = await db.query('SELECT key, value, description FROM game_config ORDER BY key');
+    res.json(rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.put('/admin/config/:key', async (req, res) => {
+  try {
+    const { key } = req.params;
+    const { value } = req.body;
+    if (value === undefined || isNaN(Number(value))) return res.status(400).json({ error: 'numeric value required' });
+    const { rowCount } = await db.query('UPDATE game_config SET value=$1 WHERE key=$2', [Number(value), key]);
+    if (!rowCount) return res.status(404).json({ error: 'unknown config key' });
+    cfg[key] = Number(value);
+    res.json({ ok: true, key, value: cfg[key] });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 // ── Start ─────────────────────────────────────────────────────────────────────
 
 const PORT = process.env.PORT || 3843;
-redis.connect().catch(e => console.error('[redis] connect failed:', e.message));
-server.listen(PORT, () => console.log(`Poker server on port ${PORT}`));
+
+async function start() {
+  await redis.connect().catch(e => console.error('[redis] connect failed:', e.message));
+  cfg = await loadGameConfig();
+  server.listen(PORT, () => console.log(`Poker server on port ${PORT}`));
+}
+
+start();
