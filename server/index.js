@@ -180,7 +180,8 @@ function scheduleNextHand(m, delay = 5000) {
   if (m.nextHandTimer) clearTimeout(m.nextHandTimer);
   m.nextHandTimer = setTimeout(async () => {
     m.nextHandTimer = null;
-    await flushHandToDb(m, m.game).catch(e => console.error('[hand] flush:', e.message));
+    // flushHandToDb captures currentHandUuid synchronously before its first await — safe to clear immediately after
+    flushHandToDb(m, m.game).catch(e => console.error('[hand] flush:', e.message));
     m.currentHandUuid = null;
     m.handEventSeq    = 0;
 
@@ -207,91 +208,85 @@ function scheduleNextHand(m, delay = 5000) {
 
 // ── Match end + ELO ───────────────────────────────────────────────────────────
 
-async function getOrCreateStats(playerId) {
-  // Ensure player row exists — only set display_name on first insert, never overwrite
-  await db.query(
-    `INSERT INTO players (id, display_name, is_guest) VALUES ($1, 'Player', true)
-     ON CONFLICT (id) DO UPDATE SET last_seen_at=NOW()`,
-    [playerId]
-  );
-  const { rows } = await db.query(
-    `INSERT INTO player_stats (player_id) VALUES ($1)
-     ON CONFLICT (player_id) DO UPDATE SET player_id=EXCLUDED.player_id
-     RETURNING *`,
-    [playerId]
-  );
-  return rows[0];
-}
-
 async function endMatch(m, winnerId) {
   if (m.ended) return;
   m.ended = true;
 
-  const loser = matchPlayers(m).find(p => p.playerId !== winnerId);
+  const loser  = matchPlayers(m).find(p => p.playerId !== winnerId);
   const winner = matchPlayers(m).find(p => p.playerId === winnerId);
   if (!winner || !loser) return;
 
-  try {
-    // Ensure both players have real names in the players table
-    for (const p of [winner, loser]) {
-      await db.query(
-        `INSERT INTO players (id, display_name, avatar_id, is_guest)
-         VALUES ($1, $2, $3, true)
-         ON CONFLICT (id) DO UPDATE SET display_name=$2, avatar_id=$3, last_seen_at=NOW()`,
-        [p.playerId, (p.playerName || 'Player').trim().slice(0, 20), p.avatarId || 'dk']
-      );
-    }
+  // Use cached ELO — only hit DB on cache miss (first match after server restart)
+  const [wElo, lElo] = await Promise.all([
+    eloCache[winner.playerId] != null
+      ? Promise.resolve(eloCache[winner.playerId])
+      : db.query('SELECT elo FROM player_stats WHERE player_id=$1', [winner.playerId])
+          .then(r => r.rows[0]?.elo ?? 1200).catch(() => 1200),
+    eloCache[loser.playerId] != null
+      ? Promise.resolve(eloCache[loser.playerId])
+      : db.query('SELECT elo FROM player_stats WHERE player_id=$1', [loser.playerId])
+          .then(r => r.rows[0]?.elo ?? 1200).catch(() => 1200),
+  ]);
 
-    const [wStats, lStats] = await Promise.all([
-      getOrCreateStats(winner.playerId),
-      getOrCreateStats(loser.playerId),
-    ]);
-    const { winnerGain, loserLoss } = calcElo(wStats.elo, lStats.elo);
-    const wNewElo = wStats.elo + winnerGain;
-    const lNewElo = lStats.elo - loserLoss;
+  const { winnerGain, loserLoss } = calcElo(wElo, lElo);
+  const wNewElo = wElo + winnerGain;
+  const lNewElo = lElo - loserLoss;
 
-    // Update in-memory ELO cache for match list
-    eloCache[winner.playerId] = wNewElo;
-    eloCache[loser.playerId]  = lNewElo;
+  eloCache[winner.playerId] = wNewElo;
+  eloCache[loser.playerId]  = lNewElo;
 
-    await Promise.all([
-      db.query(
-        `UPDATE player_stats SET elo=$1, matches_played=matches_played+1,
-         matches_won=matches_won+1, updated_at=NOW() WHERE player_id=$2`,
-        [wNewElo, winner.playerId]
-      ),
-      db.query(
-        `UPDATE player_stats SET elo=$1, matches_played=matches_played+1,
-         updated_at=NOW() WHERE player_id=$2`,
-        [lNewElo, loser.playerId]
-      ),
-      db.query(
-        `INSERT INTO matches (uuid,player1_id,player2_id,status,ended_at,winner_id,
-          player1_elo_before,player2_elo_before,player1_elo_after,player2_elo_after)
-         VALUES ($1,$2,$3,'complete',NOW(),$4,$5,$6,$7,$8)
-         ON CONFLICT (uuid) DO UPDATE SET
-           status='complete', ended_at=NOW(), winner_id=$4,
-           player1_elo_before=$5, player2_elo_before=$6,
-           player1_elo_after=$7, player2_elo_after=$8`,
-        [m.id, winner.playerId, loser.playerId, winnerId,
-         wStats.elo, lStats.elo, wNewElo, lNewElo]
-      ),
-    ]);
-
-    // Notify players with ELO changes
-    for (const p of matchPlayers(m)) {
-      const isWin = p.playerId === winnerId;
-      io.to(p.socketId).emit('match-over', {
-        winnerId, winnerName: winner.playerName,
-        eloChange: isWin ? +winnerGain : -loserLoss,
-        newElo:    isWin ? wNewElo : lNewElo,
-      });
-    }
-    console.log(`[match] ended — winner: ${winner.playerName}, elo: ${wStats.elo}→${wNewElo}`);
-  } catch (err) {
-    console.error('[match] endMatch error:', err.message);
+  // Notify players immediately — no waiting for DB
+  for (const p of matchPlayers(m)) {
+    const isWin = p.playerId === winnerId;
+    io.to(p.socketId).emit('match-over', {
+      winnerId, winnerName: winner.playerName,
+      eloChange: isWin ? +winnerGain : -loserLoss,
+      newElo:    isWin ? wNewElo : lNewElo,
+    });
   }
+  console.log(`[match] ended — winner: ${winner.playerName}, elo: ${wElo}→${wNewElo}`);
   broadcastMatchList();
+
+  // Persist to DB in the background — does not block player-facing events
+  persistMatchResult(m, winner, loser, wElo, lElo, wNewElo, lNewElo, winnerId)
+    .catch(e => console.error('[match] persist failed:', e.message));
+}
+
+async function persistMatchResult(m, winner, loser, wEloBefore, lEloBefore, wEloAfter, lEloAfter, winnerId) {
+  await Promise.all([winner, loser].map(p => db.query(
+    `INSERT INTO players (id, display_name, avatar_id, is_guest)
+     VALUES ($1, $2, $3, true)
+     ON CONFLICT (id) DO UPDATE SET display_name=$2, avatar_id=$3, last_seen_at=NOW()`,
+    [p.playerId, (p.playerName || 'Player').trim().slice(0, 20), p.avatarId || 'dk']
+  )));
+
+  await Promise.all([
+    db.query(
+      `INSERT INTO player_stats (player_id, elo, matches_played, matches_won)
+       VALUES ($1, $2, 1, 1)
+       ON CONFLICT (player_id) DO UPDATE SET
+         elo=$2, matches_played=player_stats.matches_played+1,
+         matches_won=player_stats.matches_won+1, updated_at=NOW()`,
+      [winner.playerId, wEloAfter]
+    ),
+    db.query(
+      `INSERT INTO player_stats (player_id, elo, matches_played, matches_won)
+       VALUES ($1, $2, 1, 0)
+       ON CONFLICT (player_id) DO UPDATE SET
+         elo=$2, matches_played=player_stats.matches_played+1, updated_at=NOW()`,
+      [loser.playerId, lEloAfter]
+    ),
+    db.query(
+      `INSERT INTO matches (uuid, player1_id, player2_id, status, ended_at, winner_id,
+        player1_elo_before, player2_elo_before, player1_elo_after, player2_elo_after)
+       VALUES ($1,$2,$3,'complete',NOW(),$4,$5,$6,$7,$8)
+       ON CONFLICT (uuid) DO UPDATE SET
+         status='complete', ended_at=NOW(), winner_id=$4,
+         player1_elo_before=$5, player2_elo_before=$6,
+         player1_elo_after=$7, player2_elo_after=$8`,
+      [m.id, winner.playerId, loser.playerId, winnerId, wEloBefore, lEloBefore, wEloAfter, lEloAfter]
+    ),
+  ]);
 }
 
 // ── Socket handlers ───────────────────────────────────────────────────────────
