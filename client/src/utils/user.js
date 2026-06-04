@@ -15,8 +15,10 @@ export async function setUser(fields) {
 
 async function generateGuestId() {
   if (Platform.OS === 'android') {
-    const androidId = await Application.getAndroidIdAsync();
-    if (androidId) return `a_${androidId}`;
+    try {
+      const androidId = await Application.getAndroidIdAsync();
+      if (androidId) return `a_${androidId}`;
+    } catch {}
   }
   return 'guest_' + Math.random().toString(36).slice(2) + Date.now().toString(36);
 }
