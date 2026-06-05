@@ -28,7 +28,7 @@ export default function BettingControls({ gameState, myId, onAction, raiseAmount
       {canRaise && (
         <View style={s.slider}>
           <Text style={s.sliderLabel}>
-            {raiseAmount >= maxRaise ? 'All In' : `$${raiseAmount.toLocaleString()}`}
+            {raiseAmount >= maxRaise ? 'All In' : raiseAmount.toLocaleString()}
           </Text>
           <Slider
             style={s.sliderTrack}
@@ -54,14 +54,14 @@ export default function BettingControls({ gameState, myId, onAction, raiseAmount
           </Pressable>
         ) : (
           <Pressable style={[s.btn, s.btnCall]} onPress={() => onAction('call')}>
-            <Text style={s.btnTxt}>Call{callAmount > 0 ? ` $${callAmount.toLocaleString()}` : ''}</Text>
+            <Text style={s.btnTxt}>Call{callAmount > 0 ? ` ${callAmount.toLocaleString()}` : ''}</Text>
           </Pressable>
         )}
 
         {canRaise ? (
           <Pressable style={[s.btn, s.btnRaise]} onPress={handleRaise}>
             <Text style={s.btnTxt}>
-              {raiseAmount >= maxRaise ? 'All In' : `${isOpening ? 'Bet' : 'Raise'} $${raiseAmount.toLocaleString()}`}
+              {raiseAmount >= maxRaise ? 'All In' : `${isOpening ? 'Bet' : 'Raise'} ${raiseAmount.toLocaleString()}`}
             </Text>
           </Pressable>
         ) : (

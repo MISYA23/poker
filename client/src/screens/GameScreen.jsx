@@ -1,13 +1,13 @@
 import React, { useContext, useState, useEffect, useRef } from 'react';
 import {
-  View, Text, Pressable, StyleSheet, Animated,
+  View, Text, Pressable, StyleSheet, Animated, Easing,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Circle } from 'react-native-svg';
 import { GameContext } from '../context/GameContext';
 import Card from '../components/Card';
 import Avatar from '../components/Avatar';
-import { ChipStack } from '../components/PokerChip';
+import Bananas from '../components/Bananas';
 import BettingControls from '../components/BettingControls';
 import { colors } from '../theme';
 import { SERVER_URL, VERSION } from '../config';
@@ -62,8 +62,8 @@ function useActionFlash(player, lastAction) {
     if (!t || t === seen.current) return;
     seen.current = t;
     const a = lastAction;
-    const map = { fold: 'Fold', check: 'Check', call: `Call $${a.amount?.toLocaleString() || ''}`,
-      bet: `Bet $${a.amount?.toLocaleString() || ''}`, raise: `Raise $${a.amount?.toLocaleString() || ''}`, 'all-in': 'All In' };
+    const map = { fold: 'Fold', check: 'Check', call: `Call ${a.amount?.toLocaleString() || ''}`,
+      bet: `Bet ${a.amount?.toLocaleString() || ''}`, raise: `Raise ${a.amount?.toLocaleString() || ''}`, 'all-in': 'All In' };
     setLabel(map[a.action] || a.action);
     const id = setTimeout(() => setLabel(null), 2500);
     return () => clearTimeout(id);
@@ -111,7 +111,7 @@ function PlayerPod({ player, isMe, turnDeadline, lastAction, win, displayChips, 
 
   const isActive = !!player.isCurrentPlayer;
   const hasCards = player.holeCards?.length > 0 && !player.folded;
-  const chipLabel = win ? '🏆 Winner!' : (actionLbl || `$${(displayChips ?? player.chips).toLocaleString()}`);
+  const chipLabel = win ? '🏆 Winner!' : (actionLbl || (displayChips ?? player.chips).toLocaleString());
 
   const cards = (
     <View style={[s.podCards, !hasCards && s.hidden]}>
@@ -226,6 +226,41 @@ export default function GameScreen() {
   const dispPot  = locked ? snap.pot : totalPot;
   const chipsFor = p => locked ? (snap.chips[p?.id] ?? p?.chips ?? 0) : (p?.chips ?? 0);
 
+  // Pot-to-winner banana flight. Fires once when showWinners flips true and
+  // we have a confirmed winner. Bananas appear at the pot center and fly
+  // toward the winner's nameplate (up to opp, down to me), then fade.
+  const flightY       = useRef(new Animated.Value(0)).current;
+  const flightOpacity = useRef(new Animated.Value(0)).current;
+  const flightScale   = useRef(new Animated.Value(1)).current;
+  const [flightAmount, setFlightAmount] = useState(0);
+  useEffect(() => {
+    if (!showWinners || !gameState?.winners?.length) {
+      flightOpacity.setValue(0);
+      return;
+    }
+    const winner = gameState.winners[0];
+    const dir = winner.playerId === myId ? 1 : -1; // +1 down toward me, -1 up toward opp
+    setFlightAmount(winner.amount || snap.pot || totalPot);
+    flightY.setValue(0);
+    flightScale.setValue(1);
+    flightOpacity.setValue(1);
+    Animated.parallel([
+      Animated.timing(flightY, {
+        toValue: dir * 220, duration: 900,
+        easing: Easing.bezier(0.25, 0.46, 0.45, 0.94),
+        useNativeDriver: true,
+      }),
+      Animated.sequence([
+        Animated.timing(flightScale, { toValue: 1.2, duration: 700, useNativeDriver: true }),
+        Animated.timing(flightScale, { toValue: 1,   duration: 200, useNativeDriver: true }),
+      ]),
+      Animated.sequence([
+        Animated.delay(700),
+        Animated.timing(flightOpacity, { toValue: 0, duration: 200, useNativeDriver: true }),
+      ]),
+    ]).start();
+  }, [showWinners]);
+
   const centerAction = useCenterAction(gameState?.lastAction);
 
   const handName = (() => {
@@ -301,8 +336,8 @@ export default function GameScreen() {
           {/* Opponent bet */}
           {(opponent?.roundBet > 0 || opponent?.allIn) && (
             <View style={s.betTop}>
-              {opponent.roundBet > 0 && <ChipStack amount={opponent.roundBet} size={24} />}
-              {opponent.roundBet > 0 && <Text style={s.betAmt}>${opponent.roundBet.toLocaleString()}</Text>}
+              {opponent.roundBet > 0 && <Bananas amount={opponent.roundBet} size={20} />}
+              {opponent.roundBet > 0 && <Text style={s.betAmt}>{opponent.roundBet.toLocaleString()}</Text>}
               {opponent.allIn && <Text style={s.allInTag}>ALL IN</Text>}
             </View>
           )}
@@ -318,8 +353,8 @@ export default function GameScreen() {
             </View>
             {dispPot > 0 && (
               <View style={s.potRow}>
-                <ChipStack amount={dispPot} size={24} />
-                <Text style={s.potAmt}>${dispPot.toLocaleString()}</Text>
+                <Bananas amount={dispPot} size={20} />
+                <Text style={s.potAmt}>{dispPot.toLocaleString()}</Text>
               </View>
             )}
             {(centerAction || handName) && (
@@ -330,8 +365,8 @@ export default function GameScreen() {
           {/* My bet */}
           {(me?.roundBet > 0 || me?.allIn) && (
             <View style={s.betBottom}>
-              {me.roundBet > 0 && <ChipStack amount={me.roundBet} size={24} />}
-              {me.roundBet > 0 && <Text style={s.betAmt}>${me.roundBet.toLocaleString()}</Text>}
+              {me.roundBet > 0 && <Bananas amount={me.roundBet} size={20} />}
+              {me.roundBet > 0 && <Text style={s.betAmt}>{me.roundBet.toLocaleString()}</Text>}
               {me.allIn && <Text style={s.allInTag}>ALL IN</Text>}
             </View>
           )}
@@ -339,6 +374,16 @@ export default function GameScreen() {
           {/* Dealer buttons */}
           {opponent?.isDealer && <View style={[s.dealerBtn, s.dealerTop]}><Text style={s.dealerTxt}>D</Text></View>}
           {me?.isDealer       && <View style={[s.dealerBtn, s.dealerBottom]}><Text style={s.dealerTxt}>D</Text></View>}
+
+          {/* Pot-to-winner banana flight */}
+          {flightAmount > 0 && (
+            <Animated.View pointerEvents="none" style={[s.winFlight, {
+              opacity: flightOpacity,
+              transform: [{ translateY: flightY }, { scale: flightScale }],
+            }]}>
+              <Bananas amount={flightAmount} size={28} />
+            </Animated.View>
+          )}
         </View>
 
         {/* My pod */}
@@ -511,6 +556,9 @@ const s = StyleSheet.create({
   dealerTop:    { top: 10, right: 20 },
   dealerBottom: { bottom: 10, right: 20 },
   dealerTxt: { color: '#333', fontSize: 11, fontWeight: '800' },
+
+  // Pot-to-winner banana flight overlay (sits centered on the felt)
+  winFlight: { position: 'absolute', top: '50%', alignSelf: 'center', marginTop: -14, zIndex: 30 },
 
   // Controls
   controls: { paddingHorizontal: 12, paddingBottom: 8, paddingTop: 4, backgroundColor: 'rgba(0,0,0,0.5)', borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.08)' },
