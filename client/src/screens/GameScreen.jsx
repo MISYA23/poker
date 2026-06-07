@@ -1,20 +1,47 @@
 import React, { useContext, useState, useEffect, useRef } from 'react';
 import {
   View, Text, Pressable, StyleSheet, Animated, Easing,
+  useWindowDimensions, Image,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+
+// Single in-game background: the wooden poker table artwork (rim + cream
+// felt interior + Poker Monkey skull logo + wooden floor and decorations
+// around the oval). Replaces the previous jungle bg for the game scene.
+const INGAME_BG = require('../../assets/table.png');
 import Svg, { Circle } from 'react-native-svg';
 import { GameContext } from '../context/GameContext';
 import Card from '../components/Card';
 import Avatar from '../components/Avatar';
-import Bananas from '../components/Bananas';
+import Chips from '../components/Chips';
 import BettingControls from '../components/BettingControls';
 import { colors } from '../theme';
 import { SERVER_URL, VERSION } from '../config';
 
 const TURN_DURATION_MS = 20000;
-const RING_R = 26;
-const RING_CIRC = 2 * Math.PI * RING_R;
+
+// Fixed design canvas — everything is drawn against this portrait reference,
+// then the whole canvas is scaled uniformly to fit the device's safe area.
+// Same composition on every screen, just a different overall scale.
+const DESIGN_WIDTH  = 393;
+const DESIGN_HEIGHT = 852;
+
+// Fixed pod geometry — avatar, nameplate and cards never change size.
+// Nameplate is vertically centred on the avatar; cards float just above
+// the nameplate, close to the avatar but never touching either.
+const AVATAR_SIZE      = 156;
+const NAMEPLATE_HEIGHT = 64;
+const POD_HEIGHT       = 200;
+const NAMEPLATE_TOP    = (POD_HEIGHT - NAMEPLATE_HEIGHT) / 2; // 68 — top of nameplate
+const AVATAR_TOP       = (POD_HEIGHT - AVATAR_SIZE) / 2;      // 22 — top of avatar
+const CARD_NAMEPLATE_GAP = 4;
+const CARDS_BOTTOM     = POD_HEIGHT - NAMEPLATE_TOP + CARD_NAMEPLATE_GAP; // 136 (anchor from pod bottom)
+const CARD_AVATAR_GAP  = 6;
+
+// Timer ring sized to surround the standalone avatar.
+const RING_R     = AVATAR_SIZE / 2;
+const RING_BOX   = RING_R * 2 + 6;
+const RING_CIRC  = 2 * Math.PI * RING_R;
 
 // ─── TimerRing ────────────────────────────────────────────────────────────────
 function TimerRing({ deadline }) {
@@ -33,12 +60,13 @@ function TimerRing({ deadline }) {
   }, [deadline]);
   if (!deadline) return null;
   const ringColor = timeLeft <= 5 ? '#f87171' : timeLeft <= 10 ? '#fb923c' : colors.gold;
+  const c = RING_BOX / 2;
   return (
-    <Svg width={56} height={56} viewBox="0 0 56 56" style={s.ring}>
-      <Circle cx="28" cy="28" r={RING_R} fill="none" stroke="rgba(255,255,255,0.12)" strokeWidth={3} />
-      <Circle cx="28" cy="28" r={RING_R} fill="none" stroke={ringColor} strokeWidth={3}
+    <Svg width={RING_BOX} height={RING_BOX} viewBox={`0 0 ${RING_BOX} ${RING_BOX}`} style={s.ring}>
+      <Circle cx={c} cy={c} r={RING_R} fill="none" stroke="rgba(255,255,255,0.12)" strokeWidth={3} />
+      <Circle cx={c} cy={c} r={RING_R} fill="none" stroke={ringColor} strokeWidth={3}
         strokeDasharray={RING_CIRC} strokeDashoffset={dashOffset}
-        strokeLinecap="round" transform="rotate(-90, 28, 28)" />
+        strokeLinecap="round" transform={`rotate(-90, ${c}, ${c})`} />
     </Svg>
   );
 }
@@ -89,6 +117,14 @@ function useCenterAction(lastAction) {
   return label;
 }
 
+// ─── FeltBackground ──────────────────────────────────────────────────────────
+// The wooden table artwork is now the entire scene background, so the felt
+// itself is just a transparent positioning anchor for the community cards,
+// pot, bets and dealer disc. No image of its own.
+function FeltBackground() {
+  return null;
+}
+
 // ─── DisconnectBanner ────────────────────────────────────────────────────────
 function DisconnectBanner({ deadline }) {
   const secsLeft = useCountdown(deadline);
@@ -113,34 +149,51 @@ function PlayerPod({ player, isMe, turnDeadline, lastAction, win, displayChips, 
   const hasCards = player.holeCards?.length > 0 && !player.folded;
   const chipLabel = win ? '🏆 Winner!' : (actionLbl || (displayChips ?? player.chips).toLocaleString());
 
+  // Compact pod: fixed height = AVATAR_SIZE. Cards, nameplate and avatar
+  // are absolute siblings inside the pod so they share vertical space
+  // (the cards' bottom overlaps the nameplate's top, the avatar fills
+  // the full pod height on its side). Keeps both seats visible inside
+  // the viewport even with a big avatar.
   const cards = (
-    <View style={[s.podCards, !hasCards && s.hidden]}>
-      {[0, 1].map(i => (
-        <View key={i} style={[s.cardWrap, i === 0 ? s.cardLeft : s.cardRight]}>
-          <Card card={player.holeCards?.[i]} size={isMe ? 'xl' : 'lg'} deckStyle={deckStyle}
-            faceDown={!player.holeCards?.[i] || !!player.holeCards[i]?.hidden} />
-        </View>
-      ))}
+    <View style={[
+      s.podCards,
+      isMe ? s.podCardsMe : s.podCardsOpp,
+      !hasCards && s.hidden,
+    ]}>
+      <View style={s.cardSlotLeft}>
+        <Card card={player.holeCards?.[0]} size={isMe ? 'xl' : 'lg'} deckStyle={deckStyle}
+          faceDown={!player.holeCards?.[0] || !!player.holeCards[0]?.hidden} />
+      </View>
+      <View style={s.cardSlotRight}>
+        <Card card={player.holeCards?.[1]} size={isMe ? 'xl' : 'lg'} deckStyle={deckStyle}
+          faceDown={!player.holeCards?.[1] || !!player.holeCards[1]?.hidden} />
+      </View>
+    </View>
+  );
+
+  const avatar = (
+    <View style={[s.avatarBlock, isMe ? s.avatarBlockMe : s.avatarBlockOpp]}>
+      <Avatar size={AVATAR_SIZE} avatarId={player.avatarId} />
+      <TimerRing deadline={turnDeadline} />
     </View>
   );
 
   const nameplate = (
-    <View style={[s.nameplate, isActive && s.nameplateActive, player.folded && s.nameplateFolded]}>
-      <View style={s.avatarWrap}>
-        <Avatar size={52} avatarId={player.avatarId} />
-        <TimerRing deadline={turnDeadline} />
+    <View style={[
+      s.nameplate,
+      isMe ? s.nameplateMe : s.nameplateOpp,
+      isActive && s.nameplateActive,
+      player.folded && s.nameplateFolded,
+    ]}>
+      <View style={s.nameRow}>
+        <Text style={s.podName} numberOfLines={1}>{player.name}</Text>
+        {player.isDealer     && <Text style={s.badge}>D</Text>}
+        {player.isSmallBlind && <Text style={[s.badge, s.badgeSB]}>SB</Text>}
+        {player.isBigBlind   && <Text style={[s.badge, s.badgeBB]}>BB</Text>}
+        {player.allIn        && <Text style={[s.badge, s.badgeAI]}>ALL IN</Text>}
       </View>
-      <View style={s.podInfo}>
-        <View style={s.nameRow}>
-          <Text style={s.podName} numberOfLines={1}>{player.name}</Text>
-          {player.isDealer     && <Text style={s.badge}>D</Text>}
-          {player.isSmallBlind && <Text style={[s.badge, s.badgeSB]}>SB</Text>}
-          {player.isBigBlind   && <Text style={[s.badge, s.badgeBB]}>BB</Text>}
-          {player.allIn        && <Text style={[s.badge, s.badgeAI]}>ALL IN</Text>}
-        </View>
-        <Text style={[s.podChips, win && s.podChipsWin, !!actionLbl && s.podChipsAction]}
-          numberOfLines={1}>{chipLabel}</Text>
-      </View>
+      <Text style={[s.podChips, win && s.podChipsWin, !!actionLbl && s.podChipsAction]}
+        numberOfLines={1}>{chipLabel}</Text>
       {timeLeft !== null && timeLeft <= 10 && (
         <Text style={[s.countdown, timeLeft <= 5 && s.countdownUrgent]}>{timeLeft}s</Text>
       )}
@@ -148,8 +201,10 @@ function PlayerPod({ player, isMe, turnDeadline, lastAction, win, displayChips, 
   );
 
   return (
-    <View style={s.pod}>
-      {isMe  ? <>{cards}{nameplate}</> : <>{nameplate}{cards}</>}
+    <View style={[s.pod, player.folded && { opacity: 0.55 }]}>
+      {cards}
+      {nameplate}
+      {avatar}
     </View>
   );
 }
@@ -159,6 +214,7 @@ export default function GameScreen() {
   const { gameState, myId, onAction, onLeave, onRematch, onLogout, emit, matchOver, navigationRef, deckStyle, opponentDisconnected, playerInfo } = useContext(GameContext);
 
   const [menuOpen, setMenuOpen] = useState(false);
+  const [feltSize, setFeltSize] = useState({ w: 0, h: 0 });
 
   const me       = gameState?.players?.find(p => p.id === myId);
   const opponent = gameState?.players?.find(p => p.id !== myId);
@@ -282,9 +338,22 @@ export default function GameScreen() {
 
   const handleReset = () => fetch(`${SERVER_URL}/admin/reset`, { method: 'POST' }).catch(() => {});
 
+  // Uniform scale of the entire scene to fit the device's safe area.
+  // Same composition on every screen → just a different overall scale.
+  const insets = useSafeAreaInsets();
+  const { width: winW, height: winH } = useWindowDimensions();
+  const availW = winW;
+  const availH = winH - insets.top - insets.bottom;
+  const scale  = Math.min(availW / DESIGN_WIDTH, availH / DESIGN_HEIGHT);
+
   return (
+   <View style={s.outer}>
     <SafeAreaView style={s.safe}>
-      <View style={s.container}>
+      <View style={s.sceneWrapper}>
+       <View style={[s.scene, { transform: [{ scale }] }]}>
+        <Image source={INGAME_BG} style={s.bgImage} resizeMode="cover" pointerEvents="none" />
+        <View style={s.bgTint} pointerEvents="none" />
+        <View style={s.container}>
 
         {/* Top bar */}
         <View style={s.topBar}>
@@ -331,12 +400,19 @@ export default function GameScreen() {
         </View>
 
         {/* Felt table */}
-        <View style={s.felt}>
+        <View
+          style={s.felt}
+          onLayout={e => {
+            const { width, height } = e.nativeEvent.layout;
+            if (width !== feltSize.w || height !== feltSize.h) setFeltSize({ w: width, h: height });
+          }}
+        >
+          <FeltBackground width={feltSize.w} height={feltSize.h} />
 
           {/* Opponent bet */}
           {(opponent?.roundBet > 0 || opponent?.allIn) && (
             <View style={s.betTop}>
-              {opponent.roundBet > 0 && <Bananas amount={opponent.roundBet} size={20} />}
+              {opponent.roundBet > 0 && <Chips amount={opponent.roundBet} size={22} />}
               {opponent.roundBet > 0 && <Text style={s.betAmt}>{opponent.roundBet.toLocaleString()}</Text>}
               {opponent.allIn && <Text style={s.allInTag}>ALL IN</Text>}
             </View>
@@ -353,7 +429,7 @@ export default function GameScreen() {
             </View>
             {dispPot > 0 && (
               <View style={s.potRow}>
-                <Bananas amount={dispPot} size={20} />
+                <Chips amount={dispPot} size={22} />
                 <Text style={s.potAmt}>{dispPot.toLocaleString()}</Text>
               </View>
             )}
@@ -365,7 +441,7 @@ export default function GameScreen() {
           {/* My bet */}
           {(me?.roundBet > 0 || me?.allIn) && (
             <View style={s.betBottom}>
-              {me.roundBet > 0 && <Bananas amount={me.roundBet} size={20} />}
+              {me.roundBet > 0 && <Chips amount={me.roundBet} size={22} />}
               {me.roundBet > 0 && <Text style={s.betAmt}>{me.roundBet.toLocaleString()}</Text>}
               {me.allIn && <Text style={s.allInTag}>ALL IN</Text>}
             </View>
@@ -381,7 +457,7 @@ export default function GameScreen() {
               opacity: flightOpacity,
               transform: [{ translateY: flightY }, { scale: flightScale }],
             }]}>
-              <Bananas amount={flightAmount} size={28} />
+              <Chips amount={flightAmount} size={30} />
             </Animated.View>
           )}
         </View>
@@ -469,14 +545,24 @@ export default function GameScreen() {
           </View>
         )}
 
+        </View>
+       </View>
       </View>
     </SafeAreaView>
+   </View>
   );
 }
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
 const s = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#0a1628' },
+  outer:        { flex: 1, backgroundColor: '#2a1808' },
+  safe:         { flex: 1, backgroundColor: 'transparent' },
+  sceneWrapper: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  scene:        { width: DESIGN_WIDTH, height: DESIGN_HEIGHT, overflow: 'hidden' },
+  // Table artwork fills the scaled canvas. resizeMode 'cover' so the floor
+  // decorations bleed off the canvas edges instead of leaving bands.
+  bgImage: { position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' },
+  bgTint:  { position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0,0,0,0.18)' },
   container: { flex: 1 },
 
   // Top bar
@@ -496,21 +582,45 @@ const s = StyleSheet.create({
   oppSection: { paddingHorizontal: 12, paddingTop: 4, paddingBottom: 0 },
   mySection:  { paddingHorizontal: 12, paddingTop: 0, paddingBottom: 4 },
 
-  // Pod
-  pod: { gap: 0 },
-  nameplate: {
-    flexDirection: 'row', alignItems: 'center', gap: 12,
-    backgroundColor: 'rgba(0,0,0,0.6)', borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.1)',
-    borderRadius: 16, paddingHorizontal: 14, paddingVertical: 10,
+  // Pod — fixed height. Children placed absolutely so nothing shifts.
+  pod: { position: 'relative', height: POD_HEIGHT, marginHorizontal: 8 },
+
+  // Avatar block — vertically centred in the pod, anchored to its own
+  // horizontal end. Always on top (zIndex 50, elevation 12).
+  avatarBlock: {
+    position: 'absolute', top: AVATAR_TOP,
+    width: AVATAR_SIZE, height: AVATAR_SIZE,
+    alignItems: 'center', justifyContent: 'center',
+    zIndex: 50, elevation: 12,
   },
-  nameplateActive: { borderColor: colors.gold, shadowColor: colors.gold, shadowOpacity: 0.4, shadowRadius: 10, elevation: 4 },
+  avatarBlockMe:  { right: 0 },
+  avatarBlockOpp: { left:  0 },
+  ring: { position: 'absolute', top: (AVATAR_SIZE - RING_BOX) / 2, left: (AVATAR_SIZE - RING_BOX) / 2 },
+
+  // Nameplate — fixed-height capsule, vertically centred on the avatar.
+  nameplate: {
+    position: 'absolute',
+    top: NAMEPLATE_TOP, height: NAMEPLATE_HEIGHT,
+    backgroundColor: 'rgba(8,8,10,0.92)',
+    borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.1)',
+    borderRadius: 32,
+    paddingVertical: 6,
+    justifyContent: 'center',
+    gap: 1,
+    zIndex: 1, elevation: 2,
+    shadowColor: '#000', shadowOpacity: 0.45, shadowRadius: 6,
+    shadowOffset: { width: 0, height: 3 },
+  },
+  // Horizontally: nameplate runs from the pod's outer edge to ~44 px
+  // past the avatar's inner edge, so the avatar visibly overlaps the
+  // pill's end. paddingLeft/Right reserves room for that overlap.
+  nameplateMe:  { left: 0,  right: AVATAR_SIZE - 44, paddingLeft: 18, paddingRight: 60 },
+  nameplateOpp: { right: 0, left:  AVATAR_SIZE - 44, paddingLeft: 60, paddingRight: 18 },
+  nameplateActive: { borderColor: colors.gold, shadowColor: colors.gold, shadowOpacity: 0.4, shadowRadius: 10, elevation: 6 },
   nameplateFolded: { opacity: 0.4 },
-  avatarWrap: { width: 56, height: 56, position: 'relative', alignItems: 'center', justifyContent: 'center' },
-  ring: { position: 'absolute', top: -2, left: -2 },
-  podInfo: { flex: 1, gap: 3 },
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' },
-  podName: { color: colors.white, fontSize: 16, fontWeight: '800', flexShrink: 1 },
-  podChips: { color: colors.goldLight, fontSize: 15, fontWeight: '700' },
+  podName: { color: colors.white, fontSize: 17, fontWeight: '800', flexShrink: 1 },
+  podChips: { color: '#facc15', fontSize: 18, fontWeight: '900' },
   podChipsWin: { color: '#4ade80' },
   podChipsAction: { color: colors.orange },
   badge: { fontSize: 10, color: '#fff', backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 4, paddingHorizontal: 5, paddingVertical: 1, fontWeight: '700' },
@@ -520,24 +630,31 @@ const s = StyleSheet.create({
   countdown: { color: 'rgba(255,255,255,0.7)', fontSize: 14, fontWeight: '800' },
   countdownUrgent: { color: '#f87171' },
 
-  // Cards coming out of pod
-  podCards: { flexDirection: 'row', justifyContent: 'center', paddingVertical: 4, gap: 6 },
+  // Hole cards — anchored by their BOTTOM edge so xl and lg cards
+  // (different heights) sit on the same horizontal line just above the
+  // nameplate. Close to the avatar (CARD_AVATAR_GAP horizontal gap)
+  // and just above the nameplate (CARD_NAMEPLATE_GAP vertical gap),
+  // without touching either.
+  // Hole cards row: tilted via cardSlot rotation, with a positive gap so
+  // the two cards never touch each other.
+  podCards: { position: 'absolute', flexDirection: 'row', gap: 10, zIndex: 5 },
+  podCardsMe:  { bottom: CARDS_BOTTOM, right: AVATAR_SIZE + CARD_AVATAR_GAP },
+  podCardsOpp: { bottom: CARDS_BOTTOM, left:  AVATAR_SIZE + CARD_AVATAR_GAP },
+  cardSlotLeft:  { transform: [{ rotate: '-8deg' }] },
+  cardSlotRight: { transform: [{ rotate:  '8deg' }] },
   hidden: { opacity: 0 },
-  cardWrap: {},
-  cardLeft:  {},
-  cardRight: {},
 
   // Waiting
   waitingPod: { backgroundColor: 'rgba(0,0,0,0.4)', borderRadius: 16, padding: 18, alignItems: 'center' },
   waitingTxt: { color: colors.gray, fontSize: 14, fontStyle: 'italic' },
 
-  // Felt
+  // Felt — transparent positioning anchor. The wooden table artwork is
+  // drawn behind the whole scene (INGAME_BG), so the felt View itself just
+  // holds the community cards, pot, bets and dealer disc at their fixed
+  // positions, with the table artwork showing through.
   felt: {
-    flex: 1, marginHorizontal: 8, borderRadius: 120,
-    backgroundColor: '#0d2148',
-    borderWidth: 14, borderColor: '#2a1408',
+    flex: 1, marginHorizontal: 8,
     alignItems: 'center', justifyContent: 'center',
-    shadowColor: '#000', shadowOpacity: 0.5, shadowRadius: 12, elevation: 8,
     position: 'relative',
   },
   center: { alignItems: 'center', gap: 8 },
@@ -560,8 +677,10 @@ const s = StyleSheet.create({
   // Pot-to-winner banana flight overlay (sits centered on the felt)
   winFlight: { position: 'absolute', top: '50%', alignSelf: 'center', marginTop: -14, zIndex: 30 },
 
-  // Controls
-  controls: { paddingHorizontal: 12, paddingBottom: 8, paddingTop: 4, backgroundColor: 'rgba(0,0,0,0.5)', borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.08)' },
+  // Controls — fixed minHeight so the felt + pods don't shift when the
+  // BettingControls children appear/disappear (slider + buttons only
+  // render on the local player's turn, so the slot collapses otherwise).
+  controls: { paddingHorizontal: 12, paddingBottom: 8, paddingTop: 4, minHeight: 124, backgroundColor: 'rgba(0,0,0,0.5)', borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.08)' },
 
   // Match over modal
   modalOverlay: { position: 'absolute', inset: 0, backgroundColor: 'rgba(0,0,0,0.75)', alignItems: 'center', justifyContent: 'center', zIndex: 100 },

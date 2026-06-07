@@ -2,6 +2,7 @@ import React, { useContext, useState, useEffect } from 'react';
 import {
   View, Text, TextInput, Pressable, Image, ScrollView, StyleSheet, ActivityIndicator,
 } from 'react-native';
+import ScaledBg from '../components/ScaledBg';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { GameContext } from '../context/GameContext';
 import { colors } from '../theme';
@@ -9,8 +10,6 @@ import { SERVER_URL } from '../config';
 import { getUser, setUser } from '../utils/user';
 
 const AVATARS = [
-  { id: 'dk',    source: require('../../assets/dk.png') },
-  { id: 'diddy', source: require('../../assets/diddy.webp') },
   { id: 'alfie', source: require('../../assets/alfie.png') },
   { id: 'jazz',  source: require('../../assets/jazz.png') },
 ];
@@ -19,7 +18,7 @@ export default function ProfileScreen({ navigation }) {
   const { playerInfo, myElo, onUpdateProfile, deckStyle, setDeckStyle } = useContext(GameContext);
 
   const [name, setName]         = useState(playerInfo?.name || '');
-  const [avatarId, setAvatarId] = useState(playerInfo?.avatarId || 'dk');
+  const [avatarId, setAvatarId] = useState(playerInfo?.avatarId || 'alfie');
   const [saving, setSaving]     = useState(false);
   const [history, setHistory]   = useState(null);
   const [loadingHistory, setLoadingHistory] = useState(true);
@@ -51,6 +50,7 @@ export default function ProfileScreen({ navigation }) {
   };
 
   return (
+   <ScaledBg source={require('../../assets/jungle-ingame.png')} tint={0.45}>
     <SafeAreaView style={s.safe}>
       <View style={s.header}>
         <Pressable style={s.backBtn} onPress={() => navigation.goBack()}>
@@ -138,11 +138,12 @@ export default function ProfileScreen({ navigation }) {
 
       </ScrollView>
     </SafeAreaView>
+   </ScaledBg>
   );
 }
 
 const s = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#0a1628' },
+  safe: { flex: 1, backgroundColor: 'transparent' },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.08)' },
   backBtn: { paddingVertical: 4, paddingHorizontal: 4 },
   backTxt: { color: colors.goldLight, fontSize: 15 },

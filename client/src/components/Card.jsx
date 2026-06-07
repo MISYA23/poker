@@ -5,12 +5,14 @@ const SUIT_SYMBOLS = { s: '♠', h: '♥', d: '♦', c: '♣' };
 const SUIT_COLORS_REGULAR = { s: '#1a1a1a', h: '#c81e1e', d: '#c81e1e', c: '#1a1a1a' };
 const SUIT_COLORS_FOUR    = { s: '#1a1a1a', h: '#c81e1e', d: '#1f63b0', c: '#1e7a3a' };
 
+// All sizes shrunk ~20% from earlier so hole cards integrate cleanly with
+// the avatar + nameplate.
 const SIZES = {
-  xs: { width: 28, height: 26, font: 11 },
-  sm: { width: 36, height: 32, font: 14 },
-  md: { width: 52, height: 56, font: 20 },
-  lg: { width: 64, height: 55, font: 26 },
-  xl: { width: 72, height: 70, font: 30 },
+  xs: { width: 22, height: 21, font: 9 },
+  sm: { width: 29, height: 26, font: 11 },
+  md: { width: 42, height: 45, font: 16 },
+  lg: { width: 51, height: 44, font: 21 },
+  xl: { width: 58, height: 56, font: 24 },
 };
 
 export default function Card({ card, size = 'md', faceDown = false, deckStyle = 'regular' }) {

@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useContext } from 'react';
 import {
-  View, Text, TextInput, Pressable, Image, ImageBackground,
+  View, Text, TextInput, Pressable, Image,
   ScrollView, StyleSheet, KeyboardAvoidingView, Platform, ActivityIndicator,
 } from 'react-native';
+import ScaledBg from '../components/ScaledBg';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as WebBrowser from 'expo-web-browser';
 import * as AuthSession from 'expo-auth-session';
@@ -20,8 +21,6 @@ const GOOGLE_DISCOVERY = {
 };
 
 const AVATARS = [
-  { id: 'dk',    source: require('../../assets/dk.png') },
-  { id: 'diddy', source: require('../../assets/diddy.webp') },
   { id: 'alfie', source: require('../../assets/alfie.png') },
   { id: 'jazz',  source: require('../../assets/jazz.png') },
 ];
@@ -118,16 +117,13 @@ export default function LoginScreen() {
   };
 
   return (
-    <ImageBackground source={require('../../assets/jungle.png')} style={s.bg} resizeMode="cover">
-      <View style={s.overlay}>
+    <ScaledBg source={require('../../assets/jungle-menu.png')} tint={0.22} cover>
         <SafeAreaView style={s.safe}>
+          <View style={s.topBar}>
+            <Text style={s.topLogo}>♠ Poker Monkey ♣ <Text style={s.topLogoVersion}>{VERSION}</Text></Text>
+          </View>
           <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={s.kav}>
             <ScrollView contentContainerStyle={s.scroll} keyboardShouldPersistTaps="handled">
-
-              <View style={s.header}>
-                <Text style={s.logo}>♠ Poker Monkey ♣ <Text style={s.logoVersion}>{VERSION}</Text></Text>
-                <Text style={s.sub}>NL Hold'em · 1v1</Text>
-              </View>
 
               <View style={s.card}>
                 {/* Google */}
@@ -170,14 +166,6 @@ export default function LoginScreen() {
                   onSubmitEditing={handleGuestJoin}
                 />
 
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.avatarRow}>
-                  {AVATARS.map(av => (
-                    <Pressable key={av.id} style={[s.avatarOpt, avatarId === av.id && s.avatarSel]} onPress={() => setAvatar(av.id)}>
-                      <Image source={av.source} style={s.avatarImg} resizeMode="cover" />
-                    </Pressable>
-                  ))}
-                </ScrollView>
-
                 <Pressable style={[s.joinBtn, !name.trim() && s.dim]} onPress={handleGuestJoin} disabled={!name.trim()}>
                   <Text style={s.joinTxt}>Play as Guest</Text>
                 </Pressable>
@@ -186,8 +174,7 @@ export default function LoginScreen() {
             </ScrollView>
           </KeyboardAvoidingView>
         </SafeAreaView>
-      </View>
-    </ImageBackground>
+    </ScaledBg>
   );
 }
 
@@ -197,11 +184,24 @@ const s = StyleSheet.create({
   safe: { flex: 1 },
   kav: { flex: 1 },
   scroll: { flexGrow: 1, alignItems: 'center', justifyContent: 'center', padding: 24, gap: 16 },
+  // Top bar — matches LobbyScreen: logo + version at top-left.
+  topBar:          { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 12, paddingBottom: 8 },
+  topLogo:         { fontSize: 20, fontWeight: '900', color: colors.goldLight, letterSpacing: 1 },
+  topLogoVersion:  { fontSize: 14, fontWeight: '900', color: colors.goldLight },
   header: { alignItems: 'center', gap: 6 },
   logo: { fontSize: 28, fontWeight: '900', color: colors.goldLight, letterSpacing: 2 },
   sub: { fontSize: 12, color: colors.gray, letterSpacing: 1 },
   logoVersion: { fontSize: 20, fontWeight: '900', color: colors.goldLight },
-  card: { backgroundColor: 'rgba(255,255,255,0.06)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)', borderRadius: 16, width: '100%', maxWidth: 400, padding: 22, gap: 16 },
+  // Login card — semi-opaque dark bg so the form is highly readable while
+  // the surrounding jungle image stays visible around the edges.
+  card: {
+    backgroundColor: 'rgba(8,8,10,0.75)',
+    borderWidth: 1.5, borderColor: 'rgba(255,220,160,0.22)',
+    borderRadius: 18,
+    width: '100%', maxWidth: 400, padding: 22, gap: 16,
+    shadowColor: '#000', shadowOpacity: 0.6, shadowRadius: 18,
+    shadowOffset: { width: 0, height: 8 }, elevation: 10,
+  },
   googleBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#fff', borderRadius: 50, paddingVertical: 13, gap: 10 },
   dim: { opacity: 0.45 },
   googleG: { fontSize: 17, fontWeight: '700', color: '#4285F4' },
