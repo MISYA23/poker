@@ -412,7 +412,7 @@ export default function GameScreen() {
           {/* Opponent bet */}
           {(opponent?.roundBet > 0 || opponent?.allIn) && (
             <View style={s.betTop}>
-              {opponent.roundBet > 0 && <Chips amount={opponent.roundBet} size={22} />}
+              {opponent.roundBet > 0 && <Chips amount={opponent.roundBet} size={33} />}
               {opponent.roundBet > 0 && <Text style={s.betAmt}>{opponent.roundBet.toLocaleString()}</Text>}
               {opponent.allIn && <Text style={s.allInTag}>ALL IN</Text>}
             </View>
@@ -429,7 +429,7 @@ export default function GameScreen() {
             </View>
             {dispPot > 0 && (
               <View style={s.potRow}>
-                <Chips amount={dispPot} size={22} />
+                <Chips amount={dispPot} size={33} />
                 <Text style={s.potAmt}>{dispPot.toLocaleString()}</Text>
               </View>
             )}
@@ -441,15 +441,11 @@ export default function GameScreen() {
           {/* My bet */}
           {(me?.roundBet > 0 || me?.allIn) && (
             <View style={s.betBottom}>
-              {me.roundBet > 0 && <Chips amount={me.roundBet} size={22} />}
+              {me.roundBet > 0 && <Chips amount={me.roundBet} size={33} />}
               {me.roundBet > 0 && <Text style={s.betAmt}>{me.roundBet.toLocaleString()}</Text>}
               {me.allIn && <Text style={s.allInTag}>ALL IN</Text>}
             </View>
           )}
-
-          {/* Dealer buttons */}
-          {opponent?.isDealer && <View style={[s.dealerBtn, s.dealerTop]}><Text style={s.dealerTxt}>D</Text></View>}
-          {me?.isDealer       && <View style={[s.dealerBtn, s.dealerBottom]}><Text style={s.dealerTxt}>D</Text></View>}
 
           {/* Pot-to-winner banana flight */}
           {flightAmount > 0 && (
@@ -457,7 +453,7 @@ export default function GameScreen() {
               opacity: flightOpacity,
               transform: [{ translateY: flightY }, { scale: flightScale }],
             }]}>
-              <Chips amount={flightAmount} size={30} />
+              <Chips amount={flightAmount} size={45} />
             </Animated.View>
           )}
         </View>
@@ -478,6 +474,12 @@ export default function GameScreen() {
             onAction={onAction} raiseAmount={raiseAmount}
             onRaiseChange={v => setRaiseAmount(Math.round(v))} />
         </View>
+
+        {/* Dealer disc — rendered AFTER mySection so it stays on top of
+            the hole cards, positioned in canvas coordinates relative to
+            the visible felt oval. */}
+        {opponent?.isDealer && <View style={[s.dealerBtn, s.dealerTop]}><Text style={s.dealerTxt}>D</Text></View>}
+        {me?.isDealer       && <View style={[s.dealerBtn, s.dealerBottom]}><Text style={s.dealerTxt}>D</Text></View>}
 
         {/* Match over modal */}
         {matchOver && (
@@ -661,18 +663,23 @@ const s = StyleSheet.create({
   communityRow: { flexDirection: 'row', gap: 6, alignItems: 'center' },
   ccPlaceholder: { width: 52, height: 56 },
   potRow: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: 'rgba(0,0,0,0.45)', borderRadius: 10, paddingHorizontal: 10, paddingVertical: 4 },
-  potAmt: { color: colors.goldLight, fontSize: 14, fontWeight: '800' },
+  // Dark brown matching the table rim for legibility against the cream felt.
+  potAmt: { color: '#4a2a10', fontSize: 21, fontWeight: '900' },
   narration: { color: 'rgba(255,255,255,0.7)', fontSize: 12, fontStyle: 'italic', textAlign: 'center' },
 
   betTop: { position: 'absolute', top: 14, flexDirection: 'row', alignItems: 'center', gap: 5 },
   betBottom: { position: 'absolute', bottom: 14, flexDirection: 'row', alignItems: 'center', gap: 5 },
-  betAmt: { color: colors.goldLight, fontSize: 12, fontWeight: '700' },
+  betAmt: { color: '#4a2a10', fontSize: 18, fontWeight: '900' },
   allInTag: { color: '#f87171', fontSize: 11, fontWeight: '800' },
 
-  dealerBtn: { position: 'absolute', width: 26, height: 26, borderRadius: 13, backgroundColor: '#f5f5dc', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#999' },
-  dealerTop:    { top: 10, right: 20 },
-  dealerBottom: { bottom: 10, right: 20 },
-  dealerTxt: { color: '#333', fontSize: 11, fontWeight: '800' },
+  dealerBtn: { position: 'absolute', width: 30, height: 30, borderRadius: 15, backgroundColor: '#f5f5dc', alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: '#888', shadowColor: '#000', shadowOpacity: 0.4, shadowRadius: 3, shadowOffset: { width: 0, height: 2 }, elevation: 4, zIndex: 60 },
+  // Canvas-absolute coordinates on the 393×852 design canvas.
+  //   Top (1 o'clock) — nudged a touch further down vs the previous spot.
+  //   Bottom (7 o'clock) — moved up onto the felt, just above the LEFT
+  //     hole card of the bottom player (no longer down on the floor).
+  dealerTop:    { top: 235, left: 235 },
+  dealerBottom: { top: 465, left: 100 },
+  dealerTxt: { color: '#333', fontSize: 13, fontWeight: '900' },
 
   // Pot-to-winner banana flight overlay (sits centered on the felt)
   winFlight: { position: 'absolute', top: '50%', alignSelf: 'center', marginTop: -14, zIndex: 30 },
