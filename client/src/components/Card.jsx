@@ -1,24 +1,29 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, Image, StyleSheet } from 'react-native';
+
+const CHIP_LOGO = require('../../assets/chip.png');
 
 const SUIT_SYMBOLS = { s: '♠', h: '♥', d: '♦', c: '♣' };
 const SUIT_COLORS_REGULAR = { s: '#1a1a1a', h: '#c81e1e', d: '#c81e1e', c: '#1a1a1a' };
 const SUIT_COLORS_FOUR    = { s: '#1a1a1a', h: '#c81e1e', d: '#1f63b0', c: '#1e7a3a' };
 
-// All sizes shrunk ~20% from earlier so hole cards integrate cleanly with
-// the avatar + nameplate.
+// All sizes shrunk ~20% from earlier; hole sizes (lg, xl) are 5% taller
+// so the cards read slightly more like proper playing cards.
 const SIZES = {
   xs: { width: 22, height: 21, font: 9 },
   sm: { width: 29, height: 26, font: 11 },
-  md: { width: 42, height: 45, font: 16 },
-  lg: { width: 51, height: 44, font: 21 },
-  xl: { width: 58, height: 56, font: 24 },
+  // md (community): +1% width, +10% height for slightly better presence.
+  md: { width: 42, height: 50, font: 17 },
+  lg: { width: 51, height: 46, font: 21 },
+  xl: { width: 58, height: 59, font: 24 },
 };
 
 export default function Card({ card, size = 'md', faceDown = false, deckStyle = 'regular' }) {
   const s = SIZES[size] || SIZES.md;
 
   if (faceDown || !card || card.hidden) {
+    // Card back: gold body + subtle inner pattern. No central logo —
+    // it looked off; the clean gold-on-gold reads better.
     return (
       <View style={[styles.card, styles.cardBack, { width: s.width, height: s.height }]}>
         <View style={styles.backPattern} />
@@ -60,7 +65,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(0,0,0,0.1)',
   },
-  cardBack: { backgroundColor: '#d4a017' },
+  cardBack: { backgroundColor: '#d4a017', alignItems: 'center', justifyContent: 'center' },
   backPattern: {
     position: 'absolute',
     top: 3, left: 3, right: 3, bottom: 3,
@@ -70,6 +75,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#f0c040',
     opacity: 0.6,
   },
+  // Skull glyph in the table-rim brown so the Poker Monkey mark reads
+  // clearly on the gold card back.
+  backLogo: { color: '#4a2a10', fontWeight: '900', textAlign: 'center', lineHeight: undefined },
   rank: { fontWeight: '900' },
   suit: { fontWeight: '900' },
 });
