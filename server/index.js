@@ -20,7 +20,7 @@ const io = new Server(server, { cors: { origin: '*', methods: ['GET', 'POST'] } 
 
 const db = new Pool({ connectionString: process.env.DATABASE_URL });
 
-const VALID_AVATARS = ['dk', 'diddy', 'alfie', 'jazz'];
+const VALID_AVATARS = ['dk', 'diddy', 'alfie', 'jazz', 'cigar'];
 
 // Populated from game_config table on startup — never mutate directly
 let cfg = {};

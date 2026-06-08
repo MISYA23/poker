@@ -15,6 +15,7 @@ const AVATAR_IMAGES = {
   diddy: require('../../assets/diddy.webp'),
   alfie: require('../../assets/alfie.png'),
   jazz:  require('../../assets/jazz.png'),
+  cigar: require('../../assets/cigar.png'),
 };
 
 const TAB_NAMES = ['Recent', 'Friends', 'Leaderboard'];
