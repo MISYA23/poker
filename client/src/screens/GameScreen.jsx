@@ -1,20 +1,47 @@
 import React, { useContext, useState, useEffect, useRef } from 'react';
 import {
-  View, Text, Pressable, StyleSheet, Animated,
+  View, Text, Pressable, StyleSheet, Animated, Easing,
+  useWindowDimensions, Image,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+
+// Single in-game background: the wooden poker table artwork (rim + cream
+// felt interior + Poker Monkey skull logo + wooden floor and decorations
+// around the oval). Replaces the previous jungle bg for the game scene.
+const INGAME_BG = require('../../assets/table.png');
 import Svg, { Circle } from 'react-native-svg';
 import { GameContext } from '../context/GameContext';
 import Card from '../components/Card';
 import Avatar from '../components/Avatar';
-import { ChipStack } from '../components/PokerChip';
+import Chips from '../components/Chips';
 import BettingControls from '../components/BettingControls';
 import { colors } from '../theme';
 import { SERVER_URL, VERSION } from '../config';
 
 const TURN_DURATION_MS = 20000;
-const RING_R = 26;
-const RING_CIRC = 2 * Math.PI * RING_R;
+
+// Fixed design canvas — everything is drawn against this portrait reference,
+// then the whole canvas is scaled uniformly to fit the device's safe area.
+// Same composition on every screen, just a different overall scale.
+const DESIGN_WIDTH  = 393;
+const DESIGN_HEIGHT = 852;
+
+// Fixed pod geometry — avatar, nameplate and cards never change size.
+// Nameplate is vertically centred on the avatar; cards float just above
+// the nameplate, close to the avatar but never touching either.
+const AVATAR_SIZE      = 156;
+const NAMEPLATE_HEIGHT = 64;
+const POD_HEIGHT       = 200;
+const NAMEPLATE_TOP    = (POD_HEIGHT - NAMEPLATE_HEIGHT) / 2; // 68 — top of nameplate
+const AVATAR_TOP       = (POD_HEIGHT - AVATAR_SIZE) / 2;      // 22 — top of avatar
+const CARD_NAMEPLATE_GAP = -8; // negative = cards overlap nameplate top — clipped by nameplate's higher z-index
+const CARDS_BOTTOM     = POD_HEIGHT - NAMEPLATE_TOP + CARD_NAMEPLATE_GAP; // 136 (anchor from pod bottom)
+const CARD_AVATAR_GAP  = 0; // tight against the avatar's inner edge
+
+// Timer ring sized to surround the standalone avatar.
+const RING_R     = AVATAR_SIZE / 2;
+const RING_BOX   = RING_R * 2 + 6;
+const RING_CIRC  = 2 * Math.PI * RING_R;
 
 // ─── TimerRing ────────────────────────────────────────────────────────────────
 function TimerRing({ deadline }) {
@@ -31,14 +58,18 @@ function TimerRing({ deadline }) {
     const id = setInterval(tick, 100);
     return () => clearInterval(id);
   }, [deadline]);
+  // Ring is hidden when no turn is in progress (no permanent track), so
+  // the avatar reads cleanly framed inside its own artwork.
+  const c = RING_BOX / 2;
+  const RING_W = 6;
   if (!deadline) return null;
   const ringColor = timeLeft <= 5 ? '#f87171' : timeLeft <= 10 ? '#fb923c' : colors.gold;
   return (
-    <Svg width={56} height={56} viewBox="0 0 56 56" style={s.ring}>
-      <Circle cx="28" cy="28" r={RING_R} fill="none" stroke="rgba(255,255,255,0.12)" strokeWidth={3} />
-      <Circle cx="28" cy="28" r={RING_R} fill="none" stroke={ringColor} strokeWidth={3}
+    <Svg width={RING_BOX} height={RING_BOX} viewBox={`0 0 ${RING_BOX} ${RING_BOX}`} style={s.ring} pointerEvents="none">
+      <Circle cx={c} cy={c} r={RING_R} fill="none" stroke="rgba(255,255,255,0.22)" strokeWidth={RING_W} />
+      <Circle cx={c} cy={c} r={RING_R} fill="none" stroke={ringColor} strokeWidth={RING_W}
         strokeDasharray={RING_CIRC} strokeDashoffset={dashOffset}
-        strokeLinecap="round" transform="rotate(-90, 28, 28)" />
+        strokeLinecap="round" transform={`rotate(-90, ${c}, ${c})`} />
     </Svg>
   );
 }
@@ -62,8 +93,8 @@ function useActionFlash(player, lastAction) {
     if (!t || t === seen.current) return;
     seen.current = t;
     const a = lastAction;
-    const map = { fold: 'Fold', check: 'Check', call: `Call $${a.amount?.toLocaleString() || ''}`,
-      bet: `Bet $${a.amount?.toLocaleString() || ''}`, raise: `Raise $${a.amount?.toLocaleString() || ''}`, 'all-in': 'All In' };
+    const map = { fold: 'Fold', check: 'Check', call: `Call ${a.amount?.toLocaleString() || ''}`,
+      bet: `Bet ${a.amount?.toLocaleString() || ''}`, raise: `Raise ${a.amount?.toLocaleString() || ''}`, 'all-in': 'All In' };
     setLabel(map[a.action] || a.action);
     const id = setTimeout(() => setLabel(null), 2500);
     return () => clearTimeout(id);
@@ -89,6 +120,14 @@ function useCenterAction(lastAction) {
   return label;
 }
 
+// ─── FeltBackground ──────────────────────────────────────────────────────────
+// The wooden table artwork is now the entire scene background, so the felt
+// itself is just a transparent positioning anchor for the community cards,
+// pot, bets and dealer disc. No image of its own.
+function FeltBackground() {
+  return null;
+}
+
 // ─── DisconnectBanner ────────────────────────────────────────────────────────
 function DisconnectBanner({ deadline }) {
   const secsLeft = useCountdown(deadline);
@@ -107,49 +146,101 @@ function DisconnectBanner({ deadline }) {
 function PlayerPod({ player, isMe, turnDeadline, lastAction, win, displayChips, deckStyle }) {
   const timeLeft  = useCountdown(turnDeadline);
   const actionLbl = useActionFlash(player, lastAction);
-  if (!player) return null;
+  // Avatar + nameplate are ALWAYS rendered, even before a player joins, so
+  // their on-table positions never shift. Only the contents change.
+  const present  = !!player;
+  const isActive = present && !!player.isCurrentPlayer;
+  const hasCards = present && player.holeCards?.length > 0 && !player.folded;
+  const displayName = present ? player.name : (isMe ? 'You' : 'Waiting…');
+  const chipLabel = !present ? '—'
+    : (win ? '🏆 Winner!' : (actionLbl || (displayChips ?? player.chips).toLocaleString()));
 
-  const isActive = !!player.isCurrentPlayer;
-  const hasCards = player.holeCards?.length > 0 && !player.folded;
-  const chipLabel = win ? '🏆 Winner!' : (actionLbl || `$${(displayChips ?? player.chips).toLocaleString()}`);
+  // Hand-deal animation: when this seat goes from "no cards" to "has cards"
+  // (start of a new hand), the two hole cards slide in from the felt
+  // centre with a slight scale-up and stagger.
+  const dealTy0 = useRef(new Animated.Value(0)).current;
+  const dealTy1 = useRef(new Animated.Value(0)).current;
+  const dealSc0 = useRef(new Animated.Value(1)).current;
+  const dealSc1 = useRef(new Animated.Value(1)).current;
+  const dealOp0 = useRef(new Animated.Value(1)).current;
+  const dealOp1 = useRef(new Animated.Value(1)).current;
+  const wasHas  = useRef(hasCards);
+  useEffect(() => {
+    if (hasCards && !wasHas.current) {
+      const startY = isMe ? -240 : 240; // from felt centre toward this seat
+      dealTy0.setValue(startY); dealTy1.setValue(startY);
+      dealSc0.setValue(0.6);    dealSc1.setValue(0.6);
+      dealOp0.setValue(0);      dealOp1.setValue(0);
+      const cardAnim = (ty, sc, op, delay) => Animated.parallel([
+        Animated.timing(ty, { toValue: 0, duration: 500, delay, easing: Easing.bezier(0.25, 0.46, 0.45, 0.94), useNativeDriver: true }),
+        Animated.timing(sc, { toValue: 1, duration: 500, delay, useNativeDriver: true }),
+        Animated.timing(op, { toValue: 1, duration: 300, delay, useNativeDriver: true }),
+      ]);
+      Animated.parallel([
+        cardAnim(dealTy0, dealSc0, dealOp0, 0),
+        cardAnim(dealTy1, dealSc1, dealOp1, 180),
+      ]).start();
+    }
+    wasHas.current = hasCards;
+  }, [hasCards, isMe]);
 
+  // Compact pod: fixed height = AVATAR_SIZE. Cards, nameplate and avatar
+  // are absolute siblings inside the pod so they share vertical space
+  // (the cards' bottom overlaps the nameplate's top, the avatar fills
+  // the full pod height on its side). Keeps both seats visible inside
+  // the viewport even with a big avatar.
   const cards = (
-    <View style={[s.podCards, !hasCards && s.hidden]}>
-      {[0, 1].map(i => (
-        <View key={i} style={[s.cardWrap, i === 0 ? s.cardLeft : s.cardRight]}>
-          <Card card={player.holeCards?.[i]} size={isMe ? 'xl' : 'lg'} deckStyle={deckStyle}
-            faceDown={!player.holeCards?.[i] || !!player.holeCards[i]?.hidden} />
+    <View style={[
+      s.podCards,
+      isMe ? s.podCardsMe : s.podCardsOpp,
+      !hasCards && s.hidden,
+    ]}>
+      <Animated.View style={{ transform: [{ translateY: dealTy0 }, { scale: dealSc0 }], opacity: dealOp0, zIndex: 2 }}>
+        <View style={s.cardSlotLeft}>
+          <Card card={player?.holeCards?.[0]} size="xl" deckStyle={deckStyle}
+            faceDown={!player?.holeCards?.[0] || !!player?.holeCards?.[0]?.hidden} />
         </View>
-      ))}
+      </Animated.View>
+      <Animated.View style={{ transform: [{ translateY: dealTy1 }, { scale: dealSc1 }], opacity: dealOp1, marginLeft: -6, zIndex: 1 }}>
+        <View style={s.cardSlotRight}>
+          <Card card={player?.holeCards?.[1]} size="xl" deckStyle={deckStyle}
+            faceDown={!player?.holeCards?.[1] || !!player?.holeCards?.[1]?.hidden} />
+        </View>
+      </Animated.View>
+    </View>
+  );
+
+  const avatar = (
+    <View style={[s.avatarBlock, isMe ? s.avatarBlockMe : s.avatarBlockOpp, !present && s.avatarPlaceholder]}>
+      <Avatar size={AVATAR_SIZE} avatarId={player?.avatarId} />
+      <TimerRing deadline={turnDeadline} />
     </View>
   );
 
   const nameplate = (
-    <View style={[s.nameplate, isActive && s.nameplateActive, player.folded && s.nameplateFolded]}>
-      <View style={s.avatarWrap}>
-        <Avatar size={52} avatarId={player.avatarId} />
-        <TimerRing deadline={turnDeadline} />
+    <View style={[
+      s.nameplate,
+      isMe ? s.nameplateMe : s.nameplateOpp,
+      isActive && s.nameplateActive,
+      present && player.folded && s.nameplateFolded,
+      !present && s.nameplateWaiting,
+    ]}>
+      <View style={s.nameRow}>
+        <Text style={s.podName} numberOfLines={1}>{displayName}</Text>
+        {present && player.isSmallBlind && <Text style={[s.badge, s.badgeSB]}>SB</Text>}
+        {present && player.isBigBlind   && <Text style={[s.badge, s.badgeBB]}>BB</Text>}
+        {present && player.allIn        && <Text style={[s.badge, s.badgeAI]}>ALL IN</Text>}
       </View>
-      <View style={s.podInfo}>
-        <View style={s.nameRow}>
-          <Text style={s.podName} numberOfLines={1}>{player.name}</Text>
-          {player.isDealer     && <Text style={s.badge}>D</Text>}
-          {player.isSmallBlind && <Text style={[s.badge, s.badgeSB]}>SB</Text>}
-          {player.isBigBlind   && <Text style={[s.badge, s.badgeBB]}>BB</Text>}
-          {player.allIn        && <Text style={[s.badge, s.badgeAI]}>ALL IN</Text>}
-        </View>
-        <Text style={[s.podChips, win && s.podChipsWin, !!actionLbl && s.podChipsAction]}
-          numberOfLines={1}>{chipLabel}</Text>
-      </View>
-      {timeLeft !== null && timeLeft <= 10 && (
-        <Text style={[s.countdown, timeLeft <= 5 && s.countdownUrgent]}>{timeLeft}s</Text>
-      )}
+      <Text style={[s.podChips, win && s.podChipsWin, !!actionLbl && s.podChipsAction]}
+        numberOfLines={1}>{chipLabel}</Text>
     </View>
   );
 
   return (
-    <View style={s.pod}>
-      {isMe  ? <>{cards}{nameplate}</> : <>{nameplate}{cards}</>}
+    <View style={[s.pod, present && player.folded && { opacity: 0.8 }]}>
+      {cards}
+      {nameplate}
+      {avatar}
     </View>
   );
 }
@@ -159,6 +250,7 @@ export default function GameScreen() {
   const { gameState, myId, onAction, onLeave, onRematch, onLogout, emit, matchOver, navigationRef, deckStyle, opponentDisconnected, playerInfo } = useContext(GameContext);
 
   const [menuOpen, setMenuOpen] = useState(false);
+  const [feltSize, setFeltSize] = useState({ w: 0, h: 0 });
 
   const me       = gameState?.players?.find(p => p.id === myId);
   const opponent = gameState?.players?.find(p => p.id !== myId);
@@ -226,6 +318,41 @@ export default function GameScreen() {
   const dispPot  = locked ? snap.pot : totalPot;
   const chipsFor = p => locked ? (snap.chips[p?.id] ?? p?.chips ?? 0) : (p?.chips ?? 0);
 
+  // Pot-to-winner banana flight. Fires once when showWinners flips true and
+  // we have a confirmed winner. Bananas appear at the pot center and fly
+  // toward the winner's nameplate (up to opp, down to me), then fade.
+  const flightY       = useRef(new Animated.Value(0)).current;
+  const flightOpacity = useRef(new Animated.Value(0)).current;
+  const flightScale   = useRef(new Animated.Value(1)).current;
+  const [flightAmount, setFlightAmount] = useState(0);
+  useEffect(() => {
+    if (!showWinners || !gameState?.winners?.length) {
+      flightOpacity.setValue(0);
+      return;
+    }
+    const winner = gameState.winners[0];
+    const dir = winner.playerId === myId ? 1 : -1; // +1 down toward me, -1 up toward opp
+    setFlightAmount(winner.amount || snap.pot || totalPot);
+    flightY.setValue(0);
+    flightScale.setValue(1);
+    flightOpacity.setValue(1);
+    Animated.parallel([
+      Animated.timing(flightY, {
+        toValue: dir * 220, duration: 900,
+        easing: Easing.bezier(0.25, 0.46, 0.45, 0.94),
+        useNativeDriver: true,
+      }),
+      Animated.sequence([
+        Animated.timing(flightScale, { toValue: 1.2, duration: 700, useNativeDriver: true }),
+        Animated.timing(flightScale, { toValue: 1,   duration: 200, useNativeDriver: true }),
+      ]),
+      Animated.sequence([
+        Animated.delay(700),
+        Animated.timing(flightOpacity, { toValue: 0, duration: 200, useNativeDriver: true }),
+      ]),
+    ]).start();
+  }, [showWinners]);
+
   const centerAction = useCenterAction(gameState?.lastAction);
 
   const handName = (() => {
@@ -247,9 +374,22 @@ export default function GameScreen() {
 
   const handleReset = () => fetch(`${SERVER_URL}/admin/reset`, { method: 'POST' }).catch(() => {});
 
+  // Uniform scale of the entire scene to fit the device's safe area.
+  // Same composition on every screen → just a different overall scale.
+  const insets = useSafeAreaInsets();
+  const { width: winW, height: winH } = useWindowDimensions();
+  const availW = winW;
+  const availH = winH - insets.top - insets.bottom;
+  const scale  = Math.min(availW / DESIGN_WIDTH, availH / DESIGN_HEIGHT);
+
   return (
+   <View style={s.outer}>
     <SafeAreaView style={s.safe}>
-      <View style={s.container}>
+      <View style={s.sceneWrapper}>
+       <View style={[s.scene, { transform: [{ scale }] }]}>
+        <Image source={INGAME_BG} style={s.bgImage} resizeMode="cover" pointerEvents="none" />
+        <View style={s.bgTint} pointerEvents="none" />
+        <View style={s.container}>
 
         {/* Top bar */}
         <View style={s.topBar}>
@@ -281,74 +421,96 @@ export default function GameScreen() {
           <DisconnectBanner deadline={opponentDisconnected} />
         )}
 
-        {/* Opponent pod */}
+        {/* Opponent pod — always rendered (avatar + nameplate fixed
+            on the table even before an opponent joins). */}
         <View style={s.oppSection}>
-          {opponent ? (
-            <PlayerPod player={opponent} isMe={false}
-              turnDeadline={oppDeadline} lastAction={gameState?.lastAction}
-              win={activeWinners[opponent.id]} displayChips={chipsFor(opponent)}
-              deckStyle={deckStyle} />
-          ) : (
-            <View style={s.waitingPod}>
-              <Text style={s.waitingTxt}>Waiting for opponent…</Text>
-            </View>
-          )}
+          <PlayerPod player={opponent} isMe={false}
+            turnDeadline={oppDeadline} lastAction={gameState?.lastAction}
+            win={opponent ? activeWinners[opponent.id] : null}
+            displayChips={opponent ? chipsFor(opponent) : 0}
+            deckStyle={deckStyle} />
         </View>
 
         {/* Felt table */}
-        <View style={s.felt}>
+        <View
+          style={s.felt}
+          onLayout={e => {
+            const { width, height } = e.nativeEvent.layout;
+            if (width !== feltSize.w || height !== feltSize.h) setFeltSize({ w: width, h: height });
+          }}
+        >
+          <FeltBackground width={feltSize.w} height={feltSize.h} />
 
-          {/* Opponent bet */}
-          {(opponent?.roundBet > 0 || opponent?.allIn) && (
-            <View style={s.betTop}>
-              {opponent.roundBet > 0 && <ChipStack amount={opponent.roundBet} size={24} />}
-              {opponent.roundBet > 0 && <Text style={s.betAmt}>${opponent.roundBet.toLocaleString()}</Text>}
-              {opponent.allIn && <Text style={s.allInTag}>ALL IN</Text>}
-            </View>
-          )}
-
-          {/* Center: community cards + pot + narration */}
-          <View style={s.center}>
-            <View style={s.communityRow}>
-              {[0,1,2,3,4].map(i => {
-                const card = i < revealedCC ? gameState?.communityCards?.[i] : null;
-                if (!card) return <View key={i} style={s.ccPlaceholder} />;
-                return <Card key={i} card={card} size="md" deckStyle={deckStyle} faceDown={false} />;
-              })}
-            </View>
-            {dispPot > 0 && (
-              <View style={s.potRow}>
-                <ChipStack amount={dispPot} size={24} />
-                <Text style={s.potAmt}>${dispPot.toLocaleString()}</Text>
+          {/* Opponent bet — anchored at a fixed slot, horizontally centred
+              so the chip + amount pill doesn't shift with content width. */}
+          <View style={s.betTop} pointerEvents="none">
+            {(opponent?.roundBet > 0 || opponent?.allIn) && (
+              <View style={s.betPill}>
+                {opponent.roundBet > 0 && <Chips amount={opponent.roundBet} size={33} />}
+                {opponent.roundBet > 0 && <Text style={s.betAmt}>{opponent.roundBet.toLocaleString()}</Text>}
+                {opponent.allIn && <Text style={s.allInTag}>ALL IN</Text>}
               </View>
-            )}
-            {(centerAction || handName) && (
-              <Text style={s.narration}>{handName || centerAction}</Text>
             )}
           </View>
 
-          {/* My bet */}
-          {(me?.roundBet > 0 || me?.allIn) && (
-            <View style={s.betBottom}>
-              {me.roundBet > 0 && <ChipStack amount={me.roundBet} size={24} />}
-              {me.roundBet > 0 && <Text style={s.betAmt}>${me.roundBet.toLocaleString()}</Text>}
-              {me.allIn && <Text style={s.allInTag}>ALL IN</Text>}
+          {/* Community cards — always rendered (placeholders for missing
+              slots) at a fixed position in the felt. */}
+          {feltSize.h > 0 && (
+            <View style={[s.communityFixed, { top: feltSize.h * 0.5 - 22 }]} pointerEvents="none">
+              <View style={s.communityRow}>
+                {[0,1,2,3,4].map(i => {
+                  const card = i < revealedCC ? gameState?.communityCards?.[i] : null;
+                  if (!card) return <View key={i} style={s.ccPlaceholder} />;
+                  return <Card key={i} card={card} size="md" deckStyle={deckStyle} faceDown={false} />;
+                })}
+              </View>
             </View>
           )}
 
-          {/* Dealer buttons */}
-          {opponent?.isDealer && <View style={[s.dealerBtn, s.dealerTop]}><Text style={s.dealerTxt}>D</Text></View>}
-          {me?.isDealer       && <View style={[s.dealerBtn, s.dealerBottom]}><Text style={s.dealerTxt}>D</Text></View>}
+          {/* Pot — fixed slot under the community cards. */}
+          {feltSize.h > 0 && (
+            <View style={[s.potFixed, { top: feltSize.h * 0.5 + 38 }]} pointerEvents="none">
+              {dispPot > 0 && (
+                <View style={s.potRow}>
+                  <Chips amount={dispPot} size={33} />
+                  <Text style={s.potAmt}>{dispPot.toLocaleString()}</Text>
+                </View>
+              )}
+            </View>
+          )}
+
+          {/* Narration slot removed — action label already lives in the
+              nameplate, no need to duplicate it on the felt. */}
+
+          {/* My bet — anchored at a fixed slot, horizontally centred. */}
+          <View style={s.betBottom} pointerEvents="none">
+            {(me?.roundBet > 0 || me?.allIn) && (
+              <View style={s.betPill}>
+                {me.roundBet > 0 && <Chips amount={me.roundBet} size={33} />}
+                {me.roundBet > 0 && <Text style={s.betAmt}>{me.roundBet.toLocaleString()}</Text>}
+                {me.allIn && <Text style={s.allInTag}>ALL IN</Text>}
+              </View>
+            )}
+          </View>
+
+          {/* Pot-to-winner banana flight */}
+          {flightAmount > 0 && (
+            <Animated.View pointerEvents="none" style={[s.winFlight, {
+              opacity: flightOpacity,
+              transform: [{ translateY: flightY }, { scale: flightScale }],
+            }]}>
+              <Chips amount={flightAmount} size={45} />
+            </Animated.View>
+          )}
         </View>
 
-        {/* My pod */}
+        {/* My pod — always rendered. */}
         <View style={s.mySection}>
-          {me && (
-            <PlayerPod player={me} isMe={true}
-              turnDeadline={myDeadline} lastAction={gameState?.lastAction}
-              win={activeWinners[myId]} displayChips={chipsFor(me)}
-              deckStyle={deckStyle} />
-          )}
+          <PlayerPod player={me} isMe={true}
+            turnDeadline={myDeadline} lastAction={gameState?.lastAction}
+            win={me ? activeWinners[myId] : null}
+            displayChips={me ? chipsFor(me) : 0}
+            deckStyle={deckStyle} />
         </View>
 
         {/* Betting controls */}
@@ -357,6 +519,12 @@ export default function GameScreen() {
             onAction={onAction} raiseAmount={raiseAmount}
             onRaiseChange={v => setRaiseAmount(Math.round(v))} />
         </View>
+
+        {/* Dealer disc — rendered AFTER mySection so it stays on top of
+            the hole cards, positioned in canvas coordinates relative to
+            the visible felt oval. */}
+        {opponent?.isDealer && <View style={[s.dealerBtn, s.dealerTop]}><Text style={s.dealerTxt}>D</Text></View>}
+        {me?.isDealer       && <View style={[s.dealerBtn, s.dealerBottom]}><Text style={s.dealerTxt}>D</Text></View>}
 
         {/* Match over modal */}
         {matchOver && (
@@ -424,14 +592,24 @@ export default function GameScreen() {
           </View>
         )}
 
+        </View>
+       </View>
       </View>
     </SafeAreaView>
+   </View>
   );
 }
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
 const s = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#0a1628' },
+  outer:        { flex: 1, backgroundColor: '#2a1808' },
+  safe:         { flex: 1, backgroundColor: 'transparent' },
+  sceneWrapper: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  scene:        { width: DESIGN_WIDTH, height: DESIGN_HEIGHT, overflow: 'hidden' },
+  // Table artwork fills the scaled canvas. resizeMode 'cover' so the floor
+  // decorations bleed off the canvas edges instead of leaving bands.
+  bgImage: { position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' },
+  bgTint:  { position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0,0,0,0.18)' },
   container: { flex: 1 },
 
   // Top bar
@@ -449,25 +627,60 @@ const s = StyleSheet.create({
   disconnectBanner: { marginHorizontal: 12, marginBottom: 4, backgroundColor: 'rgba(251,146,60,0.18)', borderWidth: 1, borderColor: 'rgba(251,146,60,0.5)', borderRadius: 8, paddingVertical: 6, paddingHorizontal: 12 },
   disconnectTxt: { color: '#fb923c', fontSize: 12, fontWeight: '700', textAlign: 'center' },
   oppSection: { paddingHorizontal: 12, paddingTop: 4, paddingBottom: 0 },
-  mySection:  { paddingHorizontal: 12, paddingTop: 0, paddingBottom: 4 },
-
-  // Pod
-  pod: { gap: 0 },
-  nameplate: {
-    flexDirection: 'row', alignItems: 'center', gap: 12,
-    backgroundColor: 'rgba(0,0,0,0.6)', borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.1)',
-    borderRadius: 16, paddingHorizontal: 14, paddingVertical: 10,
+  // transform: translateY pushes the my-pod visually down without
+  // shifting the flex layout (flex:1 on the felt absorbs paddingTop
+  // changes). zIndex keeps the pod above the betting controls bg.
+  mySection:  {
+    paddingHorizontal: 12, paddingTop: 0, paddingBottom: 0,
+    transform: [{ translateY: 18 }],
+    zIndex: 30,
   },
-  nameplateActive: { borderColor: colors.gold, shadowColor: colors.gold, shadowOpacity: 0.4, shadowRadius: 10, elevation: 4 },
-  nameplateFolded: { opacity: 0.4 },
-  avatarWrap: { width: 56, height: 56, position: 'relative', alignItems: 'center', justifyContent: 'center' },
-  ring: { position: 'absolute', top: -2, left: -2 },
-  podInfo: { flex: 1, gap: 3 },
+
+  // Pod — fixed height. Children placed absolutely so nothing shifts.
+  pod: { position: 'relative', height: POD_HEIGHT, marginHorizontal: 8 },
+
+  // Avatar block — vertically centred in the pod, anchored to its own
+  // horizontal end. Always on top (zIndex 50, elevation 12).
+  avatarBlock: {
+    position: 'absolute', top: AVATAR_TOP,
+    width: AVATAR_SIZE, height: AVATAR_SIZE,
+    alignItems: 'center', justifyContent: 'center',
+    zIndex: 50, elevation: 12,
+  },
+  avatarBlockMe:  { right: 0 },
+  avatarBlockOpp: { left:  0 },
+  ring: { position: 'absolute', top: (AVATAR_SIZE - RING_BOX) / 2, left: (AVATAR_SIZE - RING_BOX) / 2 },
+
+  // Nameplate — fixed-height capsule, vertically centred on the avatar.
+  // Fully opaque background (never transparent) and a higher zIndex than
+  // the hole cards so any card overlap is clipped behind the pill.
+  nameplate: {
+    position: 'absolute',
+    top: NAMEPLATE_TOP, height: NAMEPLATE_HEIGHT,
+    backgroundColor: '#08080a',
+    borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.1)',
+    borderRadius: 32,
+    paddingVertical: 6,
+    justifyContent: 'center',
+    gap: 1,
+    zIndex: 3, elevation: 4,
+    shadowColor: '#000', shadowOpacity: 0.45, shadowRadius: 6,
+    shadowOffset: { width: 0, height: 3 },
+    overflow: 'hidden',
+  },
+  // Horizontally: nameplate is ~15% narrower than the original. The
+  // avatar end still overlaps the pill ~44 px past the avatar's inner
+  // edge; the OPPOSITE end is shortened by 40 px.
+  nameplateMe:  { left:  40, right: AVATAR_SIZE - 44, paddingLeft: 18, paddingRight: 60 },
+  nameplateOpp: { right: 40, left:  AVATAR_SIZE - 44, paddingLeft: 60, paddingRight: 18 },
+  nameplateActive: { borderColor: colors.gold, shadowColor: colors.gold, shadowOpacity: 0.4, shadowRadius: 10, elevation: 6 },
+  // Folded / waiting: only the inner text fades, never the pill itself.
+  nameplateFolded: {},
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' },
-  podName: { color: colors.white, fontSize: 16, fontWeight: '800', flexShrink: 1 },
-  podChips: { color: colors.goldLight, fontSize: 15, fontWeight: '700' },
+  podName: { color: colors.white, fontSize: 17, fontWeight: '800', flexShrink: 1 },
+  podChips: { color: '#facc15', fontSize: 18, fontWeight: '900' },
   podChipsWin: { color: '#4ade80' },
-  podChipsAction: { color: colors.orange },
+  podChipsAction: { color: colors.orange, fontSize: 14, fontWeight: '800' },
   badge: { fontSize: 10, color: '#fff', backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 4, paddingHorizontal: 5, paddingVertical: 1, fontWeight: '700' },
   badgeSB: { backgroundColor: '#2563eb' },
   badgeBB: { backgroundColor: '#7c3aed' },
@@ -475,45 +688,86 @@ const s = StyleSheet.create({
   countdown: { color: 'rgba(255,255,255,0.7)', fontSize: 14, fontWeight: '800' },
   countdownUrgent: { color: '#f87171' },
 
-  // Cards coming out of pod
-  podCards: { flexDirection: 'row', justifyContent: 'center', paddingVertical: 4, gap: 6 },
+  // Hole cards — anchored by their BOTTOM edge so xl and lg cards
+  // (different heights) sit on the same horizontal line just above the
+  // nameplate. Close to the avatar (CARD_AVATAR_GAP horizontal gap)
+  // and just above the nameplate (CARD_NAMEPLATE_GAP vertical gap),
+  // without touching either.
+  // Hole cards row: tilted via cardSlot rotation, with a positive gap so
+  // the two cards never touch each other.
+  // Hole cards held by the player. Slight overlap, fanned via rotation,
+  // tucked behind the nameplate (lower zIndex) so any part of the cards
+  // crossing the nameplate's top edge is clipped by the pill.
+  podCards: { position: 'absolute', flexDirection: 'row', gap: 6, zIndex: 1 },
+  podCardsMe:  { bottom: CARDS_BOTTOM, right: AVATAR_SIZE + CARD_AVATAR_GAP },
+  podCardsOpp: { bottom: CARDS_BOTTOM, left:  AVATAR_SIZE + CARD_AVATAR_GAP },
+  // Rotation only — translation/scale lives on the outer Animated.View
+  // so the deal animation can shift world-space coordinates without
+  // tripping over the rotation matrix.
+  cardSlotLeft:  { transform: [{ rotate: '-8deg' }] },
+  cardSlotRight: { transform: [{ rotate:  '8deg' }] },
   hidden: { opacity: 0 },
-  cardWrap: {},
-  cardLeft:  {},
-  cardRight: {},
 
   // Waiting
   waitingPod: { backgroundColor: 'rgba(0,0,0,0.4)', borderRadius: 16, padding: 18, alignItems: 'center' },
   waitingTxt: { color: colors.gray, fontSize: 14, fontStyle: 'italic' },
+  // Placeholder treatment when no player has joined yet — the avatar
+  // dims while the nameplate stays SOLID (no transparency).
+  avatarPlaceholder: { opacity: 0.45 },
+  nameplateWaiting: {},
 
-  // Felt
+  // Felt — transparent positioning anchor. The wooden table artwork is
+  // drawn behind the whole scene (INGAME_BG), so the felt View itself just
+  // holds the community cards, pot, bets and dealer disc at their fixed
+  // positions, with the table artwork showing through.
   felt: {
-    flex: 1, marginHorizontal: 8, borderRadius: 120,
-    backgroundColor: '#0d2148',
-    borderWidth: 14, borderColor: '#2a1408',
+    flex: 1, marginHorizontal: 8,
     alignItems: 'center', justifyContent: 'center',
-    shadowColor: '#000', shadowOpacity: 0.5, shadowRadius: 12, elevation: 8,
     position: 'relative',
   },
-  center: { alignItems: 'center', gap: 8 },
-  communityRow: { flexDirection: 'row', gap: 6, alignItems: 'center' },
-  ccPlaceholder: { width: 52, height: 56 },
-  potRow: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: 'rgba(0,0,0,0.45)', borderRadius: 10, paddingHorizontal: 10, paddingVertical: 4 },
-  potAmt: { color: colors.goldLight, fontSize: 14, fontWeight: '800' },
-  narration: { color: 'rgba(255,255,255,0.7)', fontSize: 12, fontStyle: 'italic', textAlign: 'center' },
+  // Fixed slots on the felt — community cards, pot, narration, and the
+  // two bet pills all sit at known positions and only their content
+  // changes. Full-width centring containers keep the chip+amount pair
+  // horizontally locked regardless of width.
+  communityFixed: { position: 'absolute', left: 0, right: 0, alignItems: 'center', zIndex: 2 },
+  communityRow:   { flexDirection: 'row', gap: 6, alignItems: 'center' },
+  ccPlaceholder:  { width: 42, height: 50 },
 
-  betTop: { position: 'absolute', top: 14, flexDirection: 'row', alignItems: 'center', gap: 5 },
-  betBottom: { position: 'absolute', bottom: 14, flexDirection: 'row', alignItems: 'center', gap: 5 },
-  betAmt: { color: colors.goldLight, fontSize: 12, fontWeight: '700' },
-  allInTag: { color: '#f87171', fontSize: 11, fontWeight: '800' },
+  potFixed: { position: 'absolute', left: 0, right: 0, alignItems: 'center', height: 40, justifyContent: 'flex-start', zIndex: 2 },
+  potRow:   { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 4 },
+  potAmt:   { color: '#4a2a10', fontSize: 21, fontWeight: '900' },
 
-  dealerBtn: { position: 'absolute', width: 26, height: 26, borderRadius: 13, backgroundColor: '#f5f5dc', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#999' },
-  dealerTop:    { top: 10, right: 20 },
-  dealerBottom: { bottom: 10, right: 20 },
-  dealerTxt: { color: '#333', fontSize: 11, fontWeight: '800' },
+  narrationFixed: { position: 'absolute', left: 20, right: 20, alignItems: 'center', height: 22, justifyContent: 'flex-start', zIndex: 2 },
+  narration:      { color: 'rgba(255,255,255,0.85)', fontSize: 12, fontStyle: 'italic', textAlign: 'center' },
 
-  // Controls
-  controls: { paddingHorizontal: 12, paddingBottom: 8, paddingTop: 4, backgroundColor: 'rgba(0,0,0,0.5)', borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.08)' },
+  // Right at the player end of the felt — top bet pushed up into the
+  // top oval rim area, bottom bet pushed past the felt's bottom edge
+  // so it sits right above the player's hole cards.
+  betTop:    { position: 'absolute', top: -40,    left: 0, right: 0, alignItems: 'center', height: 40, justifyContent: 'flex-start', zIndex: 20 },
+  betBottom: { position: 'absolute', bottom: -25, left: 0, right: 0, alignItems: 'center', height: 40, justifyContent: 'flex-start', zIndex: 20 },
+  betPill:   { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  betAmt:    { color: '#4a2a10', fontSize: 18, fontWeight: '900' },
+  allInTag:  { color: '#f87171', fontSize: 11, fontWeight: '800' },
+
+  dealerBtn: { position: 'absolute', width: 30, height: 30, borderRadius: 15, backgroundColor: '#f5f5dc', alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: '#888', shadowColor: '#000', shadowOpacity: 0.4, shadowRadius: 3, shadowOffset: { width: 0, height: 2 }, elevation: 4, zIndex: 60 },
+  // Canvas-absolute coordinates on the 393×852 design canvas.
+  //   Top (1 o'clock) — nudged a touch further down vs the previous spot.
+  //   Bottom (7 o'clock) — moved up onto the felt, just above the LEFT
+  //     hole card of the bottom player (no longer down on the floor).
+  dealerTop:    { top: 235, left: 247 },
+  dealerBottom: { top: 465, left:  88 },
+  dealerTxt: { color: '#333', fontSize: 13, fontWeight: '900' },
+
+  // Pot-to-winner banana flight overlay (sits centered on the felt)
+  winFlight: { position: 'absolute', top: '50%', alignSelf: 'center', marginTop: -14, zIndex: 30 },
+
+  // Controls — fixed minHeight so the felt + pods don't shift when the
+  // BettingControls children appear/disappear (slider + buttons only
+  // render on the local player's turn, so the slot collapses otherwise).
+  // Fixed height so the avatar+nameplate above never shift whether the
+  // BettingControls children are rendered or not. Maximum content =
+  // slider row (~40) + buttons (~76) + wrap gap (10) + paddings (16) ≈ 142.
+  controls: { paddingHorizontal: 12, paddingBottom: 10, paddingTop: 6, height: 158, backgroundColor: 'rgba(0,0,0,0.5)', borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.08)' },
 
   // Match over modal
   modalOverlay: { position: 'absolute', inset: 0, backgroundColor: 'rgba(0,0,0,0.75)', alignItems: 'center', justifyContent: 'center', zIndex: 100 },

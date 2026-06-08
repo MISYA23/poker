@@ -2,6 +2,9 @@ import React, { useState, useEffect, useMemo } from 'react';
 import {
   View, Text, Pressable, ScrollView, StyleSheet, ActivityIndicator,
 } from 'react-native';
+import ScaledBg from '../components/ScaledBg';
+
+const MENU_BG = require('../../assets/jungle-ingame.png');
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Card from '../components/Card';
 import { colors } from '../theme';
@@ -106,26 +109,31 @@ export default function HandReplayScreen({ navigation, route }) {
 
   if (loading) {
     return (
-      <SafeAreaView style={s.safe}>
-        <View style={s.center}><ActivityIndicator color={colors.gold} size="large" /></View>
-      </SafeAreaView>
+      <ScaledBg source={MENU_BG} tint={0.45}>
+        <SafeAreaView style={s.safe}>
+          <View style={s.center}><ActivityIndicator color={colors.gold} size="large" /></View>
+        </SafeAreaView>
+      </ScaledBg>
     );
   }
 
   if (!hands?.length) {
     return (
-      <SafeAreaView style={s.safe}>
-        <View style={s.header}>
-          <Pressable onPress={() => navigation.goBack()}><Text style={s.back}>← Back</Text></Pressable>
-          <Text style={s.title}>Hand History</Text>
-          <View style={{ width: 60 }} />
-        </View>
-        <View style={s.center}><Text style={s.empty}>No hand history found for this match.</Text></View>
-      </SafeAreaView>
+      <ScaledBg source={MENU_BG} tint={0.45}>
+        <SafeAreaView style={s.safe}>
+          <View style={s.header}>
+            <Pressable onPress={() => navigation.goBack()}><Text style={s.back}>← Back</Text></Pressable>
+            <Text style={s.title}>Hand History</Text>
+            <View style={{ width: 60 }} />
+          </View>
+          <View style={s.center}><Text style={s.empty}>No hand history found for this match.</Text></View>
+        </SafeAreaView>
+      </ScaledBg>
     );
   }
 
   return (
+   <ScaledBg source={MENU_BG} tint={0.45}>
     <SafeAreaView style={s.safe}>
       {/* Header */}
       <View style={s.header}>
@@ -217,11 +225,12 @@ export default function HandReplayScreen({ navigation, route }) {
         </Pressable>
       </View>
     </SafeAreaView>
+   </ScaledBg>
   );
 }
 
 const s = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#0a1628' },
+  safe: { flex: 1, backgroundColor: 'transparent' },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   empty: { color: colors.gray, fontSize: 14, fontStyle: 'italic' },
 

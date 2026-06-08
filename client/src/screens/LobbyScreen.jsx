@@ -1,9 +1,10 @@
 import React, { useContext, useState, useEffect } from 'react';
 import {
-  View, Text, Pressable, ScrollView, StyleSheet, ImageBackground,
+  View, Text, Pressable, ScrollView, StyleSheet,
   Image, ActivityIndicator,
 } from 'react-native';
 import FriendsTabComponent from '../components/FriendsTab';
+import ScaledBg from '../components/ScaledBg';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { GameContext } from '../context/GameContext';
 import { colors } from '../theme';
@@ -131,8 +132,7 @@ export default function LobbyScreen() {
   const [activeTab, setActiveTab] = useState(0);
 
   return (
-    <ImageBackground source={require('../../assets/jungle.png')} style={s.bg} resizeMode="cover">
-      <View style={s.overlay}>
+    <ScaledBg source={require('../../assets/jungle-ingame.png')} tint={0.45}>
         <SafeAreaView style={s.safe}>
 
           {/* Top bar */}
@@ -210,8 +210,7 @@ export default function LobbyScreen() {
 
           </ScrollView>
         </SafeAreaView>
-      </View>
-    </ImageBackground>
+    </ScaledBg>
   );
 }
 
