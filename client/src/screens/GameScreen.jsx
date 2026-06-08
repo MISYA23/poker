@@ -18,7 +18,8 @@ const GAME_BG       = require('../../assets/game-bg.png');
 const SPEECH_BUBBLE = require('../../assets/speech-bubble.png');
 
 const TURN_DURATION_MS = 20000;
-const TOP_BAR_H = 48;
+const TOP_BAR_H    = 48;
+const ACTION_BAR_H = 125;
 
 // ─── Group A reference canvas ─────────────────────────────────────────────────
 // 393×760 (~1:1.93) — trimmed from 852 to eliminate dead bands above opponent
@@ -291,7 +292,8 @@ export default function GameScreen({ navigation }) {
     }
   }, []);
 
-  const [menuOpen, setMenuOpen] = useState(false);
+  const [menuOpen,  setMenuOpen]  = useState(false);
+  const [debugUI,   setDebugUI]   = useState(false);
 
   const me       = gameState?.players?.find(p => p.id === myId);
   const opponent = gameState?.players?.find(p => p.id !== myId);
@@ -407,12 +409,8 @@ export default function GameScreen({ navigation }) {
 
   const { width: winW, height: winH } = useWindowDimensions();
   const insets = useSafeAreaInsets();
-  // 70 = paddingTop(6) + button(~54) + paddingBottom(10); only grows, never shrinks
-  const [actionBarH, setActionBarH] = useState(70);
-
-  // Content area excludes top chrome and action bar — stage scales to fit this only
   const stageTop       = insets.top + TOP_BAR_H;
-  const stageBotOffset = insets.bottom + actionBarH;
+  const stageBotOffset = insets.bottom + ACTION_BAR_H;
   const contentH       = winH - stageTop - stageBotOffset;
   const scale          = Math.min(winW / DESIGN_W, contentH / DESIGN_H);
 
@@ -421,17 +419,17 @@ export default function GameScreen({ navigation }) {
 
       {/* Group C — environment: 55% opacity lifts the baked vignette ~45%;
           dark jungle root colour bleeds through the transparent edges */}
-      <Image source={GAME_BG} style={[StyleSheet.absoluteFill, { opacity: 0.55 }]} resizeMode="cover" />
+      <Image source={GAME_BG} style={[StyleSheet.absoluteFill, { width: '100%', height: '100%', opacity: 0.55 }]} resizeMode="cover" />
 
       {/* Group A — stage: scaled to content area only (below top bar, above action buttons) */}
       <View style={[s.stageOuter, { top: stageTop, bottom: stageBotOffset }]} pointerEvents="none">
-        <View style={[s.stage, { transform: [{ scale }], borderWidth: 2, borderColor: 'yellow' }]}>
+        <View style={[s.stage, { transform: [{ scale }] }, debugUI && { borderWidth: 2, borderColor: 'yellow' }]}>
 
           {/* Layer 2: Table surface */}
           <Image source={INGAME_TABLE} style={s.tableImg} resizeMode="contain" />
 
-          {/* DEBUG GRID — remove before ship */}
-          {['A','B','C','D'].map((col, c) =>
+          {/* DEBUG GRID */}
+          {debugUI && ['A','B','C','D'].map((col, c) =>
             [1,2,3,4,5,6,7,8].map(row => (
               <View key={`${col}${row}`} style={{
                 position: 'absolute',
@@ -545,7 +543,7 @@ export default function GameScreen({ navigation }) {
       <SafeAreaView style={s.chrome} pointerEvents="box-none">
 
         {/* Top bar */}
-        <View style={s.topBar} pointerEvents="box-none">
+        <View style={[s.topBar, debugUI && { borderWidth: 2, borderColor: 'red' }]} pointerEvents="box-none">
           <Text style={s.version}>{VERSION_DISPLAY}</Text>
           <Pressable style={s.menuBtn} onPress={() => setMenuOpen(o => !o)}>
             <Text style={s.menuBtnTxt}>☰</Text>
@@ -563,8 +561,7 @@ export default function GameScreen({ navigation }) {
         <View style={{ flex: 1 }} pointerEvents="none" />
 
         {/* Bottom betting controls (Group B) — fixed ergonomic height */}
-        <View style={s.bottomChrome} pointerEvents="box-none"
-          onLayout={(e) => { const h = e.nativeEvent.layout.height; setActionBarH(prev => Math.max(prev, h)); }}>
+        <View style={[s.bottomChrome, debugUI && { borderWidth: 2, borderColor: 'blue' }]} pointerEvents="box-none">
           {isMyTurn && (
             <BettingControls
               gameState={gameState} myId={myId}
@@ -588,6 +585,10 @@ export default function GameScreen({ navigation }) {
                 <Pressable style={s.menuItem}
                   onPress={() => { setMenuOpen(false); onLeave(); }}>
                   <Text style={s.menuItemTxt}>🚪 Leave Table</Text>
+                </Pressable>
+                <Pressable style={s.menuItem}
+                  onPress={() => { setDebugUI(v => !v); setMenuOpen(false); }}>
+                  <Text style={s.menuItemTxt}>{debugUI ? '🟢' : '⚫'} UI Debug</Text>
                 </Pressable>
                 <Pressable style={[s.menuItem, s.menuItemRed]}
                   onPress={() => { setMenuOpen(false); onLeave(); onLogout?.(); }}>
@@ -666,7 +667,7 @@ export default function GameScreen({ navigation }) {
 const s = StyleSheet.create({
   // Root — dark jungle base colour shows through wherever the bg image is
   // semi-transparent, lifting the crushed-black vignette edges.
-  root: { flex: 1, backgroundColor: '#0f2318' },
+  root: { flex: 1, width: '100%', backgroundColor: '#0a1a2e' },
 
   // Group A: stage container fills screen, centers the scaled canvas
   stageOuter: {

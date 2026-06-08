@@ -1,8 +1,5 @@
-import React, { useState, useRef, useMemo } from 'react';
-import { View, Text, Pressable, StyleSheet, PanResponder } from 'react-native';
-import { colors } from '../theme';
-
-const BAR_H = 160;
+import React, { useMemo } from 'react';
+import { View, Text, Pressable, StyleSheet } from 'react-native';
 
 export default function BettingControls({ gameState, myId, onAction, raiseAmount, onRaiseChange }) {
   const me = gameState?.players?.find(p => p.id === myId);
@@ -20,55 +17,62 @@ export default function BettingControls({ gameState, myId, onAction, raiseAmount
   const mustAllInToCall = !canCheck && hasChips && callAmount === (me?.chips || 0);
   const isOpening       = currentBet === 0;
   const isAllin         = raiseAmount >= maxRaise;
+  const pot             = gameState?.pot || 0;
 
   const handleRaise = () => onAction(isAllin ? 'all-in' : 'raise', raiseAmount);
+  const nudge = dir => onRaiseChange(Math.max(effectiveMin, Math.min(maxRaise, raiseAmount + dir * bigBlind)));
 
-  const [raiseBtnWidth, setRaiseBtnWidth] = useState(100);
-  const barWidth = Math.max(24, Math.round(raiseBtnWidth / 2));
+  const snap = v => Math.max(effectiveMin, Math.min(maxRaise, Math.round(v / bigBlind) * bigBlind));
 
-  const fillRatio = maxRaise > effectiveMin
-    ? (raiseAmount - effectiveMin) / (maxRaise - effectiveMin)
-    : 1;
-  const fillHeight = Math.round(fillRatio * BAR_H);
-
-  // Use ref so PanResponder closure always reads latest game values
-  const touchRef = useRef();
-  touchRef.current = (y) => {
-    const ratio  = 1 - Math.max(0, Math.min(1, y / BAR_H));
-    const raw    = effectiveMin + ratio * (maxRaise - effectiveMin);
-    const stepped = Math.round(raw / bigBlind) * bigBlind;
-    onRaiseChange(Math.max(effectiveMin, Math.min(maxRaise, stepped)));
-  };
-
-  const pan = useMemo(() => PanResponder.create({
-    onStartShouldSetPanResponder: () => true,
-    onMoveShouldSetPanResponder:  () => true,
-    onPanResponderGrant: (evt) => touchRef.current(evt.nativeEvent.locationY),
-    onPanResponderMove:  (evt) => touchRef.current(evt.nativeEvent.locationY),
-  }), []);
-
-  const barColor = isAllin ? '#581c87' : '#78350f';
+  const presets = useMemo(() => {
+    const candidates = [
+      { label: '½P',  value: snap(pot * 0.5) },
+      { label: 'Pot', value: snap(pot) },
+      { label: '2×',  value: snap(pot * 2) },
+      { label: 'Max', value: maxRaise },
+    ];
+    const seen = new Set();
+    return candidates.filter(({ value }) => {
+      if (value < effectiveMin || value > maxRaise || seen.has(value)) return false;
+      seen.add(value);
+      return true;
+    });
+  }, [pot, effectiveMin, maxRaise, bigBlind]);
 
   return (
     <View style={s.wrap}>
 
+      {/* Preset amounts — only shown when raise is available */}
       {canRaise && (
-        <View
-          style={[s.bar, { width: barWidth, bottom: 68, borderWidth: 5, borderColor: barColor, borderRadius: 6 }]}
-          {...pan.panHandlers}
-        >
-          {/* Empty track */}
-          <View style={[s.track, { backgroundColor: `${barColor}44` }]}>
-            {/* Fill */}
-            <View style={[s.fill, { height: fillHeight, backgroundColor: barColor }]} />
-            {/* Amount — floats just above the fill */}
-            <Text style={[s.barLabel, { bottom: fillHeight + 4 }]} numberOfLines={1}>
-              {raiseAmount.toLocaleString()}
-            </Text>
-          </View>
+        <View style={s.presetRow}>
+          {presets.map(({ label, value }) => (
+            <Pressable
+              key={label}
+              style={[s.preset, raiseAmount === value && s.presetActive]}
+              onPress={() => onRaiseChange(value)}
+            >
+              <Text style={[s.presetTxt, raiseAmount === value && s.presetTxtActive]}>
+                {label}
+              </Text>
+            </Pressable>
+          ))}
         </View>
       )}
 
+      {/* Nudge row */}
+      {canRaise && (
+        <View style={s.nudgeRow}>
+          <Pressable style={s.nudgeBtn} onPress={() => nudge(-1)}>
+            <Text style={s.nudgeTxt}>−</Text>
+          </Pressable>
+          <Text style={s.nudgeAmt}>{raiseAmount.toLocaleString()}</Text>
+          <Pressable style={s.nudgeBtn} onPress={() => nudge(1)}>
+            <Text style={s.nudgeTxt}>+</Text>
+          </Pressable>
+        </View>
+      )}
+
+      {/* Action buttons */}
       <View style={s.btns}>
         <Pressable style={[s.btn, s.btnFold]} onPress={() => onAction('fold')}>
           <Text style={s.btnTxt}>Fold</Text>
@@ -89,11 +93,7 @@ export default function BettingControls({ gameState, myId, onAction, raiseAmount
         )}
 
         {canRaise && (
-          <Pressable
-            style={[s.btn, isAllin ? s.btnAllin : s.btnRaise]}
-            onPress={handleRaise}
-            onLayout={(e) => { const w = e.nativeEvent.layout.width; setRaiseBtnWidth(w); }}
-          >
+          <Pressable style={[s.btn, isAllin ? s.btnAllin : s.btnRaise]} onPress={handleRaise}>
             <Text style={s.btnTxt}>
               {isAllin ? 'All In' : `${isOpening ? 'Bet' : 'Raise'} ${raiseAmount.toLocaleString()}`}
             </Text>
@@ -105,38 +105,30 @@ export default function BettingControls({ gameState, myId, onAction, raiseAmount
 }
 
 const s = StyleSheet.create({
-  wrap: { width: '100%', maxWidth: 650, alignSelf: 'center' },
+  wrap: { width: '100%', maxWidth: 650, alignSelf: 'center', gap: 5 },
 
-  bar: {
-    position: 'absolute',
-    right: 0,
-    height: BAR_H,
-    zIndex: 200,
-    elevation: 30,
-  },
-  track: {
+  presetRow: { flexDirection: 'row', gap: 6 },
+  preset: {
     flex: 1,
-    borderRadius: 6,
-    overflow: 'hidden',
-    justifyContent: 'flex-end',
+    paddingVertical: 5,
+    borderRadius: 7,
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.13)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.18)',
   },
-  fill: {
-    width: '100%',
-    borderRadius: 4,
-  },
-  barLabel: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    textAlign: 'center',
-    color: '#fff',
-    fontSize: 11,
-    fontWeight: '800',
-  },
+  presetActive:    { backgroundColor: '#f59e0b', borderColor: '#f59e0b' },
+  presetTxt:       { color: 'rgba(255,255,255,0.85)', fontSize: 13, fontWeight: '700' },
+  presetTxtActive: { color: '#000' },
 
-  btns: { flexDirection: 'row', gap: 8 },
-  btn: { flex: 1, paddingVertical: 16, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
-  btnTxt:   { color: '#fff', fontSize: 18, fontWeight: '800', textAlign: 'center' },
+  nudgeRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10 },
+  nudgeBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: 'rgba(255,255,255,0.15)', alignItems: 'center', justifyContent: 'center' },
+  nudgeTxt: { color: '#fff', fontSize: 20, fontWeight: '700', lineHeight: 26 },
+  nudgeAmt: { color: '#fff', fontSize: 15, fontWeight: '900', minWidth: 70, textAlign: 'center' },
+
+  btns:     { flexDirection: 'row', gap: 8 },
+  btn:      { flex: 1, paddingVertical: 14, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  btnTxt:   { color: '#fff', fontSize: 17, fontWeight: '800', textAlign: 'center' },
   btnFold:  { backgroundColor: '#7f1d1d' },
   btnCheck: { backgroundColor: '#14532d' },
   btnCall:  { backgroundColor: '#1e40af' },
