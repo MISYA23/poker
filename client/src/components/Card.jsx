@@ -12,8 +12,7 @@ const SUIT_COLORS_FOUR    = { s: '#1a1a1a', h: '#c81e1e', d: '#1f63b0', c: '#1e7
 const SIZES = {
   xs: { width: 22, height: 21, font: 9 },
   sm: { width: 29, height: 26, font: 11 },
-  // md (community): +1% width, +10% height for slightly better presence.
-  md: { width: 42, height: 50, font: 17 },
+  md: { width: 54, height: 64, font: 26 },
   lg: { width: 51, height: 46, font: 21 },
   xl: { width: 58, height: 59, font: 24 },
 };
@@ -35,6 +34,15 @@ export default function Card({ card, size = 'md', faceDown = false, deckStyle = 
   const symbol = SUIT_SYMBOLS[card.suit] || card.suit;
   const color = colors[card.suit] || '#1a1a1a';
   const rankFont = card.rank === '10' ? s.font * 0.82 : s.font;
+
+  if (size === 'md') {
+    return (
+      <View style={[styles.card, styles.cardFace, styles.cardFaceCorner, { width: s.width, height: s.height }]}>
+        <Text style={[styles.rankCorner, { fontSize: rankFont, color }]}>{card.rank}</Text>
+        <Text style={[styles.suitCorner, { fontSize: s.font, color }]}>{symbol}</Text>
+      </View>
+    );
+  }
 
   return (
     <View style={[styles.card, styles.cardFace, { width: s.width, height: s.height }]}>
@@ -80,4 +88,7 @@ const styles = StyleSheet.create({
   backLogo: { color: '#4a2a10', fontWeight: '900', textAlign: 'center', lineHeight: undefined },
   rank: { fontWeight: '900' },
   suit: { fontWeight: '900' },
+  cardFaceCorner: { alignItems: 'flex-start', justifyContent: 'flex-start', flexDirection: 'column' },
+  rankCorner: { fontWeight: '900', position: 'absolute', top: 3, left: 5 },
+  suitCorner: { fontWeight: '900', position: 'absolute', bottom: 3, right: 5 },
 });

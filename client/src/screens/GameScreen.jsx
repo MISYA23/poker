@@ -8,7 +8,7 @@ import Svg, { Circle } from 'react-native-svg';
 import { GameContext } from '../context/GameContext';
 import Card from '../components/Card';
 import Avatar from '../components/Avatar';
-import Chips from '../components/Chips';
+import { ChipStack } from '../components/PokerChip';
 import BettingControls from '../components/BettingControls';
 import { colors } from '../theme';
 import { VERSION_DISPLAY } from '../config';
@@ -71,11 +71,11 @@ const CC_T         = Math.round(0.455 * DESIGN_H - 25);                   // 363
 const POT_T        = Math.round(0.560 * DESIGN_H - 17);                   // 460
 const OPP_BET_T    = Math.round(0.375 * DESIGN_H - 20);                   // 300
 const MY_BET_T     = Math.round(0.620 * DESIGN_H - 20);                   // 508
-const DEALER_SZ    = Math.round(0.07 * DESIGN_W);                         // 28
-const DEALER_OPP_L = Math.round(0.35 * DESIGN_W - DEALER_SZ / 2);        // 124
-const DEALER_OPP_T = Math.round(0.375 * DESIGN_H - DEALER_SZ / 2);       // 306
-const DEALER_MY_L  = Math.round(0.65 * DESIGN_W - DEALER_SZ / 2);        // 241
-const DEALER_MY_T  = Math.round(0.625 * DESIGN_H - DEALER_SZ / 2);       // 519
+const DEALER_SZ    = Math.round(0.07 * DESIGN_W);
+const DEALER_OPP_L = Math.round(COL_C_X);                                 // C3 top-left x
+const DEALER_OPP_T = Math.round(TABLE_T + 2 * (TABLE_H / 8));             // C3 top-left y
+const DEALER_MY_L  = Math.round(COL_C_X);                                 // C7 top-left x
+const DEALER_MY_T  = Math.round(TABLE_T + 6 * (TABLE_H / 8));             // C7 top-left y
 // Cards locked to nameplate edges (4px gap)
 // Cards centered above the nameplate (nameplate center x = POD_ANCHOR_L + 16 + (POD_W-16-NAMEPLATE_OVERLAP)/2 = 116)
 const NP_CENTER_X  = POD_ANCHOR_L + 16 + Math.round((POD_W - 16 - NAMEPLATE_OVERLAP) / 2); // 116
@@ -466,7 +466,7 @@ export default function GameScreen({ navigation }) {
             {(opponent?.roundBet > 0 || opponent?.allIn) && (
               <View style={s.betPill}>
                 {opponent.allIn && <Text style={s.allInTag}>ALL IN</Text>}
-                {opponent.roundBet > 0 && <Chips amount={opponent.roundBet} size={33} />}
+                {opponent.roundBet > 0 && <ChipStack amount={opponent.roundBet} size={33} />}
                 {opponent.roundBet > 0 && <Text style={s.betAmt}>{opponent.roundBet.toLocaleString()}</Text>}
               </View>
             )}
@@ -487,7 +487,7 @@ export default function GameScreen({ navigation }) {
           <View style={[s.potSlot, { top: POT_T }]} pointerEvents="none">
             {dispPot > 0 && (
               <View style={s.potRow}>
-                <Chips amount={dispPot} size={33} />
+                <ChipStack amount={dispPot} size={33} />
                 <Text style={s.potAmt}>{dispPot.toLocaleString()}</Text>
               </View>
             )}
@@ -498,7 +498,7 @@ export default function GameScreen({ navigation }) {
             {(me?.roundBet > 0 || me?.allIn) && (
               <View style={s.betPill}>
                 {me.allIn && <Text style={s.allInTag}>ALL IN</Text>}
-                {me.roundBet > 0 && <Chips amount={me.roundBet} size={33} />}
+                {me.roundBet > 0 && <ChipStack amount={me.roundBet} size={33} />}
                 {me.roundBet > 0 && <Text style={s.betAmt}>{me.roundBet.toLocaleString()}</Text>}
               </View>
             )}
@@ -522,7 +522,7 @@ export default function GameScreen({ navigation }) {
               opacity: flightOpacity,
               transform: [{ translateY: flightY }, { scale: flightScale }],
             }]}>
-              <Chips amount={flightAmount} size={45} />
+              <ChipStack amount={flightAmount} size={45} />
             </Animated.View>
           )}
 
@@ -750,8 +750,8 @@ const s = StyleSheet.create({
 
   // Felt slots — full-width containers that centre their content
   communitySlot: { position: 'absolute', left: 0, right: 0, alignItems: 'center', zIndex: 2 },
-  communityRow:  { flexDirection: 'row', gap: 6, alignItems: 'center' },
-  ccPlaceholder: { width: 42, height: 50 },
+  communityRow:  { flexDirection: 'row', gap: 4, alignItems: 'center' },
+  ccPlaceholder: { width: 54, height: 64 },
   potSlot: { position: 'absolute', left: 0, right: 0, alignItems: 'center', zIndex: 2 },
   potRow:  { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 4 },
   potAmt:  { color: '#4a2a10', fontSize: 21, fontWeight: '900' },
