@@ -664,7 +664,9 @@ export default function GameScreen({ navigation }) {
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
 const s = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#0a1a2e' },
+  // Root — dark jungle base colour shows through wherever the bg image is
+  // semi-transparent, lifting the crushed-black vignette edges.
+  root: { flex: 1, backgroundColor: '#0f2318' },
 
   // Group A: stage container fills screen, centers the scaled canvas
   stageOuter: {
