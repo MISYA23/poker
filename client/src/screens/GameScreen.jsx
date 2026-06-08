@@ -3,7 +3,7 @@ import {
   View, Text, Pressable, StyleSheet, Animated, Easing,
   useWindowDimensions, Image, ImageBackground, Platform,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle } from 'react-native-svg';
 import { GameContext } from '../context/GameContext';
 import Card from '../components/Card';
@@ -21,17 +21,17 @@ const TURN_DURATION_MS = 20000;
 const TOP_BAR_H = 48;
 
 // ─── Group A reference canvas ─────────────────────────────────────────────────
-// Spec §3 recommends 1080×2160 (1:2); 393×852 (~1:2.17) keeps existing
-// component pixel values unchanged. Scale = min(winW/W, winH/H) — contain.
+// 393×760 (~1:1.93) — trimmed from 852 to eliminate dead bands above opponent
+// and below player; width now binds on most phones, filling the horizontal space.
 const DESIGN_W = 393;
-const DESIGN_H = 852;
+const DESIGN_H = 760;
 
 // ─── Table geometry (spec §16: 1024×1536 asset, aspect 0.667) ────────────────
 const TABLE_ASPECT = 1024 / 1536;
-const TABLE_W  = Math.round(0.96 * DESIGN_W);                    // 377
+const TABLE_W  = Math.round(1.14 * DESIGN_W);                    // 448 — rail fills stage width (PNG has ~7% transparent margin/side)
 const TABLE_H  = Math.round(TABLE_W / TABLE_ASPECT);             // 566
 const TABLE_L  = Math.round((DESIGN_W - TABLE_W) / 2);           // 8
-const TABLE_T  = Math.round(0.46 * DESIGN_H - TABLE_H / 2);      // 109
+const TABLE_T  = Math.round(0.48 * DESIGN_H - TABLE_H / 2);      // 29 — raised from 0.46 to keep opp cards clear of top chrome
 
 // ─── Pod geometry — static canvas-unit values ─────────────────────────────────
 // Circle diameter drives everything. Nameplate clears the circle with a fixed
@@ -48,15 +48,25 @@ const RING_R     = AVATAR_SZ / 2;                           // 43
 const RING_BOX   = Math.ceil(RING_R * 2 + RING_W_PX);     // 92
 const RING_CIRC  = 2 * Math.PI * RING_R;                   // ~270.2
 
-// ─── Group A layout — spec §5 coordinate schema → 393×852 canvas pixels ──────
+// ─── Group A layout — spec §5 coordinate schema → 393×760 canvas pixels ──────
 // x/y = element CENTER as fraction of canvas; positions derived below.
 const POD_W        = Math.round(0.56 * DESIGN_W);                          // 220
 const POD_L        = Math.round((DESIGN_W - POD_W) / 2);                  // 87
 // Ring center = TABLE_T + 6.5% of TABLE_H (skull ornament position in asset)
 const RING_TOP_Y   = Math.round(TABLE_T + 0.065 * TABLE_H);               // 146
 const RING_BOT_Y   = Math.round(TABLE_T + TABLE_H - 0.065 * TABLE_H);     // 638
-const OPP_POD_T    = RING_TOP_Y - Math.round(POD_H / 2);                  // 96  — nameplate centered on top ring
-const MY_POD_T     = RING_BOT_Y - Math.round(POD_H / 2);                  // 588 — nameplate centered on bottom ring
+// Shared x-anchor: left edge of column C = TABLE_L + 2 * (TABLE_W / 4)
+const COL_C_X    = TABLE_L + 2 * (TABLE_W / 4);                            // 196.5
+// Pod left: avatar (right:0) center lands on COL_C_X
+const POD_ANCHOR_L = Math.round(COL_C_X - POD_W + AVATAR_SZ / 2);         // 20
+// Opponent pod: avatar center anchored to C2 top-left corner
+const C2_TL_Y    = TABLE_T + 1 * (TABLE_H / 8);                            // 179.75
+const OPP_POD_L  = POD_ANCHOR_L;                                            // 20
+const OPP_POD_T  = Math.round(C2_TL_Y - AV_TOP - AVATAR_SZ / 2);          // 130
+// Player pod: avatar center anchored to C7 bottom-left corner
+const C7_BL_Y    = TABLE_T + 7 * (TABLE_H / 8);                            // 604.25
+const MY_POD_L   = POD_ANCHOR_L;                                            // 20
+const MY_POD_T   = Math.round(C7_BL_Y - AV_TOP - AVATAR_SZ / 2);          // 554
 const CC_T         = Math.round(0.455 * DESIGN_H - 25);                   // 363
 const POT_T        = Math.round(0.560 * DESIGN_H - 17);                   // 460
 const OPP_BET_T    = Math.round(0.375 * DESIGN_H - 20);                   // 300
@@ -67,10 +77,12 @@ const DEALER_OPP_T = Math.round(0.375 * DESIGN_H - DEALER_SZ / 2);       // 306
 const DEALER_MY_L  = Math.round(0.65 * DESIGN_W - DEALER_SZ / 2);        // 241
 const DEALER_MY_T  = Math.round(0.625 * DESIGN_H - DEALER_SZ / 2);       // 519
 // Cards locked to nameplate edges (4px gap)
-const MY_CARDS_L   = Math.round(0.43 * DESIGN_W - (58 * 2 + 6) / 2);     // 108
-const MY_CARDS_T   = MY_POD_T + NP_TOP - 4 - 59;                          // cards bottom = nameplate top - 4
-const OPP_CARDS_L  = Math.round(0.50 * DESIGN_W - (42 * 2 + 6) / 2);     // 152
-const OPP_CARDS_T  = OPP_POD_T + NP_TOP - 4 - 50;                        // cards bottom = nameplate top - 4 (mirrors player)
+// Cards centered above the nameplate (nameplate center x = POD_ANCHOR_L + 16 + (POD_W-16-NAMEPLATE_OVERLAP)/2 = 116)
+const NP_CENTER_X  = POD_ANCHOR_L + 16 + Math.round((POD_W - 16 - NAMEPLATE_OVERLAP) / 2); // 116
+const MY_CARDS_L   = NP_CENTER_X - Math.round((58 * 2 + 6) / 2);         // 55
+const MY_CARDS_T   = MY_POD_T + NP_TOP + 10 - 59;                         // cards bottom 10px into nameplate (pod zIndex covers bottom)
+const OPP_CARDS_L  = NP_CENTER_X - Math.round((42 * 2 + 6) / 2);         // 71
+const OPP_CARDS_T  = OPP_POD_T + NP_TOP + 10 - 50;                       // cards bottom 10px into nameplate (mirrors player)
 
 // ─── TimerRing ────────────────────────────────────────────────────────────────
 function TimerRing({ deadline }) {
@@ -224,7 +236,7 @@ function PlayerPod({ player, isMe, turnDeadline, lastAction, win, displayChips, 
     <View style={[
       s.avatarBlock,
       { top: AV_TOP, width: AVATAR_SZ, height: AVATAR_SZ },
-      isMe ? s.avatarBlockMe : s.avatarBlockOpp,
+      s.avatarBlockMe,
       !present && s.avatarPlaceholder,
     ]}>
       <Avatar size={AVATAR_SZ} avatarId={player?.avatarId} />
@@ -240,9 +252,7 @@ function PlayerPod({ player, isMe, turnDeadline, lastAction, win, displayChips, 
     <View style={[
       s.nameplate,
       { top: NP_TOP, height: NP_H },
-      isMe
-        ? { left: 16, right: NAMEPLATE_OVERLAP, paddingLeft: 12, paddingRight: AVATAR_PAD }
-        : { right: 16, left: NAMEPLATE_OVERLAP, paddingLeft: AVATAR_PAD, paddingRight: 12 },
+      { left: 16, right: NAMEPLATE_OVERLAP, paddingLeft: 12, paddingRight: AVATAR_PAD },
       isActive && s.nameplateActive,
       allIn   && s.nameplateAllIn,
       present && player.folded && s.nameplateFolded,
@@ -396,8 +406,15 @@ export default function GameScreen({ navigation }) {
   useEffect(() => { setRaiseAmount(effectiveMin); }, [gameState?.currentPlayerId]);
 
   const { width: winW, height: winH } = useWindowDimensions();
-  // Scale = contain: stage never clips, margins filled by Group C background
-  const scale = Math.min(winW / DESIGN_W, winH / DESIGN_H);
+  const insets = useSafeAreaInsets();
+  // 70 = paddingTop(6) + button(~54) + paddingBottom(10); only grows, never shrinks
+  const [actionBarH, setActionBarH] = useState(70);
+
+  // Content area excludes top chrome and action bar — stage scales to fit this only
+  const stageTop       = insets.top + TOP_BAR_H;
+  const stageBotOffset = insets.bottom + actionBarH;
+  const contentH       = winH - stageTop - stageBotOffset;
+  const scale          = Math.min(winW / DESIGN_W, contentH / DESIGN_H);
 
   return (
     <View style={s.root}>
@@ -406,9 +423,9 @@ export default function GameScreen({ navigation }) {
           dark jungle root colour bleeds through the transparent edges */}
       <Image source={GAME_BG} style={[StyleSheet.absoluteFill, { opacity: 0.55 }]} resizeMode="cover" />
 
-      {/* Group A — stage: all game content, scaled as one unit */}
-      <View style={s.stageOuter} pointerEvents="none">
-        <View style={[s.stage, { transform: [{ scale }] }]}>
+      {/* Group A — stage: scaled to content area only (below top bar, above action buttons) */}
+      <View style={[s.stageOuter, { top: stageTop, bottom: stageBotOffset }]} pointerEvents="none">
+        <View style={[s.stage, { transform: [{ scale }], borderWidth: 2, borderColor: 'yellow' }]}>
 
           {/* Layer 2: Table surface */}
           <Image source={INGAME_TABLE} style={s.tableImg} resizeMode="contain" />
@@ -546,7 +563,8 @@ export default function GameScreen({ navigation }) {
         <View style={{ flex: 1 }} pointerEvents="none" />
 
         {/* Bottom betting controls (Group B) — fixed ergonomic height */}
-        <View style={s.bottomChrome} pointerEvents="box-none">
+        <View style={s.bottomChrome} pointerEvents="box-none"
+          onLayout={(e) => { const h = e.nativeEvent.layout.height; setActionBarH(prev => Math.max(prev, h)); }}>
           {isMyTurn && (
             <BettingControls
               gameState={gameState} myId={myId}
@@ -652,10 +670,10 @@ const s = StyleSheet.create({
 
   // Group A: stage container fills screen, centers the scaled canvas
   stageOuter: {
-    position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
-    alignItems: 'center', justifyContent: 'flex-end',
+    position: 'absolute', left: 0, right: 0,
+    alignItems: 'center', justifyContent: 'center',
   },
-  stage: { width: DESIGN_W, height: DESIGN_H },
+  stage: { width: DESIGN_W, height: DESIGN_H, overflow: 'hidden' },
 
   // Table image — Layer 2, absolutely placed in canvas coords
   tableImg: {
@@ -667,13 +685,13 @@ const s = StyleSheet.create({
   // Pod slots — absolutely placed in canvas coords
   oppPodSlot: {
     position: 'absolute',
-    left: POD_L, top: OPP_POD_T,
+    left: OPP_POD_L, top: OPP_POD_T,
     width: POD_W, height: POD_H,
     zIndex: 5,
   },
   myPodSlot: {
     position: 'absolute',
-    left: POD_L, top: MY_POD_T,
+    left: MY_POD_L, top: MY_POD_T,
     width: POD_W, height: POD_H,
     zIndex: 5,
   },
@@ -724,7 +742,7 @@ const s = StyleSheet.create({
   badgeBB: { backgroundColor: '#7c3aed' },
 
   // Hole cards — absolutely placed in canvas coords (spec §5)
-  holeCardsPair: { position: 'absolute', flexDirection: 'row', gap: 6, zIndex: 6 },
+  holeCardsPair: { position: 'absolute', flexDirection: 'row', gap: 6, zIndex: 3 },
   myHoleCards:  { left: MY_CARDS_L,  top: MY_CARDS_T  },
   oppHoleCards: { left: OPP_CARDS_L, top: OPP_CARDS_T },
   cardSlotLeft:  { transform: [{ rotate: '-8deg' }] },

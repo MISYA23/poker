@@ -7,7 +7,7 @@ let socketInstance = null;
 function getSocket() {
   if (!socketInstance) {
     console.log('[socket] creating new socket to', SERVER_URL);
-    socketInstance = io(SERVER_URL, { transports: ['websocket'] });
+    socketInstance = io(SERVER_URL, { transports: ['polling', 'websocket'] });
 
     socketInstance.on('connect', () => console.log('[socket] connected, id=', socketInstance.id));
     socketInstance.on('disconnect', (reason) => console.log('[socket] disconnected:', reason));

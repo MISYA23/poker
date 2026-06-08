@@ -1,94 +1,70 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, Pressable, StyleSheet } from 'react-native';
-import Slider from '@react-native-community/slider';
+import React, { useState, useRef, useMemo } from 'react';
+import { View, Text, Pressable, StyleSheet, PanResponder } from 'react-native';
 import { colors } from '../theme';
 
-// Vertical slider geometry — slider is rendered horizontal then rotated -90°.
-// VERT_H = visual height of the track (= horizontal width before rotation).
-// VERT_W = visual width / thumb lane (= horizontal height before rotation).
-const VERT_H = 160;
-const VERT_W = 36;
+const BAR_H = 160;
 
 export default function BettingControls({ gameState, myId, onAction, raiseAmount, onRaiseChange }) {
   const me = gameState?.players?.find(p => p.id === myId);
 
-  const currentBet  = gameState?.currentBet || 0;
-  const myBet       = me?.roundBet || 0;
-  const callAmount  = Math.min(currentBet - myBet, me?.chips || 0);
-  const canCheck    = myBet >= currentBet;
-  const bigBlind    = gameState?.bigBlind || 20;
-  const minRaise    = currentBet + (gameState?.minRaise || bigBlind);
-  const maxRaise    = myBet + (me?.chips || 0);
-  const effectiveMin = Math.min(minRaise, maxRaise);
-  const canRaise    = (me?.chips || 0) > callAmount;
-  const hasChips    = (me?.chips || 0) > 0;
+  const currentBet      = gameState?.currentBet || 0;
+  const myBet           = me?.roundBet || 0;
+  const callAmount      = Math.min(currentBet - myBet, me?.chips || 0);
+  const canCheck        = myBet >= currentBet;
+  const bigBlind        = gameState?.bigBlind || 20;
+  const minRaise        = currentBet + (gameState?.minRaise || bigBlind);
+  const maxRaise        = myBet + (me?.chips || 0);
+  const effectiveMin    = Math.min(minRaise, maxRaise);
+  const canRaise        = (me?.chips || 0) > callAmount;
+  const hasChips        = (me?.chips || 0) > 0;
   const mustAllInToCall = !canCheck && hasChips && callAmount === (me?.chips || 0);
-  const isOpening   = currentBet === 0;
+  const isOpening       = currentBet === 0;
+  const isAllin         = raiseAmount >= maxRaise;
 
-  const handleRaise = () => onAction(raiseAmount >= maxRaise ? 'all-in' : 'raise', raiseAmount);
+  const handleRaise = () => onAction(isAllin ? 'all-in' : 'raise', raiseAmount);
 
-  const [inputText, setInputText]       = useState(String(raiseAmount));
-  const [isInputFocused, setIsInputFocused] = useState(false);
-  useEffect(() => {
-    if (!isInputFocused) setInputText(String(raiseAmount));
-  }, [raiseAmount, isInputFocused]);
+  const [raiseBtnWidth, setRaiseBtnWidth] = useState(100);
+  const barWidth = Math.max(24, Math.round(raiseBtnWidth / 2));
 
-  const handleInputChange = t => {
-    const cleaned = t.replace(/[^0-9]/g, '');
-    setInputText(cleaned);
-    const n = parseInt(cleaned, 10);
-    if (Number.isFinite(n)) {
-      onRaiseChange(Math.max(effectiveMin, Math.min(maxRaise, n)));
-    }
+  const fillRatio = maxRaise > effectiveMin
+    ? (raiseAmount - effectiveMin) / (maxRaise - effectiveMin)
+    : 1;
+  const fillHeight = Math.round(fillRatio * BAR_H);
+
+  // Use ref so PanResponder closure always reads latest game values
+  const touchRef = useRef();
+  touchRef.current = (y) => {
+    const ratio  = 1 - Math.max(0, Math.min(1, y / BAR_H));
+    const raw    = effectiveMin + ratio * (maxRaise - effectiveMin);
+    const stepped = Math.round(raw / bigBlind) * bigBlind;
+    onRaiseChange(Math.max(effectiveMin, Math.min(maxRaise, stepped)));
   };
 
-  const commitInput = () => {
-    const raw = parseInt(inputText.replace(/\D/g, ''), 10);
-    const n = Number.isFinite(raw) ? raw : effectiveMin;
-    const clamped = Math.max(effectiveMin, Math.min(maxRaise, n));
-    onRaiseChange(clamped);
-    setInputText(String(clamped));
-  };
+  const pan = useMemo(() => PanResponder.create({
+    onStartShouldSetPanResponder: () => true,
+    onMoveShouldSetPanResponder:  () => true,
+    onPanResponderGrant: (evt) => touchRef.current(evt.nativeEvent.locationY),
+    onPanResponderMove:  (evt) => touchRef.current(evt.nativeEvent.locationY),
+  }), []);
 
-  const handleSliderChange = v => {
-    const n = Math.round(v);
-    onRaiseChange(n);
-    setInputText(String(n));
-  };
+  const barColor = isAllin ? '#581c87' : '#78350f';
 
   return (
     <View style={s.wrap}>
 
-      {/* Vertical slider panel — floats above the Raise button */}
       {canRaise && (
-        <View style={s.vertPanel}>
-          <TextInput
-            style={[s.amountInput, raiseAmount >= maxRaise && s.amountInputAllin]}
-            value={inputText}
-            onChangeText={handleInputChange}
-            onFocus={() => setIsInputFocused(true)}
-            onBlur={() => { setIsInputFocused(false); commitInput(); }}
-            onSubmitEditing={commitInput}
-            keyboardType="numeric"
-            returnKeyType="done"
-            selectTextOnFocus
-            maxLength={9}
-            placeholder={String(effectiveMin)}
-            placeholderTextColor="rgba(255,255,255,0.3)"
-          />
-          {/* Clipping box matches post-rotation visual size */}
-          <View style={s.vertBox}>
-            <Slider
-              style={s.vertSlider}
-              minimumValue={effectiveMin}
-              maximumValue={maxRaise}
-              step={bigBlind}
-              value={raiseAmount}
-              onValueChange={handleSliderChange}
-              minimumTrackTintColor={colors.gold}
-              maximumTrackTintColor="rgba(255,255,255,0.2)"
-              thumbTintColor={colors.goldLight}
-            />
+        <View
+          style={[s.bar, { width: barWidth, bottom: 68, borderWidth: 5, borderColor: barColor, borderRadius: 6 }]}
+          {...pan.panHandlers}
+        >
+          {/* Empty track */}
+          <View style={[s.track, { backgroundColor: `${barColor}44` }]}>
+            {/* Fill */}
+            <View style={[s.fill, { height: fillHeight, backgroundColor: barColor }]} />
+            {/* Amount — floats just above the fill */}
+            <Text style={[s.barLabel, { bottom: fillHeight + 4 }]} numberOfLines={1}>
+              {raiseAmount.toLocaleString()}
+            </Text>
           </View>
         </View>
       )}
@@ -114,11 +90,12 @@ export default function BettingControls({ gameState, myId, onAction, raiseAmount
 
         {canRaise && (
           <Pressable
-            style={[s.btn, raiseAmount >= maxRaise ? s.btnAllin : s.btnRaise]}
+            style={[s.btn, isAllin ? s.btnAllin : s.btnRaise]}
             onPress={handleRaise}
+            onLayout={(e) => { const w = e.nativeEvent.layout.width; setRaiseBtnWidth(w); }}
           >
             <Text style={s.btnTxt}>
-              {raiseAmount >= maxRaise ? 'All In' : `${isOpening ? 'Bet' : 'Raise'} ${raiseAmount.toLocaleString()}`}
+              {isAllin ? 'All In' : `${isOpening ? 'Bet' : 'Raise'} ${raiseAmount.toLocaleString()}`}
             </Text>
           </Pressable>
         )}
@@ -130,54 +107,36 @@ export default function BettingControls({ gameState, myId, onAction, raiseAmount
 const s = StyleSheet.create({
   wrap: { width: '100%', maxWidth: 650, alignSelf: 'center' },
 
-  // Vertical slider panel — absolutely positioned above the raise button (right edge)
-  vertPanel: {
+  bar: {
     position: 'absolute',
-    bottom: 58,   // clears the button row (~54px tall + 4px gap)
     right: 0,
-    width: 106,
-    alignItems: 'center',
-    gap: 8,
-    backgroundColor: 'rgba(8,8,10,0.88)',
-    borderRadius: 14,
-    paddingTop: 10,
-    paddingBottom: 12,
-    paddingHorizontal: 8,
-    borderWidth: 1,
-    borderColor: 'rgba(255,220,160,0.25)',
+    height: BAR_H,
     zIndex: 200,
     elevation: 30,
   },
-  // Container sized to the POST-rotation visual dimensions (W wide, H tall)
-  vertBox: {
-    width: VERT_W,
-    height: VERT_H,
+  track: {
+    flex: 1,
+    borderRadius: 6,
+    overflow: 'hidden',
+    justifyContent: 'flex-end',
   },
-  // Slider rendered at (VERT_H × VERT_W) then translated + rotated into place
-  vertSlider: {
-    width: VERT_H,
-    height: VERT_W,
-    transform: [
-      { translateX: (VERT_W - VERT_H) / 2 },  // = -62
-      { translateY: (VERT_H - VERT_W) / 2 },  // = +62
-      { rotate: '-90deg' },
-    ],
+  fill: {
+    width: '100%',
+    borderRadius: 4,
   },
-
-  amountInput: {
-    width: 88, height: 36,
-    paddingHorizontal: 8,
-    backgroundColor: 'rgba(0,0,0,0.55)',
-    borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.18)',
-    borderRadius: 10,
-    color: colors.goldLight, fontSize: 15, fontWeight: '800',
+  barLabel: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
     textAlign: 'center',
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '800',
   },
-  amountInputAllin: { color: '#f87171', borderColor: 'rgba(248,113,113,0.55)' },
 
   btns: { flexDirection: 'row', gap: 8 },
   btn: { flex: 1, paddingVertical: 16, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
-  btnTxt: { color: '#fff', fontSize: 18, fontWeight: '800', textAlign: 'center' },
+  btnTxt:   { color: '#fff', fontSize: 18, fontWeight: '800', textAlign: 'center' },
   btnFold:  { backgroundColor: '#7f1d1d' },
   btnCheck: { backgroundColor: '#14532d' },
   btnCall:  { backgroundColor: '#1e40af' },
