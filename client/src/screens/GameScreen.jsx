@@ -28,7 +28,7 @@ const DESIGN_H = 760;
 
 // ─── Table geometry (spec §16: 1024×1536 asset, aspect 0.667) ────────────────
 const TABLE_ASPECT = 1024 / 1536;
-const TABLE_W  = Math.round(1.14 * DESIGN_W);                    // 448 — rail fills stage width (PNG has ~7% transparent margin/side)
+const TABLE_W  = Math.round(1.27 * DESIGN_W);                    // 491 — rail fills stage width (new image has ~8% dark margin/side)
 const TABLE_H  = Math.round(TABLE_W / TABLE_ASPECT);             // 566
 const TABLE_L  = Math.round((DESIGN_W - TABLE_W) / 2);           // 8
 const TABLE_T  = Math.round(0.48 * DESIGN_H - TABLE_H / 2);      // 29 — raised from 0.46 to keep opp cards clear of top chrome
@@ -37,12 +37,12 @@ const TABLE_T  = Math.round(0.48 * DESIGN_H - TABLE_H / 2);      // 29 — raise
 // Circle diameter drives everything. Nameplate clears the circle with a fixed
 // overlap (44px) + padding (10px gap) — works regardless of avatar size.
 const RING_W_PX  = 6;
-const AVATAR_SZ  = 86;                                     // circle diameter
+const AVATAR_SZ  = 96;                                     // circle diameter — scaled ×1.114 with table (1.14→1.27)
 const POD_H      = AVATAR_SZ + 14;                         // 100 — snug around circle
-const NP_H       = AVATAR_SZ;                              // 86 — matches circle height
+const NP_H       = Math.round(0.75 * AVATAR_SZ);           // 72 — 75% of avatar height, centered (12.5% gap top + bottom)
 const NP_TOP     = Math.round((POD_H - NP_H) / 2);        // 7
 const AV_TOP     = Math.round((POD_H - AVATAR_SZ) / 2);   // 7
-const NAMEPLATE_OVERLAP = 44;                              // px nameplate extends behind circle
+const NAMEPLATE_OVERLAP = 49;                              // px nameplate extends behind circle — scaled ×1.114 with table
 const AVATAR_PAD = NAMEPLATE_OVERLAP + 10;                 // 54 — keeps text clear of circle
 const RING_R     = AVATAR_SZ / 2;                           // 43
 const RING_BOX   = Math.ceil(RING_R * 2 + RING_W_PX);     // 92
@@ -50,7 +50,7 @@ const RING_CIRC  = 2 * Math.PI * RING_R;                   // ~270.2
 
 // ─── Group A layout — spec §5 coordinate schema → 393×760 canvas pixels ──────
 // x/y = element CENTER as fraction of canvas; positions derived below.
-const POD_W        = Math.round(0.56 * DESIGN_W);                          // 220
+const POD_W        = Math.round(0.62 * DESIGN_W);                          // 244 — scaled ×1.114 with table
 const POD_L        = Math.round((DESIGN_W - POD_W) / 2);                  // 87
 // Ring center = TABLE_T + 6.5% of TABLE_H (skull ornament position in asset)
 const RING_TOP_Y   = Math.round(TABLE_T + 0.065 * TABLE_H);               // 146
