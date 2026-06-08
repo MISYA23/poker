@@ -5,10 +5,6 @@ import { colors } from '../theme';
 
 export default function BettingControls({ gameState, myId, onAction, raiseAmount, onRaiseChange }) {
   const me = gameState?.players?.find(p => p.id === myId);
-  const isMyTurn = gameState?.currentPlayerId === myId &&
-    !['waiting', 'showdown'].includes(gameState?.phase);
-
-  if (!isMyTurn) return null;
 
   const currentBet = gameState?.currentBet || 0;
   const myBet = me?.roundBet || 0;

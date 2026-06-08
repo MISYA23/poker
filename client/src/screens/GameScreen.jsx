@@ -5,10 +5,7 @@ import {
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
-// Single in-game background: the wooden poker table artwork (rim + cream
-// felt interior + Poker Monkey skull logo + wooden floor and decorations
-// around the oval). Replaces the previous jungle bg for the game scene.
-const INGAME_BG = require('../../assets/table.png');
+const INGAME_TABLE = require('../../assets/game-table.png');
 import Svg, { Circle } from 'react-native-svg';
 import { GameContext } from '../context/GameContext';
 import Card from '../components/Card';
@@ -16,7 +13,7 @@ import Avatar from '../components/Avatar';
 import Chips from '../components/Chips';
 import BettingControls from '../components/BettingControls';
 import { colors } from '../theme';
-import { SERVER_URL, VERSION } from '../config';
+import { SERVER_URL, VERSION_DISPLAY } from '../config';
 
 const TURN_DURATION_MS = 20000;
 
@@ -121,14 +118,6 @@ function useCenterAction(lastAction) {
     return () => clearTimeout(id);
   }, [lastAction?.t]);
   return label;
-}
-
-// ─── FeltBackground ──────────────────────────────────────────────────────────
-// The wooden table artwork is now the entire scene background, so the felt
-// itself is just a transparent positioning anchor for the community cards,
-// pot, bets and dealer disc. No image of its own.
-function FeltBackground() {
-  return null;
 }
 
 // ─── DisconnectBanner ────────────────────────────────────────────────────────
@@ -400,13 +389,11 @@ export default function GameScreen() {
     <SafeAreaView style={s.safe}>
       <View style={s.sceneWrapper}>
        <View style={[s.scene, { transform: [{ scale }] }]}>
-        <Image source={INGAME_BG} style={s.bgImage} resizeMode="cover" pointerEvents="none" />
-        <View style={s.bgTint} pointerEvents="none" />
         <View style={s.container}>
 
         {/* Top bar */}
         <View style={s.topBar}>
-          <Text style={s.version}>{VERSION}</Text>
+          <Text style={s.version}>{VERSION_DISPLAY}</Text>
           <Pressable style={s.menuBtn} onPress={() => setMenuOpen(o => !o)}>
             <Text style={s.menuBtnTxt}>☰</Text>
           </Pressable>
@@ -452,7 +439,7 @@ export default function GameScreen() {
             if (width !== feltSize.w || height !== feltSize.h) setFeltSize({ w: width, h: height });
           }}
         >
-          <FeltBackground width={feltSize.w} height={feltSize.h} />
+          <Image source={INGAME_TABLE} style={s.tableImage} resizeMode="contain" pointerEvents="none" />
 
           {/* Opponent bet — anchored at a fixed slot, horizontally centred
               so the chip + amount pill doesn't shift with content width. */}
@@ -526,11 +513,11 @@ export default function GameScreen() {
             deckStyle={deckStyle} geo={geo} />
         </View>
 
-        {/* Betting controls */}
+        {/* Betting controls — only mounted on my turn so hook count is stable */}
         <View style={[s.controls, { height: geo.controlsH }]}>
-          <BettingControls gameState={gameState} myId={myId}
+          {isMyTurn && <BettingControls gameState={gameState} myId={myId}
             onAction={onAction} raiseAmount={raiseAmount}
-            onRaiseChange={v => setRaiseAmount(Math.round(v))} />
+            onRaiseChange={v => setRaiseAmount(Math.round(v))} />}
         </View>
 
         {/* Dealer disc — rendered AFTER mySection so it stays on top of
@@ -615,14 +602,11 @@ export default function GameScreen() {
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
 const s = StyleSheet.create({
-  outer:        { flex: 1, backgroundColor: '#2a1808' },
+  outer:        { flex: 1, backgroundColor: '#0d0d0d' },
   safe:         { flex: 1, backgroundColor: 'transparent' },
   sceneWrapper: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   scene:        { width: DESIGN_WIDTH, height: DESIGN_HEIGHT, overflow: 'hidden' },
-  // Table artwork fills the scaled canvas. resizeMode 'cover' so the floor
-  // decorations bleed off the canvas edges instead of leaving bands.
-  bgImage: { position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' },
-  bgTint:  { position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0,0,0,0.18)' },
+  tableImage: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, width: '100%', height: '100%' },
   container: { flex: 1 },
 
   // Top bar
@@ -768,7 +752,7 @@ const s = StyleSheet.create({
   // Fixed height so the avatar+nameplate above never shift whether the
   // BettingControls children are rendered or not. Maximum content =
   // slider row (~40) + buttons (~76) + wrap gap (10) + paddings (16) ≈ 142.
-  controls: { paddingHorizontal: 12, paddingBottom: 10, paddingTop: 6, backgroundColor: 'rgba(0,0,0,0.5)', borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.08)' },
+  controls: { paddingHorizontal: 12, paddingBottom: 10, paddingTop: 6 },
 
   // Match over modal
   modalOverlay: { position: 'absolute', inset: 0, backgroundColor: 'rgba(0,0,0,0.75)', alignItems: 'center', justifyContent: 'center', zIndex: 100 },

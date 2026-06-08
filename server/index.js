@@ -25,6 +25,9 @@ const VALID_AVATARS = ['dk', 'diddy', 'alfie', 'jazz'];
 // Populated from game_config table on startup — never mutate directly
 let cfg = {};
 
+// Populated from ui_config table on startup — client fetches once per session
+let uiCfg = {};
+
 // matchId → { id, game, p1, p2, observers, rematchVotes, timers... }
 const matches = new Map();
 
@@ -1099,6 +1102,67 @@ app.put('/admin/config/:key', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+async function loadUiConfig() {
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS ui_config (
+      key         TEXT PRIMARY KEY,
+      value       NUMERIC NOT NULL,
+      description TEXT
+    )
+  `);
+
+  const defaults = [
+    ['card_deal_duration_ms',     500, 'Card deal slide-in animation duration'],
+    ['card_deal_stagger_ms',      180, 'Stagger delay between card 1 and card 2'],
+    ['action_flash_duration_ms', 2500, 'How long action label shows in nameplate'],
+    ['center_action_duration_ms',3000, 'How long center action narration shows'],
+    ['community_card_stagger_ms', 500, 'Delay between flop card reveals'],
+    ['showdown_card_stagger_ms', 1000, 'Delay between turn/river reveals at showdown'],
+    ['winner_reveal_delay_ms',   2000, 'Pause after last CC before winners highlighted'],
+    ['pot_flight_duration_ms',    900, 'Pot-to-winner banana flight duration'],
+    ['pot_flight_scale_peak_ms',  700, 'Time to peak scale during pot flight'],
+    ['pot_flight_fade_start_ms',  700, 'When opacity fade starts during pot flight'],
+    ['pot_flight_fade_ms',        200, 'Duration of opacity fade at end of flight'],
+    ['win_done_delay_ms',         950, 'Delay after winners shown before chip counts update'],
+    ['match_over_elo_pause_ms',     0, 'Extra pause before match-over modal appears'],
+    ['rematch_countdown_s',        10, 'Seconds to accept/decline rematch before auto-decline'],
+  ];
+
+  for (const [key, value, description] of defaults) {
+    await db.query(
+      `INSERT INTO ui_config (key, value, description) VALUES ($1, $2, $3) ON CONFLICT (key) DO NOTHING`,
+      [key, value, description]
+    );
+  }
+
+  const { rows } = await db.query('SELECT key, value FROM ui_config');
+  const loaded = {};
+  for (const { key, value } of rows) loaded[key] = Number(value);
+  console.log('[ui-config] loaded:', loaded);
+  return loaded;
+}
+
+app.get('/api/config/ui', (_, res) => res.json(uiCfg));
+
+app.get('/admin/ui-config', async (_, res) => {
+  try {
+    const { rows } = await db.query('SELECT key, value, description FROM ui_config ORDER BY key');
+    res.json(rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.put('/admin/ui-config/:key', async (req, res) => {
+  try {
+    const { key } = req.params;
+    const { value } = req.body;
+    if (value === undefined || isNaN(Number(value))) return res.status(400).json({ error: 'numeric value required' });
+    const { rowCount } = await db.query('UPDATE ui_config SET value=$1 WHERE key=$2', [Number(value), key]);
+    if (!rowCount) return res.status(404).json({ error: 'unknown ui_config key' });
+    uiCfg[key] = Number(value);
+    res.json({ ok: true, key, value: uiCfg[key] });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 // ── Start ─────────────────────────────────────────────────────────────────────
 
 const PORT = process.env.PORT || 3843;
@@ -1106,6 +1170,7 @@ const PORT = process.env.PORT || 3843;
 async function start() {
   await redis.connect().catch(e => console.error('[redis] connect failed:', e.message));
   cfg = await loadGameConfig();
+  uiCfg = await loadUiConfig();
   server.listen(PORT, () => console.log(`Poker server on port ${PORT}`));
 }
 
