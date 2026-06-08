@@ -2,20 +2,18 @@ import { useEffect, useRef, useCallback } from 'react';
 import { io } from 'socket.io-client';
 import { SERVER_URL } from '../config';
 
-// Store on global so Expo Fast Refresh HMR doesn't reset this to null.
-// Module-level vars reset on hot-reload; global persists across HMR cycles.
-const SOCKET_KEY = '__pokerSocket__';
+let socketInstance = null;
 
 function getSocket() {
-  if (!global[SOCKET_KEY]) {
+  if (!socketInstance) {
     console.log('[socket] creating new socket to', SERVER_URL);
-    const s = io(SERVER_URL, { transports: ['websocket'] });
-    s.on('connect', () => console.log('[socket] connected, id=', s.id));
-    s.on('disconnect', (reason) => console.log('[socket] disconnected:', reason));
-    s.on('connect_error', (err) => console.error('[socket] connect_error:', err.message));
-    global[SOCKET_KEY] = s;
+    socketInstance = io(SERVER_URL, { transports: ['websocket'] });
+
+    socketInstance.on('connect', () => console.log('[socket] connected, id=', socketInstance.id));
+    socketInstance.on('disconnect', (reason) => console.log('[socket] disconnected:', reason));
+    socketInstance.on('connect_error', (err) => console.error('[socket] connect_error:', err.message));
   }
-  return global[SOCKET_KEY];
+  return socketInstance;
 }
 
 export function useSocket(handlers) {
