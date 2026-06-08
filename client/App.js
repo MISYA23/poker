@@ -101,7 +101,7 @@ export default function App() {
     setMyId(playerId);
     setPlayerInfo({ name, avatarId, playerId });
     setError(null);
-    emit('enter-lobby', { playerId, playerName: name, avatarId });
+    emit('enter-lobby', { playerId });
     // Fetch profile + pending friend request count on login
     fetch(`${SERVER_URL}/api/player/${playerId}/profile`)
       .then(r => r.json())
@@ -132,19 +132,19 @@ export default function App() {
   const onUpdateProfile = useCallback((name, avatarId) => {
     setPlayerInfo(p => {
       const updated = { ...p, name, avatarId };
-      emit('enter-lobby', { playerId: updated.playerId, playerName: name, avatarId });
+      emit('enter-lobby', { playerId: updated.playerId });
       return updated;
     });
   }, [emit]);
 
-  const onFindMatch = useCallback((name, avatarId, playerId) => {
+  const onFindMatch = useCallback((playerId) => {
     if (isObserverRef.current) {
       emit('unobserve', { matchId: matchIdRef.current });
       isObserverRef.current = false;
       matchIdRef.current = null;
     }
     setError(null);
-    emit('find-match', { playerId, playerName: name, avatarId });
+    emit('find-match', { playerId });
   }, [emit]);
 
   const onCancelMatch = useCallback(() => {

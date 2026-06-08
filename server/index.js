@@ -20,7 +20,7 @@ const io = new Server(server, { cors: { origin: '*', methods: ['GET', 'POST'] } 
 
 const db = new Pool({ connectionString: process.env.DATABASE_URL });
 
-const VALID_AVATARS = ['dk', 'diddy', 'alfie', 'jazz', 'cigar'];
+const VALID_AVATARS = ['cigar', 'alfie', 'jazz', 'dk', 'diddy'];
 
 // Populated from game_config table on startup — never mutate directly
 let cfg = {};
@@ -66,6 +66,7 @@ function createMatch(p1, p2) {
 function matchPlayers(m) {
   return [m.p1, m.p2].filter(Boolean);
 }
+
 
 function resetRoom(m) {
   clearTimeout(m.autoStartTimer);
@@ -258,9 +259,9 @@ async function endMatch(m, winnerId) {
 async function persistMatchResult(m, winner, loser, wEloBefore, lEloBefore, wEloAfter, lEloAfter, winnerId) {
   await Promise.all([winner, loser].map(p => db.query(
     `INSERT INTO players (id, display_name, avatar_id, is_guest)
-     VALUES ($1, $2, $3, true)
-     ON CONFLICT (id) DO UPDATE SET display_name=$2, avatar_id=$3, last_seen_at=NOW()`,
-    [p.playerId, (p.playerName || 'Player').trim().slice(0, 20), p.avatarId || 'dk']
+     VALUES ($1, $2, 'cigar', true)
+     ON CONFLICT (id) DO UPDATE SET display_name=$2, last_seen_at=NOW()`,
+    [p.playerId, (p.playerName || 'Player').trim().slice(0, 20)]
   )));
 
   await Promise.all([
@@ -297,16 +298,22 @@ async function persistMatchResult(m, winner, loser, wEloBefore, lEloBefore, wElo
 io.on('connection', (socket) => {
   console.log('[server] connected:', socket.id);
 
-  socket.on('enter-lobby', ({ playerId, playerName, avatarId } = {}) => {
-    if (playerId && playerName) {
-      const safeAvatar = VALID_AVATARS.includes(avatarId) ? avatarId : VALID_AVATARS[0];
+  socket.on('enter-lobby', async ({ playerId } = {}) => {
+    if (playerId) {
+      // Load display_name and avatar_id from DB — client never sends these
+      let playerName = 'Player', avatarId = 'cigar';
+      try {
+        const { rows } = await db.query('SELECT display_name, avatar_id FROM players WHERE id=$1', [playerId]);
+        if (rows.length) { playerName = rows[0].display_name; avatarId = rows[0].avatar_id; }
+      } catch (e) { console.error('[enter-lobby] db lookup failed:', e.message); }
+
       const existing = socketPlayers.get(socket.id);
       socketPlayers.set(socket.id, {
         matchId: existing?.matchId ?? null,
         ...existing,
         playerId,
-        playerName: playerName.trim().slice(0, 20),
-        avatarId: safeAvatar,
+        playerName,
+        avatarId,
         socketId: socket.id,
       });
 
@@ -333,29 +340,23 @@ io.on('connection', (socket) => {
     broadcastMatchList();
   });
 
-  socket.on('find-match', ({ playerId, playerName, avatarId }) => {
+  socket.on('find-match', ({ playerId }) => {
     if (!playerId) { socket.emit('error', { message: 'Missing player ID.' }); return; }
 
-    const name      = (playerName || 'Player').trim().slice(0, 20);
-    const safeAvatar = VALID_AVATARS.includes(avatarId) ? avatarId : VALID_AVATARS[0];
+    const sp = socketPlayers.get(socket.id);
+    if (!sp?.playerName) { socket.emit('error', { message: 'Not in lobby.' }); return; }
 
-    // Register socket
-    socketPlayers.set(socket.id, { playerId, playerName: name, avatarId: safeAvatar, matchId: null, socketId: socket.id });
-
-    // Enqueue
-    enqueue({ playerId, playerName: name, avatarId: safeAvatar, socketId: socket.id });
+    enqueue({ playerId: sp.playerId, playerName: sp.playerName, avatarId: sp.avatarId, socketId: socket.id });
 
     const pair = tryPair();
     if (pair) {
       const m = createMatch(pair.p1, pair.p2);
 
-      // Link sockets to match
       const sp1 = socketPlayers.get(pair.p1.socketId);
       const sp2 = socketPlayers.get(pair.p2.socketId);
       if (sp1) sp1.matchId = m.id;
       if (sp2) sp2.matchId = m.id;
 
-      // Add players to game
       m.game.addPlayer(pair.p1.playerId, pair.p1.playerName, pair.p1.avatarId);
       m.game.addPlayer(pair.p2.playerId, pair.p2.playerName, pair.p2.avatarId);
 
@@ -595,6 +596,14 @@ app.put('/api/player/:playerId/profile', async (req, res) => {
     const vals  = [playerId, safeName];
     if (safeAvatar) { sets.push(`avatar_id=$${vals.length + 1}`); vals.push(safeAvatar); }
     await db.query(`UPDATE players SET ${sets.join(', ')} WHERE id=$1`, vals);
+
+    // Refresh any connected socket's cached profile
+    for (const sp of socketPlayers.values()) {
+      if (sp.playerId === playerId) {
+        sp.playerName = safeName;
+        if (safeAvatar) sp.avatarId = safeAvatar;
+      }
+    }
     res.json({ ok: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -603,8 +612,9 @@ app.get('/api/player/:playerId/profile', async (req, res) => {
   try {
     const { playerId } = req.params;
 
-    const [statsRes, histRes] = await Promise.all([
+    const [statsRes, playerRes, histRes] = await Promise.all([
       db.query('SELECT elo, matches_played, matches_won FROM player_stats WHERE player_id=$1', [playerId]),
+      db.query('SELECT avatar_id, display_name FROM players WHERE id=$1', [playerId]),
       db.query(
         `SELECT m.uuid, m.started_at,
           CASE WHEN m.player1_id=$1 THEN m.player2_id ELSE m.player1_id END AS opponent_id,
@@ -627,6 +637,8 @@ app.get('/api/player/:playerId/profile', async (req, res) => {
     }
 
     res.json({
+      avatarId:    playerRes.rows[0]?.avatar_id || 'cigar',
+      displayName: playerRes.rows[0]?.display_name,
       stats: statsRes.rows[0] || { elo: 1200, matches_played: 0, matches_won: 0 },
       history: histRes.rows.map(r => ({
         matchId:      r.uuid,
@@ -888,7 +900,7 @@ app.post('/api/player/guest', async (req, res) => {
        VALUES ($1, $2, $3, true)
        ON CONFLICT (id) DO UPDATE SET
          display_name=$2, avatar_id=$3, last_seen_at=NOW()`,
-      [playerId, (name || 'Guest').trim().slice(0, 20), avatarId || 'dk']
+      [playerId, (name || 'Guest').trim().slice(0, 20), avatarId || 'cigar']
     );
     res.json({ ok: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -902,17 +914,18 @@ app.post('/auth/google', async (req, res) => {
       headers: { Authorization: `Bearer ${token}` },
     });
     const profile = await r.json();
-    const playerId  = `g_${profile.id}`;
-    const name      = profile.given_name || profile.name || '';
-    const avatarId  = 'dk';
+    const playerId = `g_${profile.id}`;
+    const name     = profile.given_name || profile.name || '';
 
-    await db.query(
+    const { rows } = await db.query(
       `INSERT INTO players (id, display_name, avatar_id, is_guest)
-       VALUES ($1, $2, $3, false)
+       VALUES ($1, $2, 'cigar', false)
        ON CONFLICT (id) DO UPDATE SET
-         display_name=$2, last_seen_at=NOW(), is_guest=false`,
-      [playerId, name.trim().slice(0, 20), avatarId]
+         display_name=$2, last_seen_at=NOW(), is_guest=false
+       RETURNING avatar_id`,
+      [playerId, name.trim().slice(0, 20)]
     );
+    const avatarId = rows[0].avatar_id;
     res.json({ playerId, name, avatarId });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });

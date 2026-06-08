@@ -8,7 +8,7 @@ import ScaledBg from '../components/ScaledBg';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { GameContext } from '../context/GameContext';
 import { colors } from '../theme';
-import { VERSION, SERVER_URL } from '../config';
+import { VERSION_DISPLAY, SERVER_URL } from '../config';
 
 const AVATAR_IMAGES = {
   dk:    require('../../assets/dk.png'),
@@ -138,7 +138,7 @@ export default function LobbyScreen() {
 
           {/* Top bar */}
           <View style={s.topBar}>
-            <Text style={s.logo}>♠ Poker Monkey ♣ <Text style={s.logoVersion}>{VERSION}</Text></Text>
+            <Text style={s.logo}>♠ Poker Monkey ♣ <Text style={s.logoVersion}>{VERSION_DISPLAY}</Text></Text>
             <Pressable style={s.hamburger} onPress={() => setMenuOpen(o => !o)}>
               <Text style={s.hamburgerTxt}>☰</Text>
             </Pressable>
@@ -177,7 +177,7 @@ export default function LobbyScreen() {
                 </Pressable>
               </View>
             ) : (
-              <Pressable style={s.playBtn} onPress={() => onFindMatch(playerInfo.name, playerInfo.avatarId, playerInfo.playerId)}>
+              <Pressable style={s.playBtn} onPress={() => onFindMatch(playerInfo.playerId)}>
                 <Text style={s.playTxt}>PLAY!</Text>
               </Pressable>
             )}
