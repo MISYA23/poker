@@ -127,7 +127,7 @@ export default function BettingControls({ gameState, myId, onAction, raiseAmount
 }
 
 const s = StyleSheet.create({
-  wrap: { gap: 10 },
+  wrap: { gap: 10, width: '100%', maxWidth: 650, alignSelf: 'center' },
   // Slider + numeric input on one row — slider takes remaining space,
   // input is fixed-width on the right so the user can type a value.
   sliderRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },

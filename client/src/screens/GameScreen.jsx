@@ -761,7 +761,7 @@ const s = StyleSheet.create({
   version:    { color: 'rgba(255,255,255,0.2)', fontSize: 11 },
   menuBtn:    { width: 36, height: 36, borderRadius: 8, backgroundColor: 'rgba(0,0,0,0.5)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)', alignItems: 'center', justifyContent: 'center' },
   menuBtnTxt: { color: colors.white, fontSize: 16 },
-  bottomChrome: { paddingHorizontal: 12, paddingBottom: 10, paddingTop: 6 },
+  bottomChrome: { paddingHorizontal: 12, paddingBottom: 10, paddingTop: 6, alignItems: 'center' },
 
   // Disconnect banner
   disconnectBanner: { marginHorizontal: 12, marginTop: 4, backgroundColor: 'rgba(251,146,60,0.18)', borderWidth: 1, borderColor: 'rgba(251,146,60,0.5)', borderRadius: 8, paddingVertical: 6, paddingHorizontal: 12 },

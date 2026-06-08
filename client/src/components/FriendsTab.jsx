@@ -7,16 +7,14 @@ import { colors } from '../theme';
 import { SERVER_URL } from '../config';
 
 const AVATAR_IMAGES = {
-  dk:    require('../../assets/dk.png'),
-  diddy: require('../../assets/diddy.webp'),
-  alfie: require('../../assets/alfie.png'),
-  jazz:  require('../../assets/jazz.png'),
+  cigar: require('../../assets/cigar.png'),
+  queen: require('../../assets/queen.png'),
 };
 
 function PlayerRow({ player, action, actionLabel, actionColor, secondAction, secondLabel }) {
   return (
     <View style={s.playerRow}>
-      <Image source={AVATAR_IMAGES[player.avatarId] || AVATAR_IMAGES.dk} style={s.avatar} />
+      <Image source={AVATAR_IMAGES[player.avatarId] || AVATAR_IMAGES.cigar} style={s.avatar} />
       <View style={s.playerInfo}>
         <Text style={s.playerName} numberOfLines={1}>{player.displayName || player.name}</Text>
         {player.elo != null && <Text style={s.playerElo}>ELO {player.elo}</Text>}
@@ -188,7 +186,7 @@ export default function FriendsTab({ onlinePlayers }) {
       {/* Incoming requests — prominent cards at top */}
       {incoming.map(f => (
         <View key={f.friendId} style={s.requestCard}>
-          <Image source={AVATAR_IMAGES[f.avatarId] || AVATAR_IMAGES.dk} style={s.requestAvatar} />
+          <Image source={AVATAR_IMAGES[f.avatarId] || AVATAR_IMAGES.cigar} style={s.requestAvatar} />
           <View style={s.requestInfo}>
             <Text style={s.requestName}>{f.displayName}</Text>
             <Text style={s.requestSub}>wants to be your friend</Text>

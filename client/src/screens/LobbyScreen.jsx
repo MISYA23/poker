@@ -11,11 +11,8 @@ import { colors } from '../theme';
 import { VERSION_DISPLAY, SERVER_URL } from '../config';
 
 const AVATAR_IMAGES = {
-  dk:    require('../../assets/dk.png'),
-  diddy: require('../../assets/diddy.webp'),
-  alfie: require('../../assets/alfie.png'),
-  jazz:  require('../../assets/jazz.png'),
   cigar: require('../../assets/cigar.png'),
+  queen: require('../../assets/queen.png'),
 };
 
 const TAB_NAMES = ['Recent', 'Friends', 'Leaderboard'];
@@ -65,7 +62,7 @@ function LeaderboardTab({ navigationRef }) {
           <Text style={[s.lbRank, p.rank <= 3 && { color: ['#FFD700','#C0C0C0','#CD7F32'][p.rank-1] }]}>
             {p.rank <= 3 ? ['🥇','🥈','🥉'][p.rank-1] : p.rank}
           </Text>
-          <Image source={AVATAR_IMAGES[p.avatarId] || AVATAR_IMAGES.dk} style={s.lbAvatar} />
+          <Image source={AVATAR_IMAGES[p.avatarId] || AVATAR_IMAGES.cigar} style={s.lbAvatar} />
           <Text style={s.lbName} numberOfLines={1}>{p.displayName}</Text>
           <Text style={s.lbElo}>{p.elo}</Text>
         </View>

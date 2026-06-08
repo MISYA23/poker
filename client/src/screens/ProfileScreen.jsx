@@ -11,8 +11,7 @@ import { getUser, setUser } from '../utils/user';
 
 const AVATARS = [
   { id: 'cigar', source: require('../../assets/cigar.png') },
-  { id: 'alfie', source: require('../../assets/alfie.png') },
-  { id: 'jazz',  source: require('../../assets/jazz.png') },
+  { id: 'queen', source: require('../../assets/queen.png') },
 ];
 
 export default function ProfileScreen({ navigation }) {

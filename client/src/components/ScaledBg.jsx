@@ -1,10 +1,14 @@
 import React from 'react';
-import { View, Image, StyleSheet } from 'react-native';
+import { View, Image, StyleSheet, Platform } from 'react-native';
 
 export default function ScaledBg({ source, children, tint = 0 }) {
   return (
     <View style={styles.outer}>
-      <Image source={source} style={StyleSheet.absoluteFill} resizeMode="cover" />
+      <Image
+        source={source}
+        style={[StyleSheet.absoluteFill, Platform.OS === 'web' && styles.bgWeb]}
+        resizeMode="cover"
+      />
       {tint > 0 && (
         <View style={[StyleSheet.absoluteFill, { backgroundColor: `rgba(0,0,0,${tint})` }]} />
       )}
@@ -15,4 +19,5 @@ export default function ScaledBg({ source, children, tint = 0 }) {
 
 const styles = StyleSheet.create({
   outer: { flex: 1, backgroundColor: '#0a1628' },
+  bgWeb: { objectPosition: 'center center' },
 });

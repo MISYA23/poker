@@ -8,10 +8,8 @@ import { colors } from '../theme';
 import { SERVER_URL } from '../config';
 
 const AVATAR_IMAGES = {
-  dk:    require('../../assets/dk.png'),
-  diddy: require('../../assets/diddy.webp'),
-  alfie: require('../../assets/alfie.png'),
-  jazz:  require('../../assets/jazz.png'),
+  cigar: require('../../assets/cigar.png'),
+  queen: require('../../assets/queen.png'),
 };
 
 const RANK_COLORS = ['#FFD700', '#C0C0C0', '#CD7F32'];
@@ -69,7 +67,7 @@ export default function LeaderboardScreen({ navigation }) {
               </Text>
               <View style={s.colName}>
                 <Image
-                  source={AVATAR_IMAGES[p.avatarId] || AVATAR_IMAGES.dk}
+                  source={AVATAR_IMAGES[p.avatarId] || AVATAR_IMAGES.cigar}
                   style={s.avatar}
                 />
                 <Text style={s.name} numberOfLines={1}>{p.displayName}</Text>
