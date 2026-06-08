@@ -51,6 +51,10 @@ export default function App() {
     'in-queue':        ()            => { setInQueue(true); setError(null); },
     'queue-cancelled': ()            => setInQueue(false),
     'match-found':     ({ matchId }) => {
+      if (isObserverRef.current) {
+        emit('unobserve', { matchId: matchIdRef.current });
+        isObserverRef.current = false;
+      }
       setInQueue(false);
       matchIdRef.current = matchId;
       setMatchOver(null);
@@ -82,6 +86,7 @@ export default function App() {
     'friend-accepted':        ()             => {},
     error:         ({ message })     => setError(message),
     reset:         ()                => {
+      if (isObserverRef.current) emit('unobserve', { matchId: matchIdRef.current });
       setGameState(null);
       setInQueue(false); setMatchOver(null);
       setOpponentDisconnected(null);
@@ -111,6 +116,7 @@ export default function App() {
 
   // Called from Lobby hamburger → Log Out
   const onLogout = useCallback(async () => {
+    if (isObserverRef.current) emit('unobserve', { matchId: matchIdRef.current });
     emit('logout', {});
     await clearUser();
     setMyId(null);
@@ -132,6 +138,11 @@ export default function App() {
   }, [emit]);
 
   const onFindMatch = useCallback((name, avatarId, playerId) => {
+    if (isObserverRef.current) {
+      emit('unobserve', { matchId: matchIdRef.current });
+      isObserverRef.current = false;
+      matchIdRef.current = null;
+    }
     setError(null);
     emit('find-match', { playerId, playerName: name, avatarId });
   }, [emit]);

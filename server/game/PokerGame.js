@@ -200,15 +200,26 @@ class PokerGame {
 
     } else if (action === 'raise' || action === 'all-in') {
       const wasOpening = this.currentBet === 0;
+      const prevBet = this.currentBet;
       const totalBet = action === 'all-in' ? player.roundBet + player.chips : amount;
-      if (totalBet < this.currentBet + this.minRaise && player.chips > 0) {
-        throw new Error(`Minimum raise is to ${this.currentBet + this.minRaise}`);
+      // An all-in (the player's whole stack) is ALWAYS legal — even when it
+      // can't cover the call or doesn't reach a full raise. Only a regular
+      // (non-all-in) raise has to meet the minimum-raise size.
+      const isAllIn = action === 'all-in' || totalBet >= player.roundBet + player.chips;
+      if (!isAllIn && totalBet < prevBet + this.minRaise) {
+        throw new Error(`Minimum raise is to ${prevBet + this.minRaise}`);
       }
       const raiseAmt = Math.min(totalBet - player.roundBet, player.chips);
       const actualTotal = player.roundBet + raiseAmt;
 
-      this.minRaise = Math.max(this.minRaise, actualTotal - this.currentBet);
-      this.currentBet = Math.max(this.currentBet, actualTotal);
+      // Only a bet that actually raises the price reopens the betting and
+      // bumps the min-raise. A short / under-call all-in (actualTotal <= the
+      // current bet) is effectively a call — it doesn't make anyone act again.
+      const raisedThePrice = actualTotal > prevBet;
+      if (raisedThePrice) {
+        this.minRaise = Math.max(this.minRaise, actualTotal - prevBet);
+        this.currentBet = actualTotal;
+      }
 
       player.chips -= raiseAmt;
       player.roundBet = actualTotal;
@@ -216,9 +227,11 @@ class PokerGame {
       this.pot += raiseAmt;
       if (player.chips === 0) player.allIn = true;
 
-      for (const p of this.getActivePlayers()) {
-        if (p.id !== playerId && !p.allIn) {
-          this.actionsNeeded.add(p.id);
+      if (raisedThePrice) {
+        for (const p of this.getActivePlayers()) {
+          if (p.id !== playerId && !p.allIn) {
+            this.actionsNeeded.add(p.id);
+          }
         }
       }
       this.actionsNeeded.delete(playerId);

@@ -1052,14 +1052,6 @@ app.get('*', (req, res) => {
 // ── Game config ───────────────────────────────────────────────────────────────
 
 async function loadGameConfig() {
-  await db.query(`
-    CREATE TABLE IF NOT EXISTS game_config (
-      key         TEXT PRIMARY KEY,
-      value       NUMERIC NOT NULL,
-      description TEXT
-    )
-  `);
-
   const defaults = [
     ['starting_chips',     1000, 'Starting chip count per player'],
     ['big_blind',            20, 'Big blind amount'],
@@ -1069,18 +1061,35 @@ async function loadGameConfig() {
     ['auto_start_delay_ms', 3000, 'Delay before first hand starts (ms)'],
   ];
 
-  for (const [key, value, description] of defaults) {
-    await db.query(
-      `INSERT INTO game_config (key, value, description) VALUES ($1, $2, $3) ON CONFLICT (key) DO NOTHING`,
-      [key, value, description]
-    );
-  }
+  try {
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS game_config (
+        key         TEXT PRIMARY KEY,
+        value       NUMERIC NOT NULL,
+        description TEXT
+      )
+    `);
 
-  const { rows } = await db.query('SELECT key, value FROM game_config');
-  const loaded = {};
-  for (const { key, value } of rows) loaded[key] = Number(value);
-  console.log('[config] loaded:', loaded);
-  return loaded;
+    for (const [key, value, description] of defaults) {
+      await db.query(
+        `INSERT INTO game_config (key, value, description) VALUES ($1, $2, $3) ON CONFLICT (key) DO NOTHING`,
+        [key, value, description]
+      );
+    }
+
+    const { rows } = await db.query('SELECT key, value FROM game_config');
+    const loaded = {};
+    for (const { key, value } of rows) loaded[key] = Number(value);
+    console.log('[config] loaded:', loaded);
+    return loaded;
+  } catch (e) {
+    // DB unreachable (e.g. local dev without DATABASE_URL) — fall back to
+    // the built-in defaults so the server still boots and is playable.
+    const loaded = {};
+    for (const [key, value] of defaults) loaded[key] = value;
+    console.error('[config] DB unavailable, using defaults:', e.message);
+    return loaded;
+  }
 }
 
 app.get('/admin/config', async (_, res) => {
