@@ -22,53 +22,56 @@ const TURN_DURATION_MS = 20000;
 
 // Fixed design canvas — everything is drawn against this portrait reference,
 // then the whole canvas is scaled uniformly to fit the device's safe area.
-// Same composition on every screen, just a different overall scale.
 const DESIGN_WIDTH  = 393;
 const DESIGN_HEIGHT = 852;
 
-// Fixed pod geometry — avatar, nameplate and cards never change size.
-// Nameplate is vertically centred on the avatar; cards float just above
-// the nameplate, close to the avatar but never touching either.
-const AVATAR_SIZE      = 156;
-const NAMEPLATE_HEIGHT = 64;
-const POD_HEIGHT       = 200;
-const NAMEPLATE_TOP    = (POD_HEIGHT - NAMEPLATE_HEIGHT) / 2; // 68 — top of nameplate
-const AVATAR_TOP       = (POD_HEIGHT - AVATAR_SIZE) / 2;      // 22 — top of avatar
-const CARD_NAMEPLATE_GAP = -8; // negative = cards overlap nameplate top — clipped by nameplate's higher z-index
-const CARDS_BOTTOM     = POD_HEIGHT - NAMEPLATE_TOP + CARD_NAMEPLATE_GAP; // 136 (anchor from pod bottom)
-const CARD_AVATAR_GAP  = 0; // tight against the avatar's inner edge
+const RING_W = 6; // timer ring stroke width
 
-// Timer ring sized to surround the standalone avatar.
-const RING_R     = AVATAR_SIZE / 2;
-const RING_BOX   = RING_R * 2 + 6;
-const RING_CIRC  = 2 * Math.PI * RING_R;
+// Interpolate all pod/layout dimensions from a compact (small phone) to
+// normal (modern phone) set. t=0 at scale≤0.65, t=1 at scale≥0.90.
+function computeGeo(scale) {
+  const t      = Math.min(1, Math.max(0, (scale - 0.65) / 0.25));
+  const lerp   = (a, b) => Math.round(a + (b - a) * t);
+  const podH     = lerp(160, 200);
+  const avatarSz = lerp(124, 156);
+  const npH      = lerp( 50,  64);
+  const npTop    = Math.round((podH - npH) / 2);
+  const avTop    = Math.round((podH - avatarSz) / 2);
+  const cardsBot = podH - npTop - 8;   // 8 = card-nameplate overlap
+  const ringR    = avatarSz / 2;
+  const ringBox  = Math.ceil(ringR * 2 + RING_W);
+  const ringCirc = 2 * Math.PI * ringR;
+  const controlsH  = lerp(120, 158);
+  const translateY = lerp( 10,  18);   // mySection visual nudge
+  return { podH, avatarSz, npH, npTop, avTop, cardsBot, ringR, ringBox, ringCirc, controlsH, translateY };
+}
 
 // ─── TimerRing ────────────────────────────────────────────────────────────────
-function TimerRing({ deadline }) {
-  const [dashOffset, setDashOffset] = useState(RING_CIRC);
+function TimerRing({ deadline, geo }) {
+  const { ringCirc, ringBox, ringR, avatarSz } = geo;
+  const [dashOffset, setDashOffset] = useState(ringCirc);
   const [timeLeft, setTimeLeft] = useState(null);
   useEffect(() => {
-    if (!deadline) { setDashOffset(RING_CIRC); setTimeLeft(null); return; }
+    if (!deadline) { setDashOffset(ringCirc); setTimeLeft(null); return; }
     const tick = () => {
       const rem = Math.max(0, deadline - Date.now());
-      setDashOffset(((TURN_DURATION_MS - rem) / TURN_DURATION_MS) * RING_CIRC);
+      setDashOffset(((TURN_DURATION_MS - rem) / TURN_DURATION_MS) * ringCirc);
       setTimeLeft(Math.ceil(rem / 1000));
     };
     tick();
     const id = setInterval(tick, 100);
     return () => clearInterval(id);
-  }, [deadline]);
-  // Ring is hidden when no turn is in progress (no permanent track), so
-  // the avatar reads cleanly framed inside its own artwork.
-  const c = RING_BOX / 2;
-  const RING_W = 6;
+  }, [deadline, ringCirc]);
   if (!deadline) return null;
+  const c = ringBox / 2;
   const ringColor = timeLeft <= 5 ? '#f87171' : timeLeft <= 10 ? '#fb923c' : colors.gold;
+  const ringOffset = Math.round((avatarSz - ringBox) / 2);
   return (
-    <Svg width={RING_BOX} height={RING_BOX} viewBox={`0 0 ${RING_BOX} ${RING_BOX}`} style={s.ring} pointerEvents="none">
-      <Circle cx={c} cy={c} r={RING_R} fill="none" stroke="rgba(255,255,255,0.22)" strokeWidth={RING_W} />
-      <Circle cx={c} cy={c} r={RING_R} fill="none" stroke={ringColor} strokeWidth={RING_W}
-        strokeDasharray={RING_CIRC} strokeDashoffset={dashOffset}
+    <Svg width={ringBox} height={ringBox} viewBox={`0 0 ${ringBox} ${ringBox}`}
+      style={[s.ring, { top: ringOffset, left: ringOffset }]} pointerEvents="none">
+      <Circle cx={c} cy={c} r={ringR} fill="none" stroke="rgba(255,255,255,0.22)" strokeWidth={RING_W} />
+      <Circle cx={c} cy={c} r={ringR} fill="none" stroke={ringColor} strokeWidth={RING_W}
+        strokeDasharray={ringCirc} strokeDashoffset={dashOffset}
         strokeLinecap="round" transform={`rotate(-90, ${c}, ${c})`} />
     </Svg>
   );
@@ -143,7 +146,7 @@ function DisconnectBanner({ deadline }) {
 // ─── PlayerPod ───────────────────────────────────────────────────────────────
 // isMe=true  → nameplate below cards (cards face the table)
 // isMe=false → nameplate above cards (cards face the table)
-function PlayerPod({ player, isMe, turnDeadline, lastAction, win, displayChips, deckStyle }) {
+function PlayerPod({ player, isMe, turnDeadline, lastAction, win, displayChips, deckStyle, geo }) {
   const timeLeft  = useCountdown(turnDeadline);
   const actionLbl = useActionFlash(player, lastAction);
   // Avatar + nameplate are ALWAYS rendered, even before a player joins, so
@@ -189,10 +192,13 @@ function PlayerPod({ player, isMe, turnDeadline, lastAction, win, displayChips, 
   // (the cards' bottom overlaps the nameplate's top, the avatar fills
   // the full pod height on its side). Keeps both seats visible inside
   // the viewport even with a big avatar.
+  const avatarPad = Math.round(geo.avatarSz * 0.37); // padding to keep text clear of avatar
+
   const cards = (
     <View style={[
       s.podCards,
-      isMe ? s.podCardsMe : s.podCardsOpp,
+      { bottom: geo.cardsBot },
+      isMe ? { right: geo.avatarSz } : { left: geo.avatarSz },
       !hasCards && s.hidden,
     ]}>
       <Animated.View style={{ transform: [{ translateY: dealTy0 }, { scale: dealSc0 }], opacity: dealOp0, zIndex: 2 }}>
@@ -211,16 +217,24 @@ function PlayerPod({ player, isMe, turnDeadline, lastAction, win, displayChips, 
   );
 
   const avatar = (
-    <View style={[s.avatarBlock, isMe ? s.avatarBlockMe : s.avatarBlockOpp, !present && s.avatarPlaceholder]}>
-      <Avatar size={AVATAR_SIZE} avatarId={player?.avatarId} />
-      <TimerRing deadline={turnDeadline} />
+    <View style={[
+      s.avatarBlock,
+      { top: geo.avTop, width: geo.avatarSz, height: geo.avatarSz },
+      isMe ? s.avatarBlockMe : s.avatarBlockOpp,
+      !present && s.avatarPlaceholder,
+    ]}>
+      <Avatar size={geo.avatarSz} avatarId={player?.avatarId} />
+      <TimerRing deadline={turnDeadline} geo={geo} />
     </View>
   );
 
   const nameplate = (
     <View style={[
       s.nameplate,
-      isMe ? s.nameplateMe : s.nameplateOpp,
+      { top: geo.npTop, height: geo.npH },
+      isMe
+        ? { left: 40, right: geo.avatarSz - 44, paddingLeft: 16, paddingRight: avatarPad }
+        : { right: 40, left: geo.avatarSz - 44, paddingLeft: avatarPad, paddingRight: 16 },
       isActive && s.nameplateActive,
       present && player.folded && s.nameplateFolded,
       !present && s.nameplateWaiting,
@@ -237,7 +251,7 @@ function PlayerPod({ player, isMe, turnDeadline, lastAction, win, displayChips, 
   );
 
   return (
-    <View style={[s.pod, present && player.folded && { opacity: 0.8 }]}>
+    <View style={[s.pod, { height: geo.podH }, present && player.folded && { opacity: 0.8 }]}>
       {cards}
       {nameplate}
       {avatar}
@@ -374,13 +388,12 @@ export default function GameScreen() {
 
   const handleReset = () => fetch(`${SERVER_URL}/admin/reset`, { method: 'POST' }).catch(() => {});
 
-  // Uniform scale of the entire scene to fit the device's safe area.
-  // Same composition on every screen → just a different overall scale.
   const insets = useSafeAreaInsets();
   const { width: winW, height: winH } = useWindowDimensions();
   const availW = winW;
   const availH = winH - insets.top - insets.bottom;
   const scale  = Math.min(availW / DESIGN_WIDTH, availH / DESIGN_HEIGHT);
+  const geo    = computeGeo(scale);
 
   return (
    <View style={s.outer}>
@@ -428,7 +441,7 @@ export default function GameScreen() {
             turnDeadline={oppDeadline} lastAction={gameState?.lastAction}
             win={opponent ? activeWinners[opponent.id] : null}
             displayChips={opponent ? chipsFor(opponent) : 0}
-            deckStyle={deckStyle} />
+            deckStyle={deckStyle} geo={geo} />
         </View>
 
         {/* Felt table */}
@@ -505,16 +518,16 @@ export default function GameScreen() {
         </View>
 
         {/* My pod — always rendered. */}
-        <View style={s.mySection}>
+        <View style={[s.mySection, { transform: [{ translateY: geo.translateY }] }]}>
           <PlayerPod player={me} isMe={true}
             turnDeadline={myDeadline} lastAction={gameState?.lastAction}
             win={me ? activeWinners[myId] : null}
             displayChips={me ? chipsFor(me) : 0}
-            deckStyle={deckStyle} />
+            deckStyle={deckStyle} geo={geo} />
         </View>
 
         {/* Betting controls */}
-        <View style={s.controls}>
+        <View style={[s.controls, { height: geo.controlsH }]}>
           <BettingControls gameState={gameState} myId={myId}
             onAction={onAction} raiseAmount={raiseAmount}
             onRaiseChange={v => setRaiseAmount(Math.round(v))} />
@@ -632,31 +645,25 @@ const s = StyleSheet.create({
   // changes). zIndex keeps the pod above the betting controls bg.
   mySection:  {
     paddingHorizontal: 12, paddingTop: 0, paddingBottom: 0,
-    transform: [{ translateY: 18 }],
     zIndex: 30,
   },
 
-  // Pod — fixed height. Children placed absolutely so nothing shifts.
-  pod: { position: 'relative', height: POD_HEIGHT, marginHorizontal: 8 },
+  // Pod — height set inline from geo. Children placed absolutely.
+  pod: { position: 'relative', marginHorizontal: 8 },
 
-  // Avatar block — vertically centred in the pod, anchored to its own
-  // horizontal end. Always on top (zIndex 50, elevation 12).
+  // Avatar block — top/width/height set inline from geo.
   avatarBlock: {
-    position: 'absolute', top: AVATAR_TOP,
-    width: AVATAR_SIZE, height: AVATAR_SIZE,
+    position: 'absolute',
     alignItems: 'center', justifyContent: 'center',
     zIndex: 50, elevation: 12,
   },
   avatarBlockMe:  { right: 0 },
   avatarBlockOpp: { left:  0 },
-  ring: { position: 'absolute', top: (AVATAR_SIZE - RING_BOX) / 2, left: (AVATAR_SIZE - RING_BOX) / 2 },
+  ring: { position: 'absolute' }, // top/left set inline from geo
 
-  // Nameplate — fixed-height capsule, vertically centred on the avatar.
-  // Fully opaque background (never transparent) and a higher zIndex than
-  // the hole cards so any card overlap is clipped behind the pill.
+  // Nameplate — top/height set inline from geo. Padding set inline.
   nameplate: {
     position: 'absolute',
-    top: NAMEPLATE_TOP, height: NAMEPLATE_HEIGHT,
     backgroundColor: '#08080a',
     borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.1)',
     borderRadius: 32,
@@ -668,11 +675,6 @@ const s = StyleSheet.create({
     shadowOffset: { width: 0, height: 3 },
     overflow: 'hidden',
   },
-  // Horizontally: nameplate is ~15% narrower than the original. The
-  // avatar end still overlaps the pill ~44 px past the avatar's inner
-  // edge; the OPPOSITE end is shortened by 40 px.
-  nameplateMe:  { left:  40, right: AVATAR_SIZE - 44, paddingLeft: 18, paddingRight: 60 },
-  nameplateOpp: { right: 40, left:  AVATAR_SIZE - 44, paddingLeft: 60, paddingRight: 18 },
   nameplateActive: { borderColor: colors.gold, shadowColor: colors.gold, shadowOpacity: 0.4, shadowRadius: 10, elevation: 6 },
   // Folded / waiting: only the inner text fades, never the pill itself.
   nameplateFolded: {},
@@ -698,9 +700,8 @@ const s = StyleSheet.create({
   // Hole cards held by the player. Slight overlap, fanned via rotation,
   // tucked behind the nameplate (lower zIndex) so any part of the cards
   // crossing the nameplate's top edge is clipped by the pill.
+  // bottom / left / right set inline from geo
   podCards: { position: 'absolute', flexDirection: 'row', gap: 6, zIndex: 1 },
-  podCardsMe:  { bottom: CARDS_BOTTOM, right: AVATAR_SIZE + CARD_AVATAR_GAP },
-  podCardsOpp: { bottom: CARDS_BOTTOM, left:  AVATAR_SIZE + CARD_AVATAR_GAP },
   // Rotation only — translation/scale lives on the outer Animated.View
   // so the deal animation can shift world-space coordinates without
   // tripping over the rotation matrix.
@@ -767,7 +768,7 @@ const s = StyleSheet.create({
   // Fixed height so the avatar+nameplate above never shift whether the
   // BettingControls children are rendered or not. Maximum content =
   // slider row (~40) + buttons (~76) + wrap gap (10) + paddings (16) ≈ 142.
-  controls: { paddingHorizontal: 12, paddingBottom: 10, paddingTop: 6, height: 158, backgroundColor: 'rgba(0,0,0,0.5)', borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.08)' },
+  controls: { paddingHorizontal: 12, paddingBottom: 10, paddingTop: 6, backgroundColor: 'rgba(0,0,0,0.5)', borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.08)' },
 
   // Match over modal
   modalOverlay: { position: 'absolute', inset: 0, backgroundColor: 'rgba(0,0,0,0.75)', alignItems: 'center', justifyContent: 'center', zIndex: 100 },

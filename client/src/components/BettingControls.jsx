@@ -149,7 +149,7 @@ const s = StyleSheet.create({
   amountInputAllin: { color: '#f87171', borderColor: 'rgba(248,113,113,0.55)' },
   btns: { flexDirection: 'row', gap: 8 },
   // Buttons taller for easier tapping (paddingVertical 14 → 18 → 23 → 29).
-  btn: { flex: 1, paddingVertical: 29, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  btn: { flex: 1, paddingVertical: 16, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
   btnTxt: { color: '#fff', fontSize: 18, fontWeight: '800', textAlign: 'center' },
   btnFold:  { backgroundColor: '#7f1d1d' },
   btnCheck: { backgroundColor: '#14532d' },
