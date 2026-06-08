@@ -10,6 +10,7 @@ import { SERVER_URL } from '../config';
 import { getUser, setUser } from '../utils/user';
 
 const AVATARS = [
+  { id: 'cigar', source: require('../../assets/cigar.png') },
   { id: 'alfie', source: require('../../assets/alfie.png') },
   { id: 'jazz',  source: require('../../assets/jazz.png') },
 ];
@@ -18,7 +19,10 @@ export default function ProfileScreen({ navigation }) {
   const { playerInfo, myElo, onUpdateProfile, deckStyle, setDeckStyle } = useContext(GameContext);
 
   const [name, setName]         = useState(playerInfo?.name || '');
-  const [avatarId, setAvatarId] = useState(playerInfo?.avatarId || 'alfie');
+  const AVATAR_IDS = AVATARS.map(a => a.id);
+  const [avatarId, setAvatarId] = useState(
+    AVATAR_IDS.includes(playerInfo?.avatarId) ? playerInfo.avatarId : 'cigar'
+  );
   const [saving, setSaving]     = useState(false);
   const [history, setHistory]   = useState(null);
   const [loadingHistory, setLoadingHistory] = useState(true);

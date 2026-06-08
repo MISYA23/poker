@@ -1,5 +1,5 @@
 import 'react-native-gesture-handler';
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { NavigationContainer, useNavigationContainerRef } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -34,10 +34,18 @@ export default function App() {
   const [playerInfo, setPlayerInfo] = useState(null);
   const [incomingChallenge, setIncomingChallenge] = useState(null); // { fromId, fromName, fromAvatarId }
   const [pendingFriendRequests, setPendingFriendRequests] = useState(0);
+  const [uiConfig, setUiConfig] = useState({});
 
   const navigationRef = useNavigationContainerRef();
   const matchIdRef    = useRef(null);
   const isObserverRef = useRef(false);
+
+  useEffect(() => {
+    fetch(`${SERVER_URL}/api/config/ui`)
+      .then(r => r.json())
+      .then(setUiConfig)
+      .catch(() => {});
+  }, []);
 
   const emit = useSocket({
     'in-queue':        ()            => { setInQueue(true); setError(null); },
@@ -57,8 +65,8 @@ export default function App() {
     'game-state':  (state)           => {
       setGameState(state);
       if (state.atTable && !state.gameOver) setMatchOver(null);
-      // Only navigate to Game if we're still supposed to be there
-      if (state.atTable || (state.observing && isObserverRef.current)) {
+      const belongsToUs = state.matchId === matchIdRef.current;
+      if (belongsToUs && (state.atTable || (state.observing && isObserverRef.current))) {
         navigationRef.navigate('Game');
       }
     },
@@ -79,7 +87,7 @@ export default function App() {
     error:         ({ message })     => setError(message),
     reset:         ()                => {
       if (isObserverRef.current) emit('unobserve', { matchId: matchIdRef.current });
-      setMyId(null); setGameState(null);
+      setGameState(null);
       setInQueue(false); setMatchOver(null);
       setOpponentDisconnected(null);
       matchIdRef.current = null;
@@ -93,7 +101,7 @@ export default function App() {
     setMyId(playerId);
     setPlayerInfo({ name, avatarId, playerId });
     setError(null);
-    emit('enter-lobby', { playerId, playerName: name, avatarId });
+    emit('enter-lobby', { playerId });
     // Fetch profile + pending friend request count on login
     fetch(`${SERVER_URL}/api/player/${playerId}/profile`)
       .then(r => r.json())
@@ -124,19 +132,19 @@ export default function App() {
   const onUpdateProfile = useCallback((name, avatarId) => {
     setPlayerInfo(p => {
       const updated = { ...p, name, avatarId };
-      emit('enter-lobby', { playerId: updated.playerId, playerName: name, avatarId });
+      emit('enter-lobby', { playerId: updated.playerId });
       return updated;
     });
   }, [emit]);
 
-  const onFindMatch = useCallback((name, avatarId, playerId) => {
+  const onFindMatch = useCallback((playerId) => {
     if (isObserverRef.current) {
       emit('unobserve', { matchId: matchIdRef.current });
       isObserverRef.current = false;
       matchIdRef.current = null;
     }
     setError(null);
-    emit('find-match', { playerId, playerName: name, avatarId });
+    emit('find-match', { playerId });
   }, [emit]);
 
   const onCancelMatch = useCallback(() => {
@@ -162,7 +170,7 @@ export default function App() {
       emit('leave-table', {});
     }
     isObserverRef.current = false;
-    setMyId(null); setGameState(null); setMatchOver(null);
+    setGameState(null); setMatchOver(null);
     matchIdRef.current = null;
     navigationRef.reset({ index: 0, routes: [{ name: 'Lobby' }] });
   }, [emit]);
@@ -183,7 +191,7 @@ export default function App() {
       gameState, myId, error, inQueue, matchList, onlinePlayers, myElo, matchOver,
       playerInfo, myRecentMatches, deckStyle, setDeckStyle, opponentDisconnected,
       incomingChallenge, setIncomingChallenge, pendingFriendRequests, setPendingFriendRequests,
-      emit, onLogin, onLogout, onUpdateProfile, onFindMatch, onCancelMatch,
+      uiConfig, emit, onLogin, onLogout, onUpdateProfile, onFindMatch, onCancelMatch,
       onObserve, onAction, onLeave, onRematch, navigationRef,
     }}>
       <GestureHandlerRootView style={{ flex: 1 }}>

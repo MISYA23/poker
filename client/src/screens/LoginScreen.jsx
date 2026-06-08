@@ -9,7 +9,7 @@ import * as WebBrowser from 'expo-web-browser';
 import * as AuthSession from 'expo-auth-session';
 import { GameContext } from '../context/GameContext';
 import { colors } from '../theme';
-import { SERVER_URL, VERSION } from '../config';
+import { SERVER_URL, VERSION_DISPLAY } from '../config';
 import { getUser, setUser, getOrCreatePlayerId } from '../utils/user';
 
 WebBrowser.maybeCompleteAuthSession();
@@ -21,6 +21,7 @@ const GOOGLE_DISCOVERY = {
 };
 
 const AVATARS = [
+  { id: 'cigar', source: require('../../assets/cigar.png') },
   { id: 'alfie', source: require('../../assets/alfie.png') },
   { id: 'jazz',  source: require('../../assets/jazz.png') },
 ];
@@ -59,12 +60,19 @@ export default function LoginScreen() {
     onLogin(playerName, av, playerId);
   };
 
-  // Auto-login if saved session exists
+  // Auto-login if saved session exists — sync avatar from DB as source of truth
   useEffect(() => {
-    getUser().then(user => {
-      if (user?.playerId && user?.name) {
-        onLogin(user.name, user.avatarId || AVATARS[0].id, user.playerId);
-      }
+    getUser().then(async (user) => {
+      if (!user?.playerId || !user?.name) return;
+      let av = user.avatarId || AVATARS[0].id;
+      try {
+        const data = await fetch(`${SERVER_URL}/api/player/${user.playerId}/profile`).then(r => r.json());
+        if (data.avatarId) {
+          av = data.avatarId;
+          await setUser({ avatarId: av });
+        }
+      } catch (_) {}
+      onLogin(user.name, av, user.playerId);
     });
   }, []);
 
@@ -112,15 +120,20 @@ export default function LoginScreen() {
     const trimmed = name.trim();
     if (!trimmed) return;
     const playerId = await getOrCreatePlayerId();
-    await setUser({ name: trimmed, avatarId, playerId });
-    onLogin(trimmed, avatarId, playerId);
+    await fetch(`${SERVER_URL}/api/player/guest`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ playerId, name: trimmed }),
+    });
+    await setUser({ name: trimmed, playerId });
+    onLogin(trimmed, 'cigar', playerId);
   };
 
   return (
     <ScaledBg source={require('../../assets/jungle-menu.png')} tint={0.22} cover>
         <SafeAreaView style={s.safe}>
           <View style={s.topBar}>
-            <Text style={s.topLogo}>♠ Poker Monkey ♣ <Text style={s.topLogoVersion}>{VERSION}</Text></Text>
+            <Text style={s.topLogo}>♠ Poker Monkey ♣ <Text style={s.topLogoVersion}>{VERSION_DISPLAY}</Text></Text>
           </View>
           <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={s.kav}>
             <ScrollView contentContainerStyle={s.scroll} keyboardShouldPersistTaps="handled">

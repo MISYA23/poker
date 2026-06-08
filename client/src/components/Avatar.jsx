@@ -6,10 +6,11 @@ const AVATAR_IMAGES = {
   diddy: require('../../assets/diddy.webp'),
   alfie: require('../../assets/alfie.png'),
   jazz:  require('../../assets/jazz.png'),
+  cigar: require('../../assets/cigar.png'),
 };
 
 export default function Avatar({ size = 52, avatarId }) {
-  const source = AVATAR_IMAGES[avatarId] || AVATAR_IMAGES.dk;
+  const source = AVATAR_IMAGES[avatarId] || AVATAR_IMAGES.cigar;
   return (
     <View style={[styles.wrap, { width: size, height: size, borderRadius: size / 2 }]}>
       <Image source={source} style={{ width: size, height: size, borderRadius: size / 2 }} resizeMode="cover" />
