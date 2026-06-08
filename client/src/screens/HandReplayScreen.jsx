@@ -1,8 +1,9 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useContext } from 'react';
 import {
-  View, Text, Pressable, ScrollView, StyleSheet, ActivityIndicator,
+  View, Text, Pressable, ScrollView, StyleSheet, ActivityIndicator, Platform,
 } from 'react-native';
 import ScaledBg from '../components/ScaledBg';
+import { GameContext } from '../context/GameContext';
 
 const MENU_BG = require('../../assets/jungle-ingame.png');
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -48,7 +49,14 @@ function parseCard(str) {
 }
 
 export default function HandReplayScreen({ navigation, route }) {
+  const { playerInfo } = useContext(GameContext);
   const { matchId, matchLabel } = route.params || {};
+
+  useEffect(() => {
+    if (Platform.OS === 'web' && !playerInfo) {
+      navigation.reset({ index: 0, routes: [{ name: 'Login' }] });
+    }
+  }, []);
 
   const [hands, setHands]       = useState(null);
   const [loading, setLoading]   = useState(true);

@@ -1,7 +1,7 @@
 import React, { useContext, useState, useEffect, useRef, useMemo } from 'react';
 import {
   View, Text, Pressable, StyleSheet, Animated, Easing,
-  useWindowDimensions, Image, ImageBackground,
+  useWindowDimensions, Image, ImageBackground, Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Circle } from 'react-native-svg';
@@ -39,8 +39,8 @@ const TABLE_T  = Math.round(0.46 * DESIGN_H - TABLE_H / 2);      // 109
 const RING_W_PX  = 6;
 const AVATAR_SZ  = 86;                                     // circle diameter
 const POD_H      = AVATAR_SZ + 14;                         // 100 — snug around circle
-const NP_H       = 56;
-const NP_TOP     = Math.round((POD_H - NP_H) / 2);        // 22
+const NP_H       = AVATAR_SZ;                              // 86 — matches circle height
+const NP_TOP     = Math.round((POD_H - NP_H) / 2);        // 7
 const AV_TOP     = Math.round((POD_H - AVATAR_SZ) / 2);   // 7
 const NAMEPLATE_OVERLAP = 44;                              // px nameplate extends behind circle
 const AVATAR_PAD = NAMEPLATE_OVERLAP + 10;                 // 54 — keeps text clear of circle
@@ -52,9 +52,12 @@ const RING_CIRC  = 2 * Math.PI * RING_R;                   // ~270.2
 // x/y = element CENTER as fraction of canvas; positions derived below.
 const POD_W        = Math.round(0.56 * DESIGN_W);                          // 220
 const POD_L        = Math.round((DESIGN_W - POD_W) / 2);                  // 87
-const OPP_POD_T    = Math.round(0.128 * DESIGN_H - POD_H / 2);            // 59  — avatar center at TABLE_T (top rail edge)
-const MY_POD_T     = Math.round(0.792 * DESIGN_H - POD_H / 2);            // 625 — avatar center at TABLE_T+TABLE_H (bottom rail edge)
-const CC_T         = Math.round(0.455 * DESIGN_H - 25);                   // 363  (25 ≈ half md-card h)
+// Ring center = TABLE_T + 6.5% of TABLE_H (skull ornament position in asset)
+const RING_TOP_Y   = Math.round(TABLE_T + 0.065 * TABLE_H);               // 146
+const RING_BOT_Y   = Math.round(TABLE_T + TABLE_H - 0.065 * TABLE_H);     // 638
+const OPP_POD_T    = RING_TOP_Y - Math.round(POD_H / 2);                  // 96  — nameplate centered on top ring
+const MY_POD_T     = RING_BOT_Y - Math.round(POD_H / 2);                  // 588 — nameplate centered on bottom ring
+const CC_T         = Math.round(0.455 * DESIGN_H - 25);                   // 363
 const POT_T        = Math.round(0.560 * DESIGN_H - 17);                   // 460
 const OPP_BET_T    = Math.round(0.375 * DESIGN_H - 20);                   // 300
 const MY_BET_T     = Math.round(0.620 * DESIGN_H - 20);                   // 508
@@ -63,12 +66,11 @@ const DEALER_OPP_L = Math.round(0.35 * DESIGN_W - DEALER_SZ / 2);        // 124
 const DEALER_OPP_T = Math.round(0.375 * DESIGN_H - DEALER_SZ / 2);       // 306
 const DEALER_MY_L  = Math.round(0.65 * DESIGN_W - DEALER_SZ / 2);        // 241
 const DEALER_MY_T  = Math.round(0.625 * DESIGN_H - DEALER_SZ / 2);       // 519
-// Player hole cards: xl size 58×59px, center at (0.43, 0.700)
+// Cards locked to nameplate edges (4px gap)
 const MY_CARDS_L   = Math.round(0.43 * DESIGN_W - (58 * 2 + 6) / 2);     // 108
-const MY_CARDS_T   = Math.round(0.700 * DESIGN_H - 59 / 2);               // 567
-// Opponent hole cards: md size 42×50px, center at (0.50, 0.305)
+const MY_CARDS_T   = MY_POD_T + NP_TOP - 4 - 59;                          // cards bottom = nameplate top - 4
 const OPP_CARDS_L  = Math.round(0.50 * DESIGN_W - (42 * 2 + 6) / 2);     // 152
-const OPP_CARDS_T  = Math.round(0.305 * DESIGN_H - 50 / 2);               // 235
+const OPP_CARDS_T  = OPP_POD_T + NP_TOP - 4 - 50;                        // cards bottom = nameplate top - 4 (mirrors player)
 
 // ─── TimerRing ────────────────────────────────────────────────────────────────
 function TimerRing({ deadline }) {
@@ -248,11 +250,13 @@ function PlayerPod({ player, isMe, turnDeadline, lastAction, win, displayChips, 
     ]}>
       <View style={s.nameRow}>
         <Text style={s.podName} numberOfLines={1}>{displayName}</Text>
+      </View>
+      <View style={s.chipsRow}>
+        <Text style={[s.podChips, win && s.podChipsWin, !!actionLbl && s.podChipsAction]}
+          numberOfLines={1}>{chipLabel}</Text>
         {present && player.isSmallBlind && <Text style={[s.badge, s.badgeSB]}>SB</Text>}
         {present && player.isBigBlind   && <Text style={[s.badge, s.badgeBB]}>BB</Text>}
       </View>
-      <Text style={[s.podChips, win && s.podChipsWin, !!actionLbl && s.podChipsAction]}
-        numberOfLines={1}>{chipLabel}</Text>
     </View>
   );
 
@@ -265,11 +269,17 @@ function PlayerPod({ player, isMe, turnDeadline, lastAction, win, displayChips, 
 }
 
 // ─── Main Screen ──────────────────────────────────────────────────────────────
-export default function GameScreen() {
+export default function GameScreen({ navigation }) {
   const {
     gameState, myId, onAction, onLeave, onRematch, onLogout,
     matchOver, navigationRef, deckStyle, opponentDisconnected, playerInfo,
   } = useContext(GameContext);
+
+  useEffect(() => {
+    if (Platform.OS === 'web' && !playerInfo) {
+      navigation.reset({ index: 0, routes: [{ name: 'Login' }] });
+    }
+  }, []);
 
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -402,6 +412,23 @@ export default function GameScreen() {
 
           {/* Layer 2: Table surface */}
           <Image source={INGAME_TABLE} style={s.tableImg} resizeMode="contain" />
+
+          {/* DEBUG GRID — remove before ship */}
+          {['A','B','C','D'].map((col, c) =>
+            [1,2,3,4,5,6,7,8].map(row => (
+              <View key={`${col}${row}`} style={{
+                position: 'absolute',
+                left: TABLE_L + c * (TABLE_W / 4),
+                top: TABLE_T + (row - 1) * (TABLE_H / 8),
+                width: TABLE_W / 4,
+                height: TABLE_H / 8,
+                borderWidth: 0.5,
+                borderColor: 'rgba(255,255,0,0.35)',
+              }} pointerEvents="none">
+                <Text style={{ color: 'rgba(255,255,0,0.5)', fontSize: 9, margin: 2 }}>{col}{row}</Text>
+              </View>
+            ))
+          )}
 
           {/* Layer 3: Game elements — all absolutely positioned in canvas coords */}
 
@@ -687,6 +714,7 @@ const s = StyleSheet.create({
   nameplateFolded:  {},
   nameplateWaiting: {},
   nameRow:   { flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' },
+  chipsRow:  { flexDirection: 'row', alignItems: 'center', gap: 6 },
   podName:   { color: colors.white, fontSize: 17, fontWeight: '800', flexShrink: 1 },
   podChips:  { color: '#facc15', fontSize: 18, fontWeight: '900' },
   podChipsWin:    { color: '#4ade80' },

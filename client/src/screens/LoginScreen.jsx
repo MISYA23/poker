@@ -20,17 +20,10 @@ const GOOGLE_DISCOVERY = {
   tokenEndpoint: 'https://oauth2.googleapis.com/token',
 };
 
-const AVATARS = [
-  { id: 'cigar', source: require('../../assets/cigar.png') },
-  { id: 'alfie', source: require('../../assets/alfie.png') },
-  { id: 'jazz',  source: require('../../assets/jazz.png') },
-];
-
 export default function LoginScreen() {
   const { onLogin } = useContext(GameContext);
 
   const [name, setName]       = useState('');
-  const [avatarId, setAvatar] = useState(AVATARS[0].id);
   const [googleLoading, setGoogleLoading] = useState(false);
 
   const redirectUri = Platform.OS === 'web'
@@ -54,23 +47,20 @@ export default function LoginScreen() {
 
     const playerId   = serverRes?.playerId || `g_${profile.id}`;
     const playerName = serverRes?.name || profile.given_name || profile.name || '';
-    const av         = serverRes?.avatarId || avatarId;
+    const av         = serverRes?.avatarId || 'cigar';
 
-    await setUser({ playerId, name: playerName, avatarId: av, email: profile.email });
+    await setUser({ playerId, name: playerName, email: profile.email });
     onLogin(playerName, av, playerId);
   };
 
-  // Auto-login if saved session exists — sync avatar from DB as source of truth
+  // Auto-login if saved session exists — avatar always fetched from DB
   useEffect(() => {
     getUser().then(async (user) => {
       if (!user?.playerId || !user?.name) return;
-      let av = user.avatarId || AVATARS[0].id;
+      let av = 'cigar';
       try {
         const data = await fetch(`${SERVER_URL}/api/player/${user.playerId}/profile`).then(r => r.json());
-        if (data.avatarId) {
-          av = data.avatarId;
-          await setUser({ avatarId: av });
-        }
+        if (data.avatarId) av = data.avatarId;
       } catch (_) {}
       onLogin(user.name, av, user.playerId);
     });
@@ -224,10 +214,6 @@ const s = StyleSheet.create({
   divTxt: { color: 'rgba(255,255,255,0.4)', fontSize: 12 },
   sectionLabel: { color: colors.gray, fontSize: 11, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 1 },
   input: { backgroundColor: 'rgba(0,0,0,0.4)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)', borderRadius: 8, paddingHorizontal: 14, paddingVertical: 12, color: colors.white, fontSize: 16 },
-  avatarRow: { flexDirection: 'row', gap: 10 },
-  avatarOpt: { width: 60, height: 60, borderRadius: 30, borderWidth: 2, borderColor: 'rgba(255,255,255,0.2)', overflow: 'hidden' },
-  avatarSel: { borderColor: colors.goldLight },
-  avatarImg: { width: 60, height: 60 },
   joinBtn: { backgroundColor: colors.gold, borderRadius: 12, paddingVertical: 14, alignItems: 'center' },
   joinTxt: { color: '#000', fontSize: 16, fontWeight: '800' },
 });

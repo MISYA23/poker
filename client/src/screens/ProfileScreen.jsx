@@ -1,6 +1,6 @@
 import React, { useContext, useState, useEffect } from 'react';
 import {
-  View, Text, TextInput, Pressable, Image, ScrollView, StyleSheet, ActivityIndicator,
+  View, Text, TextInput, Pressable, Image, ScrollView, StyleSheet, ActivityIndicator, Platform,
 } from 'react-native';
 import ScaledBg from '../components/ScaledBg';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -17,6 +17,12 @@ const AVATARS = [
 
 export default function ProfileScreen({ navigation }) {
   const { playerInfo, myElo, onUpdateProfile, deckStyle, setDeckStyle } = useContext(GameContext);
+
+  useEffect(() => {
+    if (Platform.OS === 'web' && !playerInfo) {
+      navigation.reset({ index: 0, routes: [{ name: 'Login' }] });
+    }
+  }, []);
 
   const [name, setName]         = useState(playerInfo?.name || '');
   const AVATAR_IDS = AVATARS.map(a => a.id);
@@ -41,7 +47,7 @@ export default function ProfileScreen({ navigation }) {
     if (!trimmed) return;
     setSaving(true);
     await Promise.all([
-      setUser({ name: trimmed, avatarId }),
+      setUser({ name: trimmed }),
       fetch(`${SERVER_URL}/api/player/${playerInfo.playerId}/profile`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },

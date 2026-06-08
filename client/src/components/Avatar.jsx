@@ -1,5 +1,6 @@
 import React from 'react';
 import { Image, View, StyleSheet } from 'react-native';
+import { colors } from '../theme';
 
 const AVATAR_IMAGES = {
   dk:    require('../../assets/dk.png'),
@@ -19,5 +20,5 @@ export default function Avatar({ size = 52, avatarId }) {
 }
 
 const styles = StyleSheet.create({
-  wrap: { overflow: 'hidden', borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)' },
+  wrap: { overflow: 'hidden', borderWidth: 2, borderColor: colors.goldLight, backgroundColor: colors.greenFelt },
 });

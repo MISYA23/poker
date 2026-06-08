@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useContext } from 'react';
 import {
-  View, Text, Pressable, ScrollView, StyleSheet, ActivityIndicator, Image, Modal,
+  View, Text, Pressable, ScrollView, StyleSheet, ActivityIndicator, Image, Modal, Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { GameContext } from '../context/GameContext';
@@ -18,6 +18,13 @@ const RANK_COLORS = ['#FFD700', '#C0C0C0', '#CD7F32'];
 
 export default function LeaderboardScreen({ navigation }) {
   const { playerInfo } = useContext(GameContext);
+
+  useEffect(() => {
+    if (Platform.OS === 'web' && !playerInfo) {
+      navigation.reset({ index: 0, routes: [{ name: 'Login' }] });
+    }
+  }, []);
+
   const [data, setData]         = useState(null);
   const [loading, setLoading]   = useState(true);
   const [selected, setSelected] = useState(null); // player tapped for action sheet

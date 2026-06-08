@@ -19,6 +19,20 @@ import LeaderboardScreen  from './src/screens/LeaderboardScreen';
 
 const Stack = createStackNavigator();
 
+const linking = {
+  prefixes: [],
+  config: {
+    screens: {
+      Login: '',
+      Lobby: 'lobby',
+      Game: 'game',
+      Profile: 'profile',
+      HandReplay: 'replay',
+      Leaderboard: 'leaderboard',
+    },
+  },
+};
+
 export default function App() {
   const [myId, setMyId]           = useState(null);
   const [gameState, setGameState] = useState(null);
@@ -197,7 +211,7 @@ export default function App() {
       <GestureHandlerRootView style={{ flex: 1 }}>
         <SafeAreaProvider>
           <StatusBar style="light" />
-          <NavigationContainer ref={navigationRef}>
+          <NavigationContainer ref={navigationRef} linking={linking}>
             <Stack.Navigator screenOptions={{ headerShown: false, animation: 'fade' }}>
               <Stack.Screen name="Login" component={LoginScreen} />
               <Stack.Screen name="Lobby"   component={LobbyScreen} />

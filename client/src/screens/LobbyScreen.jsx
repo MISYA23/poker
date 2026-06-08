@@ -1,7 +1,7 @@
 import React, { useContext, useState, useEffect } from 'react';
 import {
   View, Text, Pressable, ScrollView, StyleSheet,
-  Image, ActivityIndicator,
+  Image, ActivityIndicator, Platform,
 } from 'react-native';
 import FriendsTabComponent from '../components/FriendsTab';
 import ScaledBg from '../components/ScaledBg';
@@ -124,16 +124,22 @@ function FeaturedMatch({ matchList, onObserve }) {
   );
 }
 
-export default function LobbyScreen() {
+export default function LobbyScreen({ navigation }) {
   const { onFindMatch, onCancelMatch, onObserve, onLogout,
           error, matchList, onlinePlayers, inQueue, myElo, playerInfo, navigationRef,
           myRecentMatches, pendingFriendRequests } = useContext(GameContext);
+
+  useEffect(() => {
+    if (Platform.OS === 'web' && !playerInfo) {
+      navigation.reset({ index: 0, routes: [{ name: 'Login' }] });
+    }
+  }, []);
 
   const [menuOpen, setMenuOpen] = useState(false);
   const [activeTab, setActiveTab] = useState(0);
 
   return (
-    <ScaledBg source={require('../../assets/jungle-ingame.png')} tint={0.45}>
+    <ScaledBg source={require('../../assets/jungle-menu.png')} tint={0.35}>
         <SafeAreaView style={s.safe}>
 
           {/* Top bar */}
