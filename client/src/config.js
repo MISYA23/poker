@@ -13,4 +13,4 @@ function resolveUrl(url) {
 }
 
 export const SERVER_URL = resolveUrl(envUrl);
-export const VERSION = 'v5.82';
+export const VERSION = 'v5.95';

@@ -1,7 +1,7 @@
-import React, { useContext, useState, useEffect, useRef } from 'react';
+import React, { useContext, useState, useEffect, useRef, useMemo } from 'react';
 import {
   View, Text, Pressable, StyleSheet, Animated, Easing,
-  useWindowDimensions, Image,
+  useWindowDimensions, Image, ImageBackground,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -9,6 +9,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 // felt interior + Poker Monkey skull logo + wooden floor and decorations
 // around the oval). Replaces the previous jungle bg for the game scene.
 const INGAME_BG = require('../../assets/table.png');
+const SPEECH_BUBBLE = require('../../assets/speech-bubble.png');
 import Svg, { Circle } from 'react-native-svg';
 import { GameContext } from '../context/GameContext';
 import Card from '../components/Card';
@@ -90,7 +91,10 @@ function useActionFlash(player, lastAction) {
   const seen = useRef(null);
   const t = lastAction?.playerId === player?.id ? lastAction?.t : null;
   useEffect(() => {
-    if (!t || t === seen.current) return;
+    // No current action for this player (new game/hand, or it's the other
+    // player's turn) — clear any lingering label so the fresh chip stack shows.
+    if (!t) { setLabel(null); seen.current = null; return; }
+    if (t === seen.current) return;
     seen.current = t;
     const a = lastAction;
     const map = { fold: 'Fold', check: 'Check', call: `Call ${a.amount?.toLocaleString() || ''}`,
@@ -150,6 +154,7 @@ function PlayerPod({ player, isMe, turnDeadline, lastAction, win, displayChips, 
   // their on-table positions never shift. Only the contents change.
   const present  = !!player;
   const isActive = present && !!player.isCurrentPlayer;
+  const allIn    = present && !!player.allIn;
   const hasCards = present && player.holeCards?.length > 0 && !player.folded;
   const displayName = present ? player.name : (isMe ? 'You' : 'Waiting…');
   const chipLabel = !present ? '—'
@@ -213,6 +218,7 @@ function PlayerPod({ player, isMe, turnDeadline, lastAction, win, displayChips, 
   const avatar = (
     <View style={[s.avatarBlock, isMe ? s.avatarBlockMe : s.avatarBlockOpp, !present && s.avatarPlaceholder]}>
       <Avatar size={AVATAR_SIZE} avatarId={player?.avatarId} />
+      {allIn && <View style={s.avatarAllInGlow} pointerEvents="none" />}
       <TimerRing deadline={turnDeadline} />
     </View>
   );
@@ -222,6 +228,7 @@ function PlayerPod({ player, isMe, turnDeadline, lastAction, win, displayChips, 
       s.nameplate,
       isMe ? s.nameplateMe : s.nameplateOpp,
       isActive && s.nameplateActive,
+      allIn && s.nameplateAllIn,
       present && player.folded && s.nameplateFolded,
       !present && s.nameplateWaiting,
     ]}>
@@ -229,7 +236,6 @@ function PlayerPod({ player, isMe, turnDeadline, lastAction, win, displayChips, 
         <Text style={s.podName} numberOfLines={1}>{displayName}</Text>
         {present && player.isSmallBlind && <Text style={[s.badge, s.badgeSB]}>SB</Text>}
         {present && player.isBigBlind   && <Text style={[s.badge, s.badgeBB]}>BB</Text>}
-        {present && player.allIn        && <Text style={[s.badge, s.badgeAI]}>ALL IN</Text>}
       </View>
       <Text style={[s.podChips, win && s.podChipsWin, !!actionLbl && s.podChipsAction]}
         numberOfLines={1}>{chipLabel}</Text>
@@ -256,6 +262,18 @@ export default function GameScreen() {
   const opponent = gameState?.players?.find(p => p.id !== myId);
 
   const totalPot = gameState?.pot || 0;
+
+  // Match-over splash: winner's avatar + a random taunt bubble. The quote is
+  // picked once per match (keyed on winner + final ELO) so it stays stable
+  // through rematch-vote re-renders.
+  const winnerId = matchOver?.winnerId;
+  const winnerAvatarId =
+    gameState?.players?.find(p => p.id === winnerId)?.avatarId
+    || (winnerId === myId ? playerInfo?.avatarId : undefined);
+  const winnerQuote = useMemo(() => {
+    const quotes = ['Easy Bananas!', 'More Coconuts?', 'Monkey Down :D', 'Maybe Next Time! ;)', 'Obviously Me!'];
+    return quotes[Math.floor(Math.random() * quotes.length)];
+  }, [winnerId, matchOver?.newElo]);
 
   const winnerMap = {};
   if (gameState?.phase === 'showdown' && gameState?.winners) {
@@ -446,9 +464,9 @@ export default function GameScreen() {
           <View style={s.betTop} pointerEvents="none">
             {(opponent?.roundBet > 0 || opponent?.allIn) && (
               <View style={s.betPill}>
+                {opponent.allIn && <Text style={s.allInTag}>ALL IN</Text>}
                 {opponent.roundBet > 0 && <Chips amount={opponent.roundBet} size={33} />}
                 {opponent.roundBet > 0 && <Text style={s.betAmt}>{opponent.roundBet.toLocaleString()}</Text>}
-                {opponent.allIn && <Text style={s.allInTag}>ALL IN</Text>}
               </View>
             )}
           </View>
@@ -486,9 +504,9 @@ export default function GameScreen() {
           <View style={s.betBottom} pointerEvents="none">
             {(me?.roundBet > 0 || me?.allIn) && (
               <View style={s.betPill}>
+                {me.allIn && <Text style={s.allInTag}>ALL IN</Text>}
                 {me.roundBet > 0 && <Chips amount={me.roundBet} size={33} />}
                 {me.roundBet > 0 && <Text style={s.betAmt}>{me.roundBet.toLocaleString()}</Text>}
-                {me.allIn && <Text style={s.allInTag}>ALL IN</Text>}
               </View>
             )}
           </View>
@@ -533,6 +551,18 @@ export default function GameScreen() {
               <Text style={s.modalTitle}>
                 {matchOver.winnerId === myId ? '🎉 You Won!' : `${matchOver.winnerName} Won!`}
               </Text>
+
+              {/* Winner avatar stays centred; the glossy speech bubble is
+                  absolutely anchored off the avatar's right edge (so it never
+                  shifts the avatar) with plain text inside. */}
+              <View style={s.winnerWrap}>
+                <Avatar size={104} avatarId={winnerAvatarId} />
+                <ImageBackground source={SPEECH_BUBBLE} style={s.quoteBubble} resizeMode="contain" pointerEvents="none">
+                  <View style={s.quoteFill} />
+                  <Text style={s.quoteText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>{winnerQuote}</Text>
+                </ImageBackground>
+              </View>
+
               <View style={s.eloRow}>
                 <Text style={[s.eloChange, matchOver.eloChange >= 0 ? s.eloPos : s.eloNeg]}>
                   {matchOver.eloChange >= 0 ? '+' : ''}{matchOver.eloChange} ELO
@@ -583,7 +613,7 @@ export default function GameScreen() {
                       <Text style={s.modalBtnTxt}>Leave</Text>
                     </Pressable>
                     <Pressable style={[s.modalBtn, s.modalBtnYes]} onPress={() => onRematch(true)}>
-                      <Text style={s.modalBtnTxt} numberOfLines={1}>Play Again</Text>
+                      <Text style={s.modalBtnTxt} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>Play Again</Text>
                     </Pressable>
                   </View>
                 </>
@@ -649,6 +679,14 @@ const s = StyleSheet.create({
   },
   avatarBlockMe:  { right: 0 },
   avatarBlockOpp: { left:  0 },
+  // Red "alert light" ring + glow around the avatar when all-in.
+  avatarAllInGlow: {
+    position: 'absolute', top: 0, left: 0,
+    width: AVATAR_SIZE, height: AVATAR_SIZE, borderRadius: AVATAR_SIZE / 2,
+    borderWidth: 3, borderColor: '#ef4444',
+    shadowColor: '#ef4444', shadowOpacity: 0.85, shadowRadius: 16, shadowOffset: { width: 0, height: 0 },
+    elevation: 10, zIndex: 55,
+  },
   ring: { position: 'absolute', top: (AVATAR_SIZE - RING_BOX) / 2, left: (AVATAR_SIZE - RING_BOX) / 2 },
 
   // Nameplate — fixed-height capsule, vertically centred on the avatar.
@@ -671,9 +709,15 @@ const s = StyleSheet.create({
   // Horizontally: nameplate is ~15% narrower than the original. The
   // avatar end still overlaps the pill ~44 px past the avatar's inner
   // edge; the OPPOSITE end is shortened by 40 px.
-  nameplateMe:  { left:  40, right: AVATAR_SIZE - 44, paddingLeft: 18, paddingRight: 60 },
-  nameplateOpp: { right: 40, left:  AVATAR_SIZE - 44, paddingLeft: 60, paddingRight: 18 },
+  // Me: avatar sits on the RIGHT, so content is right-aligned to hug the
+  // avatar — mirrors the opponent (paddingRight reserves the same ~16px gap
+  // from the avatar's inner edge as the opponent's paddingLeft does).
+  nameplateMe:  { left:  60, right: AVATAR_SIZE - 44, paddingLeft: 18, paddingRight: 60, alignItems: 'flex-end' },
+  nameplateOpp: { right: 60, left:  AVATAR_SIZE - 44, paddingLeft: 60, paddingRight: 18 },
   nameplateActive: { borderColor: colors.gold, shadowColor: colors.gold, shadowOpacity: 0.4, shadowRadius: 10, elevation: 6 },
+  // All-in: red "alert light" glow over the nameplate (avatar gets a
+  // matching red ring — see avatarAllInGlow).
+  nameplateAllIn: { borderColor: '#ef4444', shadowColor: '#ef4444', shadowOpacity: 0.8, shadowRadius: 14, shadowOffset: { width: 0, height: 0 }, elevation: 8 },
   // Folded / waiting: only the inner text fades, never the pill itself.
   nameplateFolded: {},
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' },
@@ -684,7 +728,6 @@ const s = StyleSheet.create({
   badge: { fontSize: 10, color: '#fff', backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 4, paddingHorizontal: 5, paddingVertical: 1, fontWeight: '700' },
   badgeSB: { backgroundColor: '#2563eb' },
   badgeBB: { backgroundColor: '#7c3aed' },
-  badgeAI: { backgroundColor: '#dc2626' },
   countdown: { color: 'rgba(255,255,255,0.7)', fontSize: 14, fontWeight: '800' },
   countdownUrgent: { color: '#f87171' },
 
@@ -747,7 +790,9 @@ const s = StyleSheet.create({
   betBottom: { position: 'absolute', bottom: -25, left: 0, right: 0, alignItems: 'center', height: 40, justifyContent: 'flex-start', zIndex: 20 },
   betPill:   { flexDirection: 'row', alignItems: 'center', gap: 6 },
   betAmt:    { color: '#4a2a10', fontSize: 18, fontWeight: '900' },
-  allInTag:  { color: '#f87171', fontSize: 11, fontWeight: '800' },
+  // Larger red "alert" badge next to the player's chips on the felt —
+  // replaces the small nameplate ALL IN mention.
+  allInTag:  { color: '#fff', backgroundColor: '#dc2626', fontSize: 13, fontWeight: '900', letterSpacing: 0.5, paddingHorizontal: 9, paddingVertical: 2, borderRadius: 8, overflow: 'hidden', borderWidth: 1, borderColor: '#fca5a5' },
 
   dealerBtn: { position: 'absolute', width: 30, height: 30, borderRadius: 15, backgroundColor: '#f5f5dc', alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: '#888', shadowColor: '#000', shadowOpacity: 0.4, shadowRadius: 3, shadowOffset: { width: 0, height: 2 }, elevation: 4, zIndex: 60 },
   // Canvas-absolute coordinates on the 393×852 design canvas.
@@ -771,10 +816,30 @@ const s = StyleSheet.create({
 
   // Match over modal
   modalOverlay: { position: 'absolute', inset: 0, backgroundColor: 'rgba(0,0,0,0.75)', alignItems: 'center', justifyContent: 'center', zIndex: 100 },
-  modal: { backgroundColor: '#111', borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)', borderRadius: 24, padding: 28, alignItems: 'center', gap: 14, width: '80%' },
+  modal: { backgroundColor: '#111', borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)', borderRadius: 24, padding: 22, alignItems: 'center', gap: 14, width: '90%' },
   modalTitle: { color: colors.white, fontSize: 24, fontWeight: '900', textAlign: 'center' },
+  // Winner avatar + taunt bubble — sits between the title and the ELO row.
+  // The avatar stays centred; the bubble is absolutely anchored at the
+  // avatar's centre and expands to the right (so it never shifts the avatar).
+  // Avatar stays centred (only in-flow child); the glossy bubble overlays it.
+  winnerWrap: { alignItems: 'center', justifyContent: 'center', marginTop: 2, position: 'relative' },
+  // Outlined speech-bubble image, positioned so its tail tip reaches the
+  // avatar's frame; the oval body sits to the avatar's right. Interior is
+  // transparent (dark modal shows through) so the text is light.
+  quoteBubble: {
+    position: 'absolute', left: '50%', marginLeft: 13, top: '50%', marginTop: -83,
+    width: 150, height: 150,
+    alignItems: 'center', justifyContent: 'center',
+    paddingHorizontal: 30, paddingBottom: 30, paddingTop: 4,
+  },
+  // White fill behind the text, sized to the oval interior of the outline image.
+  quoteFill: {
+    position: 'absolute', left: 27, top: 36, width: 96, height: 54,
+    borderRadius: 27, backgroundColor: '#fff',
+  },
+  quoteText: { color: '#111', fontSize: 11, fontStyle: 'italic', fontWeight: '400', textAlign: 'center' },
   eloRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  eloChange: { fontSize: 28, fontWeight: '900' },
+  eloChange: { fontSize: 16, fontWeight: '800' },
   eloPos: { color: '#4ade80' },
   eloNeg: { color: '#f87171' },
   eloNew: { color: colors.gray, fontSize: 16 },
@@ -782,9 +847,10 @@ const s = StyleSheet.create({
   addFriendBtn: { paddingVertical: 8, paddingHorizontal: 16, borderRadius: 8, borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)', alignItems: 'center' },
   addFriendTxt: { color: 'rgba(255,255,255,0.7)', fontSize: 13 },
   modalWaiting: { color: colors.gray, fontSize: 14, fontStyle: 'italic' },
-  modalBtns: { flexDirection: 'row', gap: 12, marginTop: 4 },
-  modalBtn: { flex: 1, paddingVertical: 12, borderRadius: 12, alignItems: 'center' },
+  modalBtns: { flexDirection: 'row', gap: 12, marginTop: 4, alignSelf: 'stretch' },
+  modalBtn: { flex: 1, paddingVertical: 12, paddingHorizontal: 14, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   modalBtnNo:  { backgroundColor: 'rgba(255,255,255,0.1)' },
-  modalBtnYes: { backgroundColor: colors.gold },
-  modalBtnTxt: { color: colors.white, fontSize: 15, fontWeight: '800' },
+  // Primary action gets extra width so longer labels ("Play Again") stay on one line.
+  modalBtnYes: { backgroundColor: colors.gold, flex: 1.5 },
+  modalBtnTxt: { color: colors.white, fontSize: 15, fontWeight: '800', textAlign: 'center' },
 });
