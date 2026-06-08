@@ -653,7 +653,7 @@ const s = StyleSheet.create({
   // Group A: stage container fills screen, centers the scaled canvas
   stageOuter: {
     position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
-    alignItems: 'center', justifyContent: 'center',
+    alignItems: 'center', justifyContent: 'flex-end',
   },
   stage: { width: DESIGN_W, height: DESIGN_H },
 
