@@ -3,7 +3,6 @@ import {
   View, Text, Pressable, ScrollView, StyleSheet,
   Image, ActivityIndicator, Platform,
 } from 'react-native';
-import FriendsTabComponent from '../components/FriendsTab';
 import ScaledBg from '../components/ScaledBg';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { GameContext } from '../context/GameContext';
@@ -15,7 +14,7 @@ const AVATAR_IMAGES = {
   queen: require('../../assets/queen.png'),
 };
 
-const TAB_NAMES = ['Recent', 'Friends', 'Leaderboard'];
+const TAB_NAMES = ['Recent', 'Leaderboard'];
 
 function RecentTab({ matches, navigationRef }) {
   if (!matches?.length) return <Text style={s.tabEmpty}>No matches yet — play your first game!</Text>;
@@ -34,10 +33,6 @@ function RecentTab({ matches, navigationRef }) {
       ))}
     </View>
   );
-}
-
-function FriendsTab({ onlinePlayers }) {
-  return <FriendsTabComponent onlinePlayers={onlinePlayers} />;
 }
 
 function LeaderboardTab({ navigationRef }) {
@@ -124,7 +119,7 @@ function FeaturedMatch({ matchList, onObserve }) {
 export default function LobbyScreen({ navigation }) {
   const { onFindMatch, onCancelMatch, onObserve, onLogout,
           error, matchList, onlinePlayers, inQueue, myElo, playerInfo, navigationRef,
-          myRecentMatches, pendingFriendRequests } = useContext(GameContext);
+          myRecentMatches } = useContext(GameContext);
 
   useEffect(() => {
     if (Platform.OS === 'web' && !playerInfo) {
@@ -191,21 +186,13 @@ export default function LobbyScreen({ navigation }) {
                 {TAB_NAMES.map((tab, i) => (
                   <Pressable key={i} style={[s.tabBtn, activeTab === i && s.tabBtnActive]}
                     onPress={() => setActiveTab(i)}>
-                    <View style={s.tabBtnInner}>
-                      <Text style={[s.tabLabel, activeTab === i && s.tabLabelActive]}>{tab}</Text>
-                      {i === 1 && pendingFriendRequests > 0 && (
-                        <View style={s.badge}>
-                          <Text style={s.badgeTxt}>{pendingFriendRequests}</Text>
-                        </View>
-                      )}
-                    </View>
+                    <Text style={[s.tabLabel, activeTab === i && s.tabLabelActive]}>{tab}</Text>
                   </Pressable>
                 ))}
               </View>
               <View style={s.tabPanel}>
                 {activeTab === 0 && <RecentTab matches={myRecentMatches} navigationRef={navigationRef} />}
-                {activeTab === 1 && <FriendsTab onlinePlayers={onlinePlayers} />}
-                {activeTab === 2 && <LeaderboardTab navigationRef={navigationRef} />}
+                {activeTab === 1 && <LeaderboardTab navigationRef={navigationRef} />}
               </View>
             </View>
 

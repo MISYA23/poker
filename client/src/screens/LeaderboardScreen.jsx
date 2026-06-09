@@ -90,17 +90,6 @@ export default function LeaderboardScreen({ navigation }) {
           <View style={s.sheet}>
             <Text style={s.sheetName}>{selected?.displayName}</Text>
             <Text style={s.sheetElo}>ELO {selected?.elo}</Text>
-            <Pressable style={s.sheetBtn} onPress={() => {
-              if (selected && playerInfo?.playerId) {
-                fetch(`${SERVER_URL}/api/friends/request`, {
-                  method: 'POST', headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ requesterId: playerInfo.playerId, addresseeId: selected.playerId }),
-                });
-              }
-              setSelected(null);
-            }}>
-              <Text style={s.sheetBtnTxt}>+ Add Friend</Text>
-            </Pressable>
             <Pressable style={[s.sheetBtn, s.sheetBtnCancel]} onPress={() => setSelected(null)}>
               <Text style={[s.sheetBtnTxt, { color: colors.gray }]}>Cancel</Text>
             </Pressable>
