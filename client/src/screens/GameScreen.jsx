@@ -69,9 +69,10 @@ const C7_BL_Y    = TABLE_T + 7 * (TABLE_H / 8);                            // 60
 const MY_POD_L   = POD_ANCHOR_L;                                            // 20
 const MY_POD_T   = Math.round(C7_BL_Y - AV_TOP - AVATAR_SZ / 2);          // 554
 const CC_T         = Math.round(0.455 * DESIGN_H - 25);                   // 363
-const POT_T        = Math.round(0.560 * DESIGN_H - 17);                   // 460
-const OPP_BET_T    = Math.round(0.375 * DESIGN_H - 20);                   // 300
-const MY_BET_T     = Math.round(0.620 * DESIGN_H - 20);                   // 508
+const POT_T        = Math.round(TABLE_T + 4 * (TABLE_H / 8) + 20);        // 20px past row 5 line
+const OPP_BET_T    = Math.round(TABLE_T + 2 * (TABLE_H / 8));             // row 3 line
+const MY_BET_T     = Math.round(0.620 * DESIGN_H - 20 + TABLE_H / 16);   // down half row
+const MY_BET_L     = Math.round(TABLE_W / 4);                             // right half column (center +62px)
 const DEALER_SZ    = Math.round(0.07 * DESIGN_W);
 const DEALER_OPP_L = Math.round(COL_C_X);                                 // C3 top-left x
 const DEALER_OPP_T = Math.round(TABLE_T + 2 * (TABLE_H / 8));             // C3 top-left y
@@ -492,7 +493,7 @@ export default function GameScreen({ navigation }) {
           </View>
 
           {/* Player bet */}
-          <View style={[s.betSlot, { top: MY_BET_T }]} pointerEvents="none">
+          <View style={[s.betSlot, { top: MY_BET_T, left: MY_BET_L }]} pointerEvents="none">
             {(me?.roundBet > 0 || me?.allIn) && (
               <View style={s.betPill}>
                 {me.allIn && <Text style={s.allInTag}>ALL IN</Text>}
