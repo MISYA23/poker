@@ -947,6 +947,174 @@ app.post('/admin/reset', (_, res) => { doReset(); res.json({ ok: true }); });
 
 // ── Admin UI ──────────────────────────────────────────────────────────────────
 
+app.get('/api/admin/players', async (_, res) => {
+  try {
+    const { rows } = await db.query(`
+      SELECT p.id, p.display_name, p.avatar_id, p.is_guest,
+             p.created_at, p.last_seen_at,
+             ps.elo, ps.matches_played, ps.matches_won
+      FROM players p
+      LEFT JOIN player_stats ps ON ps.player_id = p.id
+      ORDER BY p.created_at DESC
+    `);
+    res.json(rows);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get('/admin/players', (_, res) => {
+  res.send(`<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Poker Monkey — Players</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #0d1117; color: #e6edf3; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', monospace; min-height: 100vh; padding: 40px 16px; }
+    h1 { font-size: 1.4rem; color: #f0c040; margin-bottom: 8px; letter-spacing: 1px; }
+    .sub { color: #8b949e; font-size: 0.85rem; margin-bottom: 24px; }
+    #auth { background: #161b22; border: 1px solid #30363d; border-radius: 10px; padding: 32px; width: 100%; max-width: 340px; display: flex; flex-direction: column; gap: 16px; }
+    #auth label { font-size: 0.85rem; color: #8b949e; }
+    #auth input { background: #0d1117; border: 1px solid #30363d; border-radius: 6px; color: #e6edf3; font-size: 1rem; padding: 10px 14px; width: 100%; outline: none; }
+    #auth input:focus { border-color: #f0c040; }
+    #auth button { background: #f0c040; color: #0d1117; border: none; border-radius: 6px; font-weight: 700; font-size: 1rem; padding: 10px; cursor: pointer; }
+    #auth .err { color: #f85149; font-size: 0.85rem; display: none; }
+    #main { display: none; }
+    .nav { margin-bottom: 16px; }
+    .nav a { color: #8b949e; font-size: 0.85rem; text-decoration: none; }
+    .nav a:hover { color: #e6edf3; }
+    .toolbar { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+    .toolbar input { background: #161b22; border: 1px solid #30363d; border-radius: 6px; color: #e6edf3; font-size: 0.9rem; padding: 7px 12px; width: 260px; outline: none; }
+    .toolbar input:focus { border-color: #f0c040; }
+    .count { color: #8b949e; font-size: 0.85rem; }
+    .wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; background: #161b22; border: 1px solid #30363d; border-radius: 10px; overflow: hidden; font-size: 0.85rem; }
+    th { background: #1c2128; color: #8b949e; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; padding: 10px 14px; text-align: left; white-space: nowrap; cursor: pointer; user-select: none; }
+    th:hover { color: #e6edf3; }
+    th.asc::after  { content: ' ↑'; color: #f0c040; }
+    th.desc::after { content: ' ↓'; color: #f0c040; }
+    td { padding: 9px 14px; border-top: 1px solid #21262d; white-space: nowrap; vertical-align: middle; }
+    td.id { font-family: monospace; color: #79c0ff; font-size: 0.78rem; max-width: 160px; overflow: hidden; text-overflow: ellipsis; }
+    td.guest { color: #8b949e; font-size: 0.8rem; }
+    td.elo { font-weight: 700; color: #f0c040; }
+    td.name { color: #e6edf3; }
+    td.date { color: #8b949e; font-size: 0.8rem; }
+    tr:hover td { background: #1c2128; }
+  </style>
+</head>
+<body>
+  <h1>♠ Players</h1>
+
+  <div id="auth">
+    <label>Password</label>
+    <input type="password" id="pw" placeholder="Enter password" />
+    <div class="err" id="err">Wrong password</div>
+    <button onclick="login()">Enter</button>
+  </div>
+
+  <div id="main">
+    <div class="nav"><a href="/admin">← Admin home</a></div>
+    <div class="toolbar">
+      <input type="text" id="search" placeholder="Search name or ID…" oninput="render()" />
+      <span class="count" id="count"></span>
+    </div>
+    <div class="wrap"><table>
+      <thead>
+        <tr id="thead"></tr>
+      </thead>
+      <tbody id="tbody"></tbody>
+    </table></div>
+  </div>
+
+  <script>
+    const PASSWORD = '1111';
+    const COLS = [
+      { key: 'display_name', label: 'Name',     fmt: v => v ?? '—' },
+      { key: 'id',           label: 'ID',        fmt: v => v,         cls: 'id' },
+      { key: 'is_guest',     label: 'Type',      fmt: v => v ? 'guest' : 'registered', cls: 'guest' },
+      { key: 'elo',          label: 'ELO',       fmt: v => v ?? '—',  cls: 'elo' },
+      { key: 'matches_played', label: 'Played',  fmt: v => v ?? 0 },
+      { key: 'matches_won',  label: 'Won',       fmt: v => v ?? 0 },
+      { key: 'created_at',   label: 'Joined',    fmt: v => v ? new Date(v).toLocaleString() : '—', cls: 'date' },
+      { key: 'last_seen_at', label: 'Last seen', fmt: v => v ? new Date(v).toLocaleString() : '—', cls: 'date' },
+    ];
+
+    let allRows = [], sortCol = 'created_at', sortDir = 'desc';
+
+    document.getElementById('pw').addEventListener('keydown', e => { if (e.key === 'Enter') login(); });
+
+    function login() {
+      if (document.getElementById('pw').value === PASSWORD) {
+        document.getElementById('auth').style.display = 'none';
+        document.getElementById('main').style.display = 'block';
+        load();
+      } else {
+        document.getElementById('err').style.display = 'block';
+      }
+    }
+
+    function buildHeader() {
+      const tr = document.getElementById('thead');
+      tr.innerHTML = '';
+      COLS.forEach(col => {
+        const th = document.createElement('th');
+        th.textContent = col.label;
+        if (col.key === sortCol) th.className = sortDir;
+        th.onclick = () => {
+          if (sortCol === col.key) sortDir = sortDir === 'asc' ? 'desc' : 'asc';
+          else { sortCol = col.key; sortDir = 'asc'; }
+          buildHeader();
+          render();
+        };
+        tr.appendChild(th);
+      });
+    }
+
+    function sortVal(row, key) {
+      const v = row[key];
+      if (v === null || v === undefined) return '';
+      if (key === 'created_at' || key === 'last_seen_at') return new Date(v).getTime();
+      if (typeof v === 'boolean') return v ? 1 : 0;
+      return v;
+    }
+
+    function render() {
+      const q = document.getElementById('search').value.toLowerCase();
+      let rows = allRows.filter(r =>
+        !q || (r.display_name ?? '').toLowerCase().includes(q) || r.id.toLowerCase().includes(q)
+      );
+      rows.sort((a, b) => {
+        const av = sortVal(a, sortCol), bv = sortVal(b, sortCol);
+        const cmp = av < bv ? -1 : av > bv ? 1 : 0;
+        return sortDir === 'asc' ? cmp : -cmp;
+      });
+      document.getElementById('count').textContent = rows.length + ' players';
+      const tbody = document.getElementById('tbody');
+      tbody.innerHTML = '';
+      rows.forEach(row => {
+        const tr = document.createElement('tr');
+        COLS.forEach(col => {
+          const td = document.createElement('td');
+          if (col.cls) td.className = col.cls;
+          td.textContent = col.fmt(row[col.key]);
+          tr.appendChild(td);
+        });
+        tbody.appendChild(tr);
+      });
+    }
+
+    async function load() {
+      allRows = await fetch('/api/admin/players').then(r => r.json());
+      buildHeader();
+      render();
+    }
+  </script>
+</body>
+</html>`);
+});
+
 app.get('/admin', (_, res) => {
   res.send(`<!DOCTYPE html>
 <html lang="en">
