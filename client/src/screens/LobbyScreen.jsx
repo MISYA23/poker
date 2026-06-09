@@ -13,22 +13,18 @@ const AVATAR_IMAGES = {
   queen: require('../../assets/queen.png'),
 };
 
-const TAB_NAMES = ['Recent', 'Leaderboard'];
+const TAB_NAMES = ['Players', 'Leaderboard'];
 
-function RecentTab({ matches, navigationRef }) {
-  if (!matches?.length) return <Text style={s.tabEmpty}>No matches yet — play your first game!</Text>;
+function PlayersTab({ onlinePlayers }) {
+  if (!onlinePlayers?.length) return <Text style={s.tabEmpty}>No players online</Text>;
   return (
     <View style={s.tabContent}>
-      {matches.map((m, i) => (
-        <Pressable key={i} style={s.recentRow}
-          onPress={() => navigationRef.navigate('HandReplay', { matchId: m.matchId, matchLabel: `vs ${m.opponentName}` })}>
-          <View style={[s.resultDot, m.won ? s.dotWin : s.dotLoss]} />
-          <Text style={s.recentOpp} numberOfLines={1}>vs {m.opponentName}</Text>
-          <Text style={[s.recentElo, m.eloChange >= 0 ? s.eloPos : s.eloNeg]}>
-            {m.eloChange >= 0 ? '+' : ''}{m.eloChange}
-          </Text>
-          <Text style={s.replayArrow}>▶</Text>
-        </Pressable>
+      {onlinePlayers.map((p) => (
+        <View key={p.id} style={s.onlineRow}>
+          <View style={[s.statusDot, p.inMatch ? s.dotInMatch : s.dotOnline]} />
+          <Text style={s.onlineName} numberOfLines={1}>{p.name}</Text>
+          <Text style={s.onlineStatus}>{p.inMatch ? 'In match' : 'Online'}</Text>
+        </View>
       ))}
     </View>
   );
@@ -190,7 +186,7 @@ export default function LobbyScreen({ navigation }) {
                 ))}
               </View>
               <View style={s.tabPanel}>
-                {activeTab === 0 && <RecentTab matches={myRecentMatches} navigationRef={navigationRef} />}
+                {activeTab === 0 && <PlayersTab onlinePlayers={onlinePlayers} />}
                 {activeTab === 1 && <LeaderboardTab navigationRef={navigationRef} />}
               </View>
             </View>
@@ -254,11 +250,13 @@ const s = StyleSheet.create({
   eloPos: { color: '#4ade80' },
   eloNeg: { color: '#f87171' },
 
-  // Friends tab
+  // Players tab
   onlineRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  onlineAvatar: { width: 24, height: 24, borderRadius: 12 },
+  statusDot: { width: 8, height: 8, borderRadius: 4, flexShrink: 0 },
+  dotOnline: { backgroundColor: '#4ade80' },
+  dotInMatch: { backgroundColor: '#facc15' },
   onlineName: { flex: 1, color: colors.white, fontSize: 13, fontWeight: '600' },
-  onlineDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#4ade80' },
+  onlineStatus: { color: colors.gray, fontSize: 11 },
 
   // Leaderboard tab
   lbRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },

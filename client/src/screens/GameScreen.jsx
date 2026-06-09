@@ -1,7 +1,7 @@
-import React, { useContext, useState, useEffect, useRef, useMemo } from 'react';
+import React, { useContext, useState, useEffect, useRef } from 'react';
 import {
   View, Text, Pressable, StyleSheet, Animated, Easing,
-  useWindowDimensions, Image, ImageBackground, Platform,
+  useWindowDimensions, Image, Platform,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle } from 'react-native-svg';
@@ -14,8 +14,6 @@ import { colors } from '../theme';
 import { VERSION_DISPLAY } from '../config';
 
 const INGAME_TABLE  = require('../../assets/game-table.png');
-const GAME_BG       = require('../../assets/game-bg.png');
-const SPEECH_BUBBLE = require('../../assets/speech-bubble.png');
 
 const TURN_DURATION_MS = 20000;
 const TOP_BAR_H    = 48;
@@ -305,11 +303,6 @@ export default function GameScreen({ navigation }) {
   const winnerAvatarId =
     gameState?.players?.find(p => p.id === winnerId)?.avatarId
     || (winnerId === myId ? playerInfo?.avatarId : undefined);
-  const winnerQuote = useMemo(() => {
-    const quotes = ['Easy Bananas!', 'More Coconuts?', 'Monkey Down :D', 'Maybe Next Time! ;)', 'Obviously Me!'];
-    return quotes[Math.floor(Math.random() * quotes.length)];
-  }, [winnerId, matchOver?.newElo]);
-
   const winnerMap = {};
   if (gameState?.phase === 'showdown' && gameState?.winners) {
     for (const w of gameState.winners) winnerMap[w.playerId] = w;
@@ -418,10 +411,6 @@ export default function GameScreen({ navigation }) {
 
   return (
     <View style={s.root}>
-
-      {/* Group C — environment: 55% opacity lifts the baked vignette ~45%;
-          dark jungle root colour bleeds through the transparent edges */}
-      <Image source={GAME_BG} style={[StyleSheet.absoluteFill, { width: '100%', height: '100%', opacity: 0.55 }]} resizeMode="cover" />
 
       {/* Group A — stage: scaled to content area only (below top bar, above action buttons) */}
       <View style={[s.stageOuter, { top: stageTop, bottom: stageBotOffset }]} pointerEvents="none">
@@ -633,12 +622,6 @@ export default function GameScreen({ navigation }) {
 
             <View style={s.winnerWrap}>
               <Avatar size={104} avatarId={winnerAvatarId} />
-              <ImageBackground source={SPEECH_BUBBLE} style={s.quoteBubble}
-                resizeMode="contain" pointerEvents="none">
-                <View style={s.quoteFill} />
-                <Text style={s.quoteText} numberOfLines={1}
-                  adjustsFontSizeToFit minimumFontScale={0.8}>{winnerQuote}</Text>
-              </ImageBackground>
             </View>
 
             <View style={s.eloRow}>
@@ -821,10 +804,7 @@ const s = StyleSheet.create({
   modalOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.75)', alignItems: 'center', justifyContent: 'center', zIndex: 100 },
   modal:       { backgroundColor: '#111', borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)', borderRadius: 24, padding: 22, alignItems: 'center', gap: 14, width: '90%' },
   modalTitle:  { color: colors.white, fontSize: 24, fontWeight: '900', textAlign: 'center' },
-  winnerWrap:  { alignItems: 'center', justifyContent: 'center', marginTop: 2, position: 'relative' },
-  quoteBubble: { position: 'absolute', left: '50%', marginLeft: 13, top: '50%', marginTop: -83, width: 150, height: 150, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 30, paddingBottom: 30, paddingTop: 4 },
-  quoteFill:   { position: 'absolute', left: 27, top: 36, width: 96, height: 54, borderRadius: 27, backgroundColor: '#fff' },
-  quoteText:   { color: '#111', fontSize: 11, fontStyle: 'italic', fontWeight: '400', textAlign: 'center' },
+  winnerWrap:  { alignItems: 'center', justifyContent: 'center', marginTop: 2 },
   eloRow:      { flexDirection: 'row', alignItems: 'center', gap: 8 },
   eloChange:   { fontSize: 16, fontWeight: '800' },
   eloPos:      { color: '#4ade80' },

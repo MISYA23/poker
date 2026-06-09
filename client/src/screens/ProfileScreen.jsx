@@ -83,6 +83,7 @@ export default function ProfileScreen({ navigation }) {
           <Text style={s.sectionLbl}>Username</Text>
           <TextInput style={s.input} value={name} onChangeText={setName}
             maxLength={20} placeholder="Your name" placeholderTextColor={colors.gray} />
+          <Text style={s.uuidTxt}>{playerInfo?.playerId}</Text>
         </View>
 
         {/* Avatar */}
@@ -164,6 +165,7 @@ const s = StyleSheet.create({
   section: { gap: 10 },
   sectionLbl: { color: colors.gray, fontSize: 11, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 1 },
   input: { backgroundColor: 'rgba(0,0,0,0.4)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12, color: colors.white, fontSize: 16 },
+  uuidTxt: { color: 'rgba(255,255,255,0.3)', fontSize: 11, paddingHorizontal: 4 },
   avatarRow: { flexDirection: 'row', gap: 12 },
   avatarOpt: { width: 64, height: 64, borderRadius: 32, borderWidth: 2, borderColor: 'rgba(255,255,255,0.2)', overflow: 'hidden' },
   avatarSel: { borderColor: colors.goldLight },

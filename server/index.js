@@ -147,7 +147,7 @@ function broadcastMatchList() {
   for (const sp of socketPlayers.values()) {
     if (sp.playerName && !seen.has(sp.playerId)) {
       seen.add(sp.playerId);
-      online.push({ id: sp.playerId, name: sp.playerName, avatarId: sp.avatarId });
+      online.push({ id: sp.playerId, name: sp.playerName, avatarId: sp.avatarId, inMatch: sp.matchId !== null });
     }
   }
 
@@ -1288,6 +1288,47 @@ app.put('/admin/ui-config/:key', async (req, res) => {
     res.json({ ok: true, key, value: uiCfg[key] });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
+
+// ── Legal pages ───────────────────────────────────────────────────────────────
+app.get('/privacy-policy', (_, res) => res.send(`<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Privacy Policy — Poker Monkey</title>
+<style>body{font-family:sans-serif;max-width:680px;margin:40px auto;padding:0 20px;color:#222;line-height:1.6}h1{font-size:1.6rem}h2{font-size:1.1rem;margin-top:2rem}a{color:#0066cc}</style>
+</head><body>
+<h1>Privacy Policy</h1>
+<p><strong>Last updated: June 2025</strong></p>
+<p>Poker Monkey ("we", "us") operates the Poker Monkey mobile and web application. This policy explains what data we collect and how we use it.</p>
+<h2>Information We Collect</h2>
+<ul>
+  <li><strong>Google Sign-In:</strong> When you log in with Google, we receive your Google user ID, display name, and profile photo URL. We do not receive your email address or password.</li>
+  <li><strong>Guest accounts:</strong> If you play as a guest, we generate a random identifier stored on your device. No personal information is collected.</li>
+  <li><strong>Gameplay data:</strong> We store match history, hand history, and ELO ratings associated with your account.</li>
+</ul>
+<h2>How We Use Your Data</h2>
+<p>We use your data solely to operate the game: to identify you across sessions, track your match history, and calculate your ELO rating. We do not sell, share, or use your data for advertising.</p>
+<h2>Data Retention</h2>
+<p>Your data is retained as long as your account exists. You may request deletion at any time via our <a href="/data-deletion">data deletion page</a>.</p>
+<h2>Contact</h2>
+<p>Questions? Email us at <a href="mailto:brian.danilo@gmail.com">brian.danilo@gmail.com</a>.</p>
+</body></html>`));
+
+app.get('/data-deletion', (_, res) => res.send(`<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Data Deletion — Poker Monkey</title>
+<style>body{font-family:sans-serif;max-width:680px;margin:40px auto;padding:0 20px;color:#222;line-height:1.6}h1{font-size:1.6rem}h2{font-size:1.1rem;margin-top:2rem}a{color:#0066cc}</style>
+</head><body>
+<h1>Data Deletion Request</h1>
+<p>You can request deletion of all data associated with your Poker Monkey account at any time.</p>
+<h2>What gets deleted</h2>
+<ul>
+  <li>Your player profile (display name, avatar)</li>
+  <li>Your match and hand history</li>
+  <li>Your ELO rating</li>
+  <li>Any association between your Google account and Poker Monkey</li>
+</ul>
+<h2>How to request deletion</h2>
+<p>Send an email to <a href="mailto:brian.danilo@gmail.com">brian.danilo@gmail.com</a> with the subject line <strong>"Data Deletion Request"</strong> and include your in-game username or Google account email. We will process your request within 7 days and confirm by reply.</p>
+</body></html>`));
 
 // ── Web client (SPA) ──────────────────────────────────────────────────────────
 const distDir = path.join(__dirname, '..', 'client', 'dist');
