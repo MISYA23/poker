@@ -3,7 +3,6 @@ import {
   View, Text, Pressable, ScrollView, StyleSheet,
   Image, ActivityIndicator, Platform,
 } from 'react-native';
-import ScaledBg from '../components/ScaledBg';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { GameContext } from '../context/GameContext';
 import { colors } from '../theme';
@@ -131,7 +130,7 @@ export default function LobbyScreen({ navigation }) {
   const [activeTab, setActiveTab] = useState(0);
 
   return (
-    <ScaledBg source={require('../../assets/jungle-menu.png')} tint={0.35}>
+    <View style={s.root}>
         <SafeAreaView style={s.safe}>
 
           {/* Top bar */}
@@ -201,13 +200,12 @@ export default function LobbyScreen({ navigation }) {
 
           </ScrollView>
         </SafeAreaView>
-    </ScaledBg>
+    </View>
   );
 }
 
 const s = StyleSheet.create({
-  bg: { flex: 1 },
-  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)' },
+  root: { flex: 1, backgroundColor: '#0a1628' },
   safe: { flex: 1 },
   topBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 12, paddingBottom: 8 },
   logo: { fontSize: 20, fontWeight: '900', color: colors.goldLight, letterSpacing: 1 },
