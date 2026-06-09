@@ -293,8 +293,9 @@ export default function GameScreen({ navigation }) {
     }
   }, []);
 
-  const [menuOpen,  setMenuOpen]  = useState(false);
-  const [debugUI,   setDebugUI]   = useState(false);
+  const [menuOpen,      setMenuOpen]      = useState(false);
+  const [debugUI,       setDebugUI]       = useState(false);
+  const [leaveWarning,  setLeaveWarning]  = useState(false);
 
   const me       = gameState?.players?.find(p => p.id === myId);
   const opponent = gameState?.players?.find(p => p.id !== myId);
@@ -584,7 +585,10 @@ export default function GameScreen({ navigation }) {
                   <Text style={s.menuItemTxt}>👤 Profile</Text>
                 </Pressable>
                 <Pressable style={s.menuItem}
-                  onPress={() => { setMenuOpen(false); onLeave(); }}>
+                  onPress={() => {
+                    setMenuOpen(false);
+                    if (gameState && me && !matchOver) { setLeaveWarning(true); } else { onLeave(); }
+                  }}>
                   <Text style={s.menuItemTxt}>🚪 Leave Table</Text>
                 </Pressable>
                 <Pressable style={s.menuItem}
@@ -599,6 +603,24 @@ export default function GameScreen({ navigation }) {
             </View>
           </SafeAreaView>
         </Pressable>
+      )}
+
+      {/* Leave table warning — shown when match is in progress */}
+      {leaveWarning && (
+        <View style={s.modalOverlay}>
+          <View style={s.modal}>
+            <Text style={s.modalTitle}>Leave Table?</Text>
+            <Text style={s.modalSub}>Leaving the table will end the match, resulting in a loss. Are you sure?</Text>
+            <View style={s.modalBtns}>
+              <Pressable style={[s.modalBtn, s.modalBtnNo]} onPress={() => setLeaveWarning(false)}>
+                <Text style={s.modalBtnTxt}>Cancel</Text>
+              </Pressable>
+              <Pressable style={[s.modalBtn, s.modalBtnYes]} onPress={() => { setLeaveWarning(false); onLeave(); }}>
+                <Text style={s.modalBtnTxt}>Leave</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
       )}
 
       {/* Match over modal — root-level overlay, not scaled */}
