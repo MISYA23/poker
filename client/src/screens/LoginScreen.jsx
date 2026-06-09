@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useContext } from 'react';
 import {
-  View, Text, TextInput, Pressable, Image,
+  View, Text, TextInput, Pressable,
   ScrollView, StyleSheet, KeyboardAvoidingView, Platform, ActivityIndicator,
 } from 'react-native';
 import ScaledBg from '../components/ScaledBg';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as WebBrowser from 'expo-web-browser';
 import * as AuthSession from 'expo-auth-session';
+import Constants from 'expo-constants';
 import { GameContext } from '../context/GameContext';
 import { colors } from '../theme';
 import { SERVER_URL, VERSION_DISPLAY } from '../config';
@@ -14,7 +15,8 @@ import { getUser, setUser, getOrCreatePlayerId } from '../utils/user';
 
 WebBrowser.maybeCompleteAuthSession();
 
-const GOOGLE_CLIENT_ID = '1056319941649-g1feki5rvo6bm7jltur6eo4oanrn1tvo.apps.googleusercontent.com';
+const GOOGLE_WEB_CLIENT_ID     = '1056319941649-g1feki5rvo6bm7jltur6eo4oanrn1tvo.apps.googleusercontent.com';
+const GOOGLE_ANDROID_CLIENT_ID = '1056319941649-see3orn4pr726lj32s8leecpn98sidpf.apps.googleusercontent.com';
 const GOOGLE_DISCOVERY = {
   authorizationEndpoint: 'https://accounts.google.com/o/oauth2/v2/auth',
   tokenEndpoint: 'https://oauth2.googleapis.com/token',
@@ -26,12 +28,22 @@ export default function LoginScreen() {
   const [name, setName]       = useState('');
   const [googleLoading, setGoogleLoading] = useState(false);
 
+  const isExpoGo = Constants.appOwnership === 'expo';
+
+  // Expo Go on Android generates exp://IP:PORT — Google rejects it.
+  // Use web client + proxy for Expo Go; Android client with reversed-ID scheme for real builds.
+  const clientId = (Platform.OS === 'android' && !isExpoGo)
+    ? GOOGLE_ANDROID_CLIENT_ID
+    : GOOGLE_WEB_CLIENT_ID;
+
   const redirectUri = Platform.OS === 'web'
     ? window.location.origin + '/'
-    : AuthSession.makeRedirectUri({ useProxy: true });
+    : (Platform.OS === 'android' && !isExpoGo)
+      ? AuthSession.makeRedirectUri({ native: 'com.googleusercontent.apps.1056319941649-see3orn4pr726lj32s8leecpn98sidpf:/oauth2redirect/google' })
+      : AuthSession.makeRedirectUri({ useProxy: true });
 
   const [request, response, promptAsync] = AuthSession.useAuthRequest(
-    { clientId: GOOGLE_CLIENT_ID, redirectUri, scopes: ['openid', 'profile', 'email'], responseType: AuthSession.ResponseType.Code, usePKCE: true },
+    { clientId, redirectUri, scopes: ['openid', 'profile', 'email'], responseType: AuthSession.ResponseType.Code, usePKCE: true },
     GOOGLE_DISCOVERY
   );
 
@@ -80,7 +92,7 @@ export default function LoginScreen() {
     fetch(`${SERVER_URL}/auth/google/exchange`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ code, redirectUri, codeVerifier }),
+      body: JSON.stringify({ code, redirectUri: window.location.origin + '/', codeVerifier }),
     })
       .then(r => r.json())
       .then(data => {
@@ -98,7 +110,7 @@ export default function LoginScreen() {
     setGoogleLoading(true);
 
     AuthSession.exchangeCodeAsync(
-      { clientId: GOOGLE_CLIENT_ID, code: response.params.code, redirectUri, extraParams: { code_verifier: request?.codeVerifier } },
+      { clientId, code: response.params.code, redirectUri, extraParams: { code_verifier: request?.codeVerifier } },
       GOOGLE_DISCOVERY
     )
       .then(tokens => finishGoogleLogin(tokens.accessToken))
@@ -160,45 +172,50 @@ export default function LoginScreen() {
     </View>
   );
 
+  const topBar = (
+    <View style={s.topBar}>
+      <Text style={s.topLogo}>♠ Poker Monkey ♣ <Text style={s.topLogoVersion}>{VERSION_DISPLAY}</Text></Text>
+    </View>
+  );
+
+  if (Platform.OS === 'web') {
+    return (
+      <View style={s.webRoot}>
+        <View style={s.webCenter}>
+          <Text style={s.webTitle}>♠ Poker Monkey ♣ <Text style={s.webTitleVersion}>{VERSION_DISPLAY}</Text></Text>
+          {card}
+        </View>
+      </View>
+    );
+  }
+
   return (
     <ScaledBg source={require('../../assets/jungle-menu.png')} tint={0.22} cover>
       <SafeAreaView style={s.safe}>
-        <View style={s.topBar}>
-          <Text style={s.topLogo}>♠ Poker Monkey ♣ <Text style={s.topLogoVersion}>{VERSION_DISPLAY}</Text></Text>
-        </View>
-        {Platform.OS === 'web' ? (
-          <View style={s.webCenter}>{card}</View>
-        ) : (
-          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={s.kav}>
-            <ScrollView contentContainerStyle={s.scroll} keyboardShouldPersistTaps="handled">
-              {card}
-            </ScrollView>
-          </KeyboardAvoidingView>
-        )}
+        {topBar}
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={s.kav}>
+          <ScrollView contentContainerStyle={s.scroll} keyboardShouldPersistTaps="handled">
+            {card}
+          </ScrollView>
+        </KeyboardAvoidingView>
       </SafeAreaView>
     </ScaledBg>
   );
 }
 
 const s = StyleSheet.create({
-  bg: { flex: 1 },
-  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)' },
+  webRoot:   { backgroundColor: '#0a1628', width: '100%', height: '100vh' },
+  webCenter: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24, gap: 24 },
+  webTitle:        { fontSize: 26, fontWeight: '900', color: colors.goldLight, letterSpacing: 1, textAlign: 'center' },
+  webTitleVersion: { fontSize: 14, fontWeight: '900', color: colors.goldLight },
   safe: { flex: 1 },
-  webCenter: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
   kav: { flex: 1 },
   scroll: { flexGrow: 1, alignItems: 'center', justifyContent: 'center', padding: 24, gap: 16 },
-  // Top bar — matches LobbyScreen: logo + version at top-left.
   topBar:          { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 12, paddingBottom: 8 },
   topLogo:         { fontSize: 20, fontWeight: '900', color: colors.goldLight, letterSpacing: 1 },
   topLogoVersion:  { fontSize: 14, fontWeight: '900', color: colors.goldLight },
-  header: { alignItems: 'center', gap: 6 },
-  logo: { fontSize: 28, fontWeight: '900', color: colors.goldLight, letterSpacing: 2 },
-  sub: { fontSize: 12, color: colors.gray, letterSpacing: 1 },
-  logoVersion: { fontSize: 20, fontWeight: '900', color: colors.goldLight },
-  // Login card — semi-opaque dark bg so the form is highly readable while
-  // the surrounding jungle image stays visible around the edges.
   card: {
-    backgroundColor: 'rgba(8,8,10,0.75)',
+    backgroundColor: '#12121e',
     borderWidth: 1.5, borderColor: 'rgba(255,220,160,0.22)',
     borderRadius: 18,
     width: '100%', maxWidth: 400, padding: 22, gap: 16,
