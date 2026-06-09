@@ -119,64 +119,63 @@ export default function LoginScreen() {
     onLogin(trimmed, 'cigar', playerId);
   };
 
+  const card = (
+    <View style={s.card}>
+      <Pressable
+        style={[s.googleBtn, (googleLoading || !request) && s.dim]}
+        onPress={() => {
+          if (Platform.OS === 'web') {
+            if (!request) return;
+            sessionStorage.setItem('pkce_code_verifier', request.codeVerifier || '');
+            window.location.href = request.url;
+          } else {
+            setGoogleLoading(true);
+            promptAsync({ createTask: false }).finally(() => setGoogleLoading(false));
+          }
+        }}
+        disabled={googleLoading || !request}
+      >
+        {googleLoading
+          ? <ActivityIndicator color="#444" size="small" />
+          : <><Text style={s.googleG}>G</Text><Text style={s.googleTxt}>Log in with Google</Text></>
+        }
+      </Pressable>
+      <View style={s.divider}>
+        <View style={s.divLine} /><Text style={s.divTxt}>or</Text><View style={s.divLine} />
+      </View>
+      <Text style={s.sectionLabel}>Play as Guest</Text>
+      <TextInput
+        style={s.input}
+        placeholder="Enter your name"
+        placeholderTextColor={colors.gray}
+        value={name}
+        onChangeText={setName}
+        maxLength={20}
+        returnKeyType="done"
+        onSubmitEditing={handleGuestJoin}
+      />
+      <Pressable style={[s.joinBtn, !name.trim() && s.dim]} onPress={handleGuestJoin} disabled={!name.trim()}>
+        <Text style={s.joinTxt}>Play as Guest</Text>
+      </Pressable>
+    </View>
+  );
+
   return (
     <ScaledBg source={require('../../assets/jungle-menu.png')} tint={0.22} cover>
-        <SafeAreaView style={s.safe}>
-          <View style={s.topBar}>
-            <Text style={s.topLogo}>♠ Poker Monkey ♣ <Text style={s.topLogoVersion}>{VERSION_DISPLAY}</Text></Text>
-          </View>
+      <SafeAreaView style={s.safe}>
+        <View style={s.topBar}>
+          <Text style={s.topLogo}>♠ Poker Monkey ♣ <Text style={s.topLogoVersion}>{VERSION_DISPLAY}</Text></Text>
+        </View>
+        {Platform.OS === 'web' ? (
+          <View style={s.webCenter}>{card}</View>
+        ) : (
           <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={s.kav}>
             <ScrollView contentContainerStyle={s.scroll} keyboardShouldPersistTaps="handled">
-
-              <View style={s.card}>
-                {/* Google */}
-                <Pressable
-                  style={[s.googleBtn, (googleLoading || !request) && s.dim]}
-                  onPress={() => {
-                    if (Platform.OS === 'web') {
-                      if (!request) return;
-                      sessionStorage.setItem('pkce_code_verifier', request.codeVerifier || '');
-                      window.location.href = request.url;
-                    } else {
-                      setGoogleLoading(true);
-                      promptAsync({ createTask: false }).finally(() => setGoogleLoading(false));
-                    }
-                  }}
-                  disabled={googleLoading || !request}
-                >
-                  {googleLoading
-                    ? <ActivityIndicator color="#444" size="small" />
-                    : <><Text style={s.googleG}>G</Text><Text style={s.googleTxt}>Log in with Google</Text></>
-                  }
-                </Pressable>
-
-                {/* Divider */}
-                <View style={s.divider}>
-                  <View style={s.divLine} /><Text style={s.divTxt}>or</Text><View style={s.divLine} />
-                </View>
-
-                {/* Guest */}
-                <Text style={s.sectionLabel}>Play as Guest</Text>
-
-                <TextInput
-                  style={s.input}
-                  placeholder="Enter your name"
-                  placeholderTextColor={colors.gray}
-                  value={name}
-                  onChangeText={setName}
-                  maxLength={20}
-                  returnKeyType="done"
-                  onSubmitEditing={handleGuestJoin}
-                />
-
-                <Pressable style={[s.joinBtn, !name.trim() && s.dim]} onPress={handleGuestJoin} disabled={!name.trim()}>
-                  <Text style={s.joinTxt}>Play as Guest</Text>
-                </Pressable>
-              </View>
-
+              {card}
             </ScrollView>
           </KeyboardAvoidingView>
-        </SafeAreaView>
+        )}
+      </SafeAreaView>
     </ScaledBg>
   );
 }
@@ -185,6 +184,7 @@ const s = StyleSheet.create({
   bg: { flex: 1 },
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)' },
   safe: { flex: 1 },
+  webCenter: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
   kav: { flex: 1 },
   scroll: { flexGrow: 1, alignItems: 'center', justifyContent: 'center', padding: 24, gap: 16 },
   // Top bar — matches LobbyScreen: logo + version at top-left.
