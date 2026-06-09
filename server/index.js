@@ -930,6 +930,29 @@ app.post('/auth/google', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// Facebook auth — upsert into players with is_guest=false
+app.post('/auth/facebook', async (req, res) => {
+  try {
+    const { token } = req.body;
+    const r = await fetch(`https://graph.facebook.com/me?fields=id,name,email&access_token=${token}`);
+    const profile = await r.json();
+    if (profile.error) return res.status(401).json({ error: profile.error.message });
+
+    const playerId = `fb_${profile.id}`;
+    const name     = (profile.name || '').trim().slice(0, 20);
+
+    const { rows } = await db.query(
+      `INSERT INTO players (id, display_name, avatar_id, is_guest)
+       VALUES ($1, $2, 'cigar', false)
+       ON CONFLICT (id) DO UPDATE SET
+         display_name=$2, last_seen_at=NOW(), is_guest=false
+       RETURNING avatar_id`,
+      [playerId, name]
+    );
+    res.json({ playerId, name, email: profile.email || null, avatarId: rows[0].avatar_id });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 function doReset() {
   for (const m of matches.values()) {
     clearTimeout(m.autoStartTimer);
@@ -1328,6 +1351,32 @@ app.get('/data-deletion', (_, res) => res.send(`<!DOCTYPE html>
 </ul>
 <h2>How to request deletion</h2>
 <p>Send an email to <a href="mailto:brian.danilo@gmail.com">brian.danilo@gmail.com</a> with the subject line <strong>"Data Deletion Request"</strong> and include your in-game username or Google account email. We will process your request within 7 days and confirm by reply.</p>
+</body></html>`));
+
+app.get('/terms', (_, res) => res.send(`<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Terms of Service — Poker Monkey</title>
+<style>body{font-family:sans-serif;max-width:680px;margin:40px auto;padding:0 20px;color:#222;line-height:1.6}h1{font-size:1.6rem}h2{font-size:1.1rem;margin-top:2rem}a{color:#0066cc}</style>
+</head><body>
+<h1>Terms of Service</h1>
+<p><strong>Last updated: June 2025</strong></p>
+<p>By accessing or using Poker Monkey ("the App"), you agree to these Terms of Service. If you do not agree, do not use the App.</p>
+<h2>1. Use of the App</h2>
+<p>Poker Monkey is a free-to-play online poker game. You must be at least 13 years old to use the App. No real money is wagered — all chips are virtual and have no monetary value.</p>
+<h2>2. Accounts</h2>
+<p>You are responsible for maintaining the confidentiality of your account. You agree not to share your account, impersonate others, or use the App in any way that violates applicable law.</p>
+<h2>3. Acceptable Use</h2>
+<p>You agree not to cheat, use bots or automated tools, exploit bugs, harass other players, or attempt to disrupt the service. We reserve the right to suspend or terminate accounts that violate these terms.</p>
+<h2>4. Intellectual Property</h2>
+<p>All content in the App — including graphics, code, and game mechanics — is owned by or licensed to Poker Monkey. You may not copy, modify, or distribute any part of the App without written permission.</p>
+<h2>5. Disclaimers</h2>
+<p>The App is provided "as is" without warranties of any kind. We do not guarantee uninterrupted or error-free operation. Your use of the App is at your own risk.</p>
+<h2>6. Limitation of Liability</h2>
+<p>To the fullest extent permitted by law, Poker Monkey shall not be liable for any indirect, incidental, or consequential damages arising from your use of the App.</p>
+<h2>7. Changes to These Terms</h2>
+<p>We may update these Terms at any time. Continued use of the App after changes constitutes acceptance of the revised Terms.</p>
+<h2>8. Contact</h2>
+<p>Questions? Email us at <a href="mailto:brian.danilo@gmail.com">brian.danilo@gmail.com</a>.</p>
 </body></html>`));
 
 // ── Web client (SPA) ──────────────────────────────────────────────────────────

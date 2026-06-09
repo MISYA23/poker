@@ -16,3 +16,5 @@ and log [START] / [DONE] entries for every task. See global CLAUDE.md for protoc
 [02:07 UTC] [DONE] added withNoRequiredFeatures config plugin — changed: client/app.json, client/plugins/withNoRequiredFeatures.js, client/src/config.js
 [03:20 UTC] [DONE] added /admin/players sortable players table — changed: server/index.js, client/src/config.js
 [18:26 UTC] [START] Rename Recent tab → Players tab with online/in-match status dots
+[20:03 UTC] [DONE] v5.99 (b1.46): Facebook login for web — changed: client/web/index.html (new), client/src/screens/LoginScreen.jsx, server/index.js, client/src/config.js
+[20:11 UTC] [DONE] v5.100: add /terms page — changed: server/index.js, client/src/config.js
