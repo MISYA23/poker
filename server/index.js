@@ -1179,11 +1179,16 @@ const ADMIN_SHELL = (title, bodyHtml, scriptHtml = '') => `<!DOCTYPE html>
     document.getElementById('pw').addEventListener('keydown', e => { if (e.key === 'Enter') login(); });
     function login() {
       if (document.getElementById('pw').value === PASSWORD) {
-        document.getElementById('auth').style.display = 'none';
-        document.getElementById('main').style.display = 'block';
-        onLogin();
+        sessionStorage.setItem('adminAuth', '1');
+        showMain();
       } else { document.getElementById('err').style.display = 'block'; }
     }
+    function showMain() {
+      document.getElementById('auth').style.display = 'none';
+      document.getElementById('main').style.display = 'block';
+      onLogin();
+    }
+    if (sessionStorage.getItem('adminAuth') === '1') showMain();
     ${scriptHtml}
   </script>
 </body>
