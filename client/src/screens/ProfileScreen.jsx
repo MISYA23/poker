@@ -8,10 +8,11 @@ import { colors } from '../theme';
 import { SERVER_URL } from '../config';
 import { getUser, setUser } from '../utils/user';
 
-const AVATARS = [
-  { id: 'cigar', source: require('../../assets/cigar.png') },
-  { id: 'queen', source: require('../../assets/queen.png') },
-];
+// Static image map — Metro requires these to be known at build time
+const AVATAR_IMAGES = {
+  cigar: require('../../assets/cigar.png'),
+  queen: require('../../assets/queen.png'),
+};
 
 export default function ProfileScreen({ navigation }) {
   const { playerInfo, myElo, onUpdateProfile, deckStyle, setDeckStyle } = useContext(GameContext);
@@ -23,13 +24,22 @@ export default function ProfileScreen({ navigation }) {
   }, []);
 
   const [name, setName]         = useState(playerInfo?.name || '');
-  const AVATAR_IDS = AVATARS.map(a => a.id);
+  const [avatars, setAvatars]   = useState(
+    Object.keys(AVATAR_IMAGES).map(id => ({ avatar_id: id, image_key: id }))
+  );
   const [avatarId, setAvatarId] = useState(
-    AVATAR_IDS.includes(playerInfo?.avatarId) ? playerInfo.avatarId : 'cigar'
+    AVATAR_IMAGES[playerInfo?.avatarId] ? playerInfo.avatarId : 'cigar'
   );
   const [saving, setSaving]     = useState(false);
   const [history, setHistory]   = useState(null);
   const [loadingHistory, setLoadingHistory] = useState(true);
+
+  useEffect(() => {
+    fetch(`${SERVER_URL}/api/avatars`)
+      .then(r => r.json())
+      .then(rows => setAvatars(rows.filter(a => AVATAR_IMAGES[a.image_key])))
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (!playerInfo?.playerId) return;
@@ -90,10 +100,10 @@ export default function ProfileScreen({ navigation }) {
         <View style={s.section}>
           <Text style={s.sectionLbl}>Avatar</Text>
           <View style={s.avatarRow}>
-            {AVATARS.map(av => (
-              <Pressable key={av.id} style={[s.avatarOpt, avatarId === av.id && s.avatarSel]}
-                onPress={() => setAvatarId(av.id)}>
-                <Image source={av.source} style={s.avatarImg} resizeMode="cover" />
+            {avatars.map(av => (
+              <Pressable key={av.avatar_id} style={[s.avatarOpt, avatarId === av.avatar_id && s.avatarSel]}
+                onPress={() => setAvatarId(av.avatar_id)}>
+                <Image source={AVATAR_IMAGES[av.image_key]} style={s.avatarImg} resizeMode="cover" />
               </Pressable>
             ))}
           </View>

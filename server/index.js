@@ -20,7 +20,8 @@ const io = new Server(server, { cors: { origin: '*', methods: ['GET', 'POST'] } 
 
 const db = new Pool({ connectionString: process.env.DATABASE_URL });
 
-const VALID_AVATARS = ['cigar', 'alfie', 'jazz', 'dk', 'diddy'];
+// Populated from avatars table on startup
+let validAvatars = ['cigar', 'queen'];
 
 // Populated from game_config table on startup — never mutate directly
 let cfg = {};
@@ -590,7 +591,7 @@ app.put('/api/player/:playerId/profile', async (req, res) => {
     const { displayName, avatarId } = req.body;
     if (!displayName || typeof displayName !== 'string') return res.status(400).json({ error: 'displayName required' });
     const safeName   = displayName.trim().slice(0, 20);
-    const safeAvatar = VALID_AVATARS.includes(avatarId) ? avatarId : null;
+    const safeAvatar = validAvatars.includes(avatarId) ? avatarId : null;
     if (!safeName) return res.status(400).json({ error: 'displayName cannot be empty' });
     const sets  = ['display_name=$2'];
     const vals  = [playerId, safeName];
@@ -1390,6 +1391,11 @@ app.get('*', (req, res) => {
   res.sendFile(path.join(distDir, 'index.html'));
 });
 
+app.get('/api/avatars', async (_, res) => {
+  const { rows } = await db.query('SELECT avatar_id, display_name, image_key FROM avatars ORDER BY avatar_id');
+  res.json(rows);
+});
+
 // ── Game config ───────────────────────────────────────────────────────────────
 
 async function loadGameConfig() {
@@ -1473,6 +1479,44 @@ async function loadUiConfig() {
   return loaded;
 }
 
+async function initAvatars() {
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS avatars (
+      avatar_id    TEXT PRIMARY KEY,
+      display_name TEXT NOT NULL,
+      image_key    TEXT NOT NULL
+    )
+  `);
+  const seeds = [
+    ['cigar', 'Cigar Monkey', 'cigar'],
+    ['queen', 'Queen',        'queen'],
+  ];
+  for (const [id, name, key] of seeds) {
+    await db.query(
+      `INSERT INTO avatars (avatar_id, display_name, image_key) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING`,
+      [id, name, key]
+    );
+  }
+  // Migrate any players with stale avatar_ids to 'cigar'
+  await db.query(`UPDATE players SET avatar_id = 'cigar' WHERE avatar_id NOT IN (SELECT avatar_id FROM avatars)`);
+  // Add FK constraint if not already present
+  await db.query(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM information_schema.table_constraints
+        WHERE constraint_name = 'fk_players_avatar' AND table_name = 'players'
+      ) THEN
+        ALTER TABLE players ADD CONSTRAINT fk_players_avatar FOREIGN KEY (avatar_id) REFERENCES avatars(avatar_id);
+      END IF;
+    END $$
+  `);
+  const { rows } = await db.query('SELECT avatar_id FROM avatars ORDER BY avatar_id');
+  const ids = rows.map(r => r.avatar_id);
+  console.log('[avatars] loaded:', ids);
+  return ids;
+}
+
 // ── Start ─────────────────────────────────────────────────────────────────────
 
 const PORT = process.env.PORT || 3843;
@@ -1481,6 +1525,7 @@ async function start() {
   await redis.connect().catch(e => console.error('[redis] connect failed:', e.message));
   cfg = await loadGameConfig();
   uiCfg = await loadUiConfig();
+  validAvatars = await initAvatars();
   server.listen(PORT, () => console.log(`Poker server on port ${PORT}`));
 }
 
