@@ -1,7 +1,7 @@
 import { Platform } from 'react-native';
 
 const envUrl = process.env.EXPO_PUBLIC_SERVER_URL;
-const prodUrl = 'https://poker-production-d726.up.railway.app';
+const prodUrl = 'https://pokermonkey.app';
 
 // Android emulator can't reach host machine via 'localhost' — must use 10.0.2.2
 function resolveUrl(url) {
@@ -14,5 +14,5 @@ function resolveUrl(url) {
 
 export const SERVER_URL = resolveUrl(envUrl);
 export const VERSION = 'v5.98';
-export const BRANCH_VERSION = 'b1.28';
+export const BRANCH_VERSION = 'b1.29';
 export const VERSION_DISPLAY = `${VERSION} (${BRANCH_VERSION})`;
