@@ -1219,6 +1219,48 @@ app.get('/admin', (_, res) => {
 </html>`);
 });
 
+// ── Game / UI config routes (must be before catch-all) ───────────────────────
+
+app.get('/admin/config', async (_, res) => {
+  try {
+    const { rows } = await db.query('SELECT key, value, description FROM game_config ORDER BY key');
+    res.json(rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.put('/admin/config/:key', async (req, res) => {
+  try {
+    const { key } = req.params;
+    const { value } = req.body;
+    if (value === undefined || isNaN(Number(value))) return res.status(400).json({ error: 'numeric value required' });
+    const { rowCount } = await db.query('UPDATE game_config SET value=$1 WHERE key=$2', [Number(value), key]);
+    if (!rowCount) return res.status(404).json({ error: 'unknown config key' });
+    cfg[key] = Number(value);
+    res.json({ ok: true, key, value: cfg[key] });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.get('/api/config/ui', (_, res) => res.json(uiCfg));
+
+app.get('/admin/ui-config', async (_, res) => {
+  try {
+    const { rows } = await db.query('SELECT key, value, description FROM ui_config ORDER BY key');
+    res.json(rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.put('/admin/ui-config/:key', async (req, res) => {
+  try {
+    const { key } = req.params;
+    const { value } = req.body;
+    if (value === undefined || isNaN(Number(value))) return res.status(400).json({ error: 'numeric value required' });
+    const { rowCount } = await db.query('UPDATE ui_config SET value=$1 WHERE key=$2', [Number(value), key]);
+    if (!rowCount) return res.status(404).json({ error: 'unknown ui_config key' });
+    uiCfg[key] = Number(value);
+    res.json({ ok: true, key, value: uiCfg[key] });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 // ── Web client (SPA) ──────────────────────────────────────────────────────────
 const distDir = path.join(__dirname, '..', 'client', 'dist');
 app.use(express.static(distDir));
@@ -1273,25 +1315,6 @@ async function loadGameConfig() {
   }
 }
 
-app.get('/admin/config', async (_, res) => {
-  try {
-    const { rows } = await db.query('SELECT key, value, description FROM game_config ORDER BY key');
-    res.json(rows);
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-app.put('/admin/config/:key', async (req, res) => {
-  try {
-    const { key } = req.params;
-    const { value } = req.body;
-    if (value === undefined || isNaN(Number(value))) return res.status(400).json({ error: 'numeric value required' });
-    const { rowCount } = await db.query('UPDATE game_config SET value=$1 WHERE key=$2', [Number(value), key]);
-    if (!rowCount) return res.status(404).json({ error: 'unknown config key' });
-    cfg[key] = Number(value);
-    res.json({ ok: true, key, value: cfg[key] });
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
 async function loadUiConfig() {
   await db.query(`
     CREATE TABLE IF NOT EXISTS ui_config (
@@ -1331,27 +1354,6 @@ async function loadUiConfig() {
   console.log('[ui-config] loaded:', loaded);
   return loaded;
 }
-
-app.get('/api/config/ui', (_, res) => res.json(uiCfg));
-
-app.get('/admin/ui-config', async (_, res) => {
-  try {
-    const { rows } = await db.query('SELECT key, value, description FROM ui_config ORDER BY key');
-    res.json(rows);
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-app.put('/admin/ui-config/:key', async (req, res) => {
-  try {
-    const { key } = req.params;
-    const { value } = req.body;
-    if (value === undefined || isNaN(Number(value))) return res.status(400).json({ error: 'numeric value required' });
-    const { rowCount } = await db.query('UPDATE ui_config SET value=$1 WHERE key=$2', [Number(value), key]);
-    if (!rowCount) return res.status(404).json({ error: 'unknown ui_config key' });
-    uiCfg[key] = Number(value);
-    res.json({ ok: true, key, value: uiCfg[key] });
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
 
 // ── Start ─────────────────────────────────────────────────────────────────────
 
