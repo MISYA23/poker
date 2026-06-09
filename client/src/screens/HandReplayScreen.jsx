@@ -2,10 +2,7 @@ import React, { useState, useEffect, useMemo, useContext } from 'react';
 import {
   View, Text, Pressable, ScrollView, StyleSheet, ActivityIndicator, Platform,
 } from 'react-native';
-import ScaledBg from '../components/ScaledBg';
 import { GameContext } from '../context/GameContext';
-
-const MENU_BG = require('../../assets/jungle-ingame.png');
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Card from '../components/Card';
 import { colors } from '../theme';
@@ -117,17 +114,17 @@ export default function HandReplayScreen({ navigation, route }) {
 
   if (loading) {
     return (
-      <ScaledBg source={MENU_BG} tint={0.45}>
+      <View style={s.root}>
         <SafeAreaView style={s.safe}>
           <View style={s.center}><ActivityIndicator color={colors.gold} size="large" /></View>
         </SafeAreaView>
-      </ScaledBg>
+      </View>
     );
   }
 
   if (!hands?.length) {
     return (
-      <ScaledBg source={MENU_BG} tint={0.45}>
+      <View style={s.root}>
         <SafeAreaView style={s.safe}>
           <View style={s.header}>
             <Pressable onPress={() => navigation.goBack()}><Text style={s.back}>← Back</Text></Pressable>
@@ -136,12 +133,12 @@ export default function HandReplayScreen({ navigation, route }) {
           </View>
           <View style={s.center}><Text style={s.empty}>No hand history found for this match.</Text></View>
         </SafeAreaView>
-      </ScaledBg>
+      </View>
     );
   }
 
   return (
-   <ScaledBg source={MENU_BG} tint={0.45}>
+   <View style={s.root}>
     <SafeAreaView style={s.safe}>
       {/* Header */}
       <View style={s.header}>
@@ -233,12 +230,13 @@ export default function HandReplayScreen({ navigation, route }) {
         </Pressable>
       </View>
     </SafeAreaView>
-   </ScaledBg>
+   </View>
   );
 }
 
 const s = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: 'transparent' },
+  root: { flex: 1, backgroundColor: '#0a1628' },
+  safe: { flex: 1 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   empty: { color: colors.gray, fontSize: 14, fontStyle: 'italic' },
 

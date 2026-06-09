@@ -2,7 +2,6 @@ import React, { useContext, useState, useEffect } from 'react';
 import {
   View, Text, TextInput, Pressable, Image, ScrollView, StyleSheet, ActivityIndicator, Platform,
 } from 'react-native';
-import ScaledBg from '../components/ScaledBg';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { GameContext } from '../context/GameContext';
 import { colors } from '../theme';
@@ -59,7 +58,7 @@ export default function ProfileScreen({ navigation }) {
   };
 
   return (
-   <ScaledBg source={require('../../assets/jungle-ingame.png')} tint={0.45}>
+   <View style={s.root}>
     <SafeAreaView style={s.safe}>
       <View style={s.header}>
         <Pressable style={s.backBtn} onPress={() => navigation.goBack()}>
@@ -147,12 +146,13 @@ export default function ProfileScreen({ navigation }) {
 
       </ScrollView>
     </SafeAreaView>
-   </ScaledBg>
+   </View>
   );
 }
 
 const s = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: 'transparent' },
+  root: { flex: 1, backgroundColor: '#0a1628' },
+  safe: { flex: 1 },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.08)' },
   backBtn: { paddingVertical: 4, paddingHorizontal: 4 },
   backTxt: { color: colors.goldLight, fontSize: 15 },
