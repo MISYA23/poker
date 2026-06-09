@@ -947,42 +947,65 @@ app.post('/admin/reset', (_, res) => { doReset(); res.json({ ok: true }); });
 
 // ── Admin UI ──────────────────────────────────────────────────────────────────
 
-app.get('/admin', (_, res) => {
+app.get('/api/admin/players', async (_, res) => {
+  try {
+    const { rows } = await db.query(`
+      SELECT p.id, p.display_name, p.avatar_id, p.is_guest,
+             p.created_at, p.last_seen_at,
+             ps.elo, ps.matches_played, ps.matches_won
+      FROM players p
+      LEFT JOIN player_stats ps ON ps.player_id = p.id
+      ORDER BY p.created_at DESC
+    `);
+    res.json(rows);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get('/admin/players', (_, res) => {
   res.send(`<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Poker Monkey — Admin</title>
+  <title>Poker Monkey — Players</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { background: #0d1117; color: #e6edf3; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', monospace; min-height: 100vh; display: flex; flex-direction: column; align-items: center; padding: 40px 16px; }
-    h1 { font-size: 1.4rem; color: #f0c040; margin-bottom: 32px; letter-spacing: 1px; }
+    body { background: #0d1117; color: #e6edf3; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', monospace; min-height: 100vh; padding: 40px 16px; }
+    h1 { font-size: 1.4rem; color: #f0c040; margin-bottom: 8px; letter-spacing: 1px; }
+    .sub { color: #8b949e; font-size: 0.85rem; margin-bottom: 24px; }
     #auth { background: #161b22; border: 1px solid #30363d; border-radius: 10px; padding: 32px; width: 100%; max-width: 340px; display: flex; flex-direction: column; gap: 16px; }
     #auth label { font-size: 0.85rem; color: #8b949e; }
     #auth input { background: #0d1117; border: 1px solid #30363d; border-radius: 6px; color: #e6edf3; font-size: 1rem; padding: 10px 14px; width: 100%; outline: none; }
     #auth input:focus { border-color: #f0c040; }
     #auth button { background: #f0c040; color: #0d1117; border: none; border-radius: 6px; font-weight: 700; font-size: 1rem; padding: 10px; cursor: pointer; }
-    #auth button:hover { background: #e0b030; }
     #auth .err { color: #f85149; font-size: 0.85rem; display: none; }
-    #main { display: none; width: 100%; max-width: 680px; }
-    table { width: 100%; border-collapse: collapse; background: #161b22; border: 1px solid #30363d; border-radius: 10px; overflow: hidden; }
-    th { background: #1c2128; color: #8b949e; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; padding: 12px 16px; text-align: left; }
-    td { padding: 12px 16px; border-top: 1px solid #21262d; font-size: 0.9rem; vertical-align: middle; }
-    td.key { font-family: monospace; color: #79c0ff; }
-    td.desc { color: #8b949e; font-size: 0.8rem; }
-    td.val input { background: #0d1117; border: 1px solid #30363d; border-radius: 5px; color: #e6edf3; font-size: 0.9rem; padding: 6px 10px; width: 90px; text-align: right; outline: none; }
-    td.val input:focus { border-color: #f0c040; }
-    td.action button { background: #238636; color: #fff; border: none; border-radius: 5px; padding: 6px 14px; font-size: 0.8rem; cursor: pointer; font-weight: 600; }
-    td.action button:hover { background: #2ea043; }
-    td.action button.saved { background: #1f6feb; }
-    .reload { margin-top: 20px; text-align: right; }
-    .reload button { background: none; border: 1px solid #30363d; color: #8b949e; border-radius: 6px; padding: 6px 14px; font-size: 0.8rem; cursor: pointer; }
-    .reload button:hover { color: #e6edf3; border-color: #8b949e; }
+    #main { display: none; }
+    .nav { margin-bottom: 16px; }
+    .nav a { color: #8b949e; font-size: 0.85rem; text-decoration: none; }
+    .nav a:hover { color: #e6edf3; }
+    .toolbar { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+    .toolbar input { background: #161b22; border: 1px solid #30363d; border-radius: 6px; color: #e6edf3; font-size: 0.9rem; padding: 7px 12px; width: 260px; outline: none; }
+    .toolbar input:focus { border-color: #f0c040; }
+    .count { color: #8b949e; font-size: 0.85rem; }
+    .wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; background: #161b22; border: 1px solid #30363d; border-radius: 10px; overflow: hidden; font-size: 0.85rem; }
+    th { background: #1c2128; color: #8b949e; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; padding: 10px 14px; text-align: left; white-space: nowrap; cursor: pointer; user-select: none; }
+    th:hover { color: #e6edf3; }
+    th.asc::after  { content: ' ↑'; color: #f0c040; }
+    th.desc::after { content: ' ↓'; color: #f0c040; }
+    td { padding: 9px 14px; border-top: 1px solid #21262d; white-space: nowrap; vertical-align: middle; }
+    td.id { font-family: monospace; color: #79c0ff; font-size: 0.78rem; max-width: 160px; overflow: hidden; text-overflow: ellipsis; }
+    td.guest { color: #8b949e; font-size: 0.8rem; }
+    td.elo { font-weight: 700; color: #f0c040; }
+    td.name { color: #e6edf3; }
+    td.date { color: #8b949e; font-size: 0.8rem; }
+    tr:hover td { background: #1c2128; }
   </style>
 </head>
 <body>
-  <h1>♠ Poker Monkey Admin</h1>
+  <h1>♠ Players</h1>
 
   <div id="auth">
     <label>Password</label>
@@ -992,15 +1015,33 @@ app.get('/admin', (_, res) => {
   </div>
 
   <div id="main">
-    <table id="cfg-table">
-      <thead><tr><th>Key</th><th>Value</th><th>Description</th><th></th></tr></thead>
-      <tbody id="cfg-body"></tbody>
-    </table>
-    <div class="reload"><button onclick="loadConfig()">↺ Reload</button></div>
+    <div class="nav"><a href="/admin">← Admin home</a></div>
+    <div class="toolbar">
+      <input type="text" id="search" placeholder="Search name or ID…" oninput="render()" />
+      <span class="count" id="count"></span>
+    </div>
+    <div class="wrap"><table>
+      <thead>
+        <tr id="thead"></tr>
+      </thead>
+      <tbody id="tbody"></tbody>
+    </table></div>
   </div>
 
   <script>
     const PASSWORD = '1111';
+    const COLS = [
+      { key: 'display_name', label: 'Name',     fmt: v => v ?? '—' },
+      { key: 'id',           label: 'ID',        fmt: v => v,         cls: 'id' },
+      { key: 'is_guest',     label: 'Type',      fmt: v => v ? 'guest' : 'registered', cls: 'guest' },
+      { key: 'elo',          label: 'ELO',       fmt: v => v ?? '—',  cls: 'elo' },
+      { key: 'matches_played', label: 'Played',  fmt: v => v ?? 0 },
+      { key: 'matches_won',  label: 'Won',       fmt: v => v ?? 0 },
+      { key: 'created_at',   label: 'Joined',    fmt: v => v ? new Date(v).toLocaleString() : '—', cls: 'date' },
+      { key: 'last_seen_at', label: 'Last seen', fmt: v => v ? new Date(v).toLocaleString() : '—', cls: 'date' },
+    ];
+
+    let allRows = [], sortCol = 'created_at', sortDir = 'desc';
 
     document.getElementById('pw').addEventListener('keydown', e => { if (e.key === 'Enter') login(); });
 
@@ -1008,47 +1049,244 @@ app.get('/admin', (_, res) => {
       if (document.getElementById('pw').value === PASSWORD) {
         document.getElementById('auth').style.display = 'none';
         document.getElementById('main').style.display = 'block';
-        loadConfig();
+        load();
       } else {
         document.getElementById('err').style.display = 'block';
       }
     }
 
-    async function loadConfig() {
-      const rows = await fetch('/admin/config').then(r => r.json());
-      const tbody = document.getElementById('cfg-body');
-      tbody.innerHTML = '';
-      for (const row of rows) {
-        const tr = document.createElement('tr');
-        tr.innerHTML = \`
-          <td class="key">\${row.key}</td>
-          <td class="val"><input type="number" id="val-\${row.key}" value="\${row.value}" /></td>
-          <td class="desc">\${row.description || ''}</td>
-          <td class="action"><button id="btn-\${row.key}" onclick="save('\${row.key}')">Save</button></td>
-        \`;
-        tbody.appendChild(tr);
-      }
+    function buildHeader() {
+      const tr = document.getElementById('thead');
+      tr.innerHTML = '';
+      COLS.forEach(col => {
+        const th = document.createElement('th');
+        th.textContent = col.label;
+        if (col.key === sortCol) th.className = sortDir;
+        th.onclick = () => {
+          if (sortCol === col.key) sortDir = sortDir === 'asc' ? 'desc' : 'asc';
+          else { sortCol = col.key; sortDir = 'asc'; }
+          buildHeader();
+          render();
+        };
+        tr.appendChild(th);
+      });
     }
 
-    async function save(key) {
-      const input = document.getElementById('val-' + key);
-      const btn   = document.getElementById('btn-' + key);
-      const res   = await fetch('/admin/config/' + key, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ value: Number(input.value) }),
+    function sortVal(row, key) {
+      const v = row[key];
+      if (v === null || v === undefined) return '';
+      if (key === 'created_at' || key === 'last_seen_at') return new Date(v).getTime();
+      if (typeof v === 'boolean') return v ? 1 : 0;
+      return v;
+    }
+
+    function render() {
+      const q = document.getElementById('search').value.toLowerCase();
+      let rows = allRows.filter(r =>
+        !q || (r.display_name ?? '').toLowerCase().includes(q) || r.id.toLowerCase().includes(q)
+      );
+      rows.sort((a, b) => {
+        const av = sortVal(a, sortCol), bv = sortVal(b, sortCol);
+        const cmp = av < bv ? -1 : av > bv ? 1 : 0;
+        return sortDir === 'asc' ? cmp : -cmp;
       });
-      if (res.ok) {
-        btn.textContent = '✓ Saved';
-        btn.classList.add('saved');
-        setTimeout(() => { btn.textContent = 'Save'; btn.classList.remove('saved'); }, 2000);
-      } else {
-        btn.textContent = 'Error';
-      }
+      document.getElementById('count').textContent = rows.length + ' players';
+      const tbody = document.getElementById('tbody');
+      tbody.innerHTML = '';
+      rows.forEach(row => {
+        const tr = document.createElement('tr');
+        COLS.forEach(col => {
+          const td = document.createElement('td');
+          if (col.cls) td.className = col.cls;
+          td.textContent = col.fmt(row[col.key]);
+          tr.appendChild(td);
+        });
+        tbody.appendChild(tr);
+      });
+    }
+
+    async function load() {
+      allRows = await fetch('/api/admin/players').then(r => r.json());
+      buildHeader();
+      render();
     }
   </script>
 </body>
 </html>`);
+});
+
+const ADMIN_SHELL = (title, bodyHtml, scriptHtml = '') => `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Poker Monkey — ${title}</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #0d1117; color: #e6edf3; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', monospace; min-height: 100vh; padding: 40px 16px; }
+    h1 { font-size: 1.4rem; color: #f0c040; margin-bottom: 8px; letter-spacing: 1px; }
+    .nav { margin-bottom: 24px; } .nav a { color: #8b949e; font-size: 0.85rem; text-decoration: none; } .nav a:hover { color: #e6edf3; }
+    #auth { background: #161b22; border: 1px solid #30363d; border-radius: 10px; padding: 32px; width: 100%; max-width: 340px; display: flex; flex-direction: column; gap: 16px; }
+    #auth label { font-size: 0.85rem; color: #8b949e; }
+    #auth input { background: #0d1117; border: 1px solid #30363d; border-radius: 6px; color: #e6edf3; font-size: 1rem; padding: 10px 14px; width: 100%; outline: none; }
+    #auth input:focus { border-color: #f0c040; }
+    #auth button { background: #f0c040; color: #0d1117; border: none; border-radius: 6px; font-weight: 700; font-size: 1rem; padding: 10px; cursor: pointer; }
+    #auth .err { color: #f85149; font-size: 0.85rem; display: none; }
+    #main { display: none; }
+    table { width: 100%; border-collapse: collapse; background: #161b22; border: 1px solid #30363d; border-radius: 10px; overflow: hidden; }
+    th { background: #1c2128; color: #8b949e; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; padding: 12px 16px; text-align: left; }
+    td { padding: 12px 16px; border-top: 1px solid #21262d; font-size: 0.9rem; vertical-align: middle; }
+    td.key { font-family: monospace; color: #79c0ff; }
+    td.desc { color: #8b949e; font-size: 0.8rem; }
+    td.val input { background: #0d1117; border: 1px solid #30363d; border-radius: 5px; color: #e6edf3; font-size: 0.9rem; padding: 6px 10px; width: 110px; text-align: right; outline: none; }
+    td.val input:focus { border-color: #f0c040; }
+    td.action button { background: #238636; color: #fff; border: none; border-radius: 5px; padding: 6px 14px; font-size: 0.8rem; cursor: pointer; font-weight: 600; }
+    td.action button:hover { background: #2ea043; }
+    td.action button.saved { background: #1f6feb; }
+    .reload { margin-top: 16px; text-align: right; }
+    .reload button { background: none; border: 1px solid #30363d; color: #8b949e; border-radius: 6px; padding: 6px 14px; font-size: 0.8rem; cursor: pointer; }
+    .reload button:hover { color: #e6edf3; border-color: #8b949e; }
+  </style>
+</head>
+<body>
+  ${bodyHtml}
+  <script>
+    const PASSWORD = '1111';
+    document.getElementById('pw').addEventListener('keydown', e => { if (e.key === 'Enter') login(); });
+    function login() {
+      if (document.getElementById('pw').value === PASSWORD) {
+        document.getElementById('auth').style.display = 'none';
+        document.getElementById('main').style.display = 'block';
+        onLogin();
+      } else { document.getElementById('err').style.display = 'block'; }
+    }
+    ${scriptHtml}
+  </script>
+</body>
+</html>`;
+
+const ADMIN_AUTH_BLOCK = `
+  <div id="auth">
+    <label>Password</label>
+    <input type="password" id="pw" placeholder="Enter password" />
+    <div class="err" id="err">Wrong password</div>
+    <button onclick="login()">Enter</button>
+  </div>`;
+
+app.get('/admin', (_, res) => res.send(ADMIN_SHELL('Admin', `
+  <h1>♠ Poker Monkey Admin</h1>
+  ${ADMIN_AUTH_BLOCK}
+  <div id="main">
+    <div style="display:flex;flex-direction:column;gap:12px;max-width:400px;margin-top:8px">
+      <a href="/admin/game-config" style="display:block;background:#161b22;border:1px solid #30363d;border-radius:10px;padding:20px 24px;text-decoration:none;color:#e6edf3">
+        <div style="font-size:1rem;font-weight:700;margin-bottom:4px">⚙️ Game Config</div>
+        <div style="font-size:0.82rem;color:#8b949e">Blinds, starting chips, turn timer</div>
+      </a>
+      <a href="/admin/ui-config" style="display:block;background:#161b22;border:1px solid #30363d;border-radius:10px;padding:20px 24px;text-decoration:none;color:#e6edf3">
+        <div style="font-size:1rem;font-weight:700;margin-bottom:4px">🎨 UI Config</div>
+        <div style="font-size:0.82rem;color:#8b949e">Animation timings, deal speed, reveal delays</div>
+      </a>
+      <a href="/admin/players" style="display:block;background:#161b22;border:1px solid #30363d;border-radius:10px;padding:20px 24px;text-decoration:none;color:#e6edf3">
+        <div style="font-size:1rem;font-weight:700;margin-bottom:4px">👥 Players</div>
+        <div style="font-size:0.82rem;color:#8b949e">All registered and guest players, ELO, match history</div>
+      </a>
+    </div>
+  </div>`, `function onLogin() {}`)));
+
+app.get('/admin/game-config', (_, res) => res.send(ADMIN_SHELL('Game Config', `
+  <h1>♠ Game Config</h1>
+  <div class="nav"><a href="/admin">← Admin</a></div>
+  ${ADMIN_AUTH_BLOCK}
+  <div id="main" style="max-width:680px">
+    <table><thead><tr><th>Key</th><th>Value</th><th>Description</th><th></th></tr></thead>
+    <tbody id="cfg-body"></tbody></table>
+    <div class="reload"><button onclick="load()">↺ Reload</button></div>
+  </div>`, `
+  async function onLogin() { load(); }
+  async function load() {
+    const rows = await fetch('/admin/config').then(r => r.json());
+    const tbody = document.getElementById('cfg-body');
+    tbody.innerHTML = '';
+    for (const row of rows) {
+      const tr = document.createElement('tr');
+      tr.innerHTML = \`<td class="key">\${row.key}</td><td class="val"><input type="number" id="val-\${row.key}" value="\${row.value}" /></td><td class="desc">\${row.description||''}</td><td class="action"><button id="btn-\${row.key}" onclick="save('\${row.key}')">Save</button></td>\`;
+      tbody.appendChild(tr);
+    }
+  }
+  async function save(key) {
+    const btn = document.getElementById('btn-'+key);
+    const res = await fetch('/admin/config/'+key, { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({value:Number(document.getElementById('val-'+key).value)}) });
+    btn.textContent = res.ok ? '✓ Saved' : 'Error';
+    if (res.ok) { btn.classList.add('saved'); setTimeout(()=>{btn.textContent='Save';btn.classList.remove('saved');},2000); }
+  }`)));
+
+app.get('/admin/ui-config', (_, res) => res.send(ADMIN_SHELL('UI Config', `
+  <h1>♠ UI Config</h1>
+  <div class="nav"><a href="/admin">← Admin</a></div>
+  ${ADMIN_AUTH_BLOCK}
+  <div id="main" style="max-width:680px">
+    <table><thead><tr><th>Key</th><th>Value</th><th>Description</th><th></th></tr></thead>
+    <tbody id="cfg-body"></tbody></table>
+    <div class="reload"><button onclick="load()">↺ Reload</button></div>
+  </div>`, `
+  async function onLogin() { load(); }
+  async function load() {
+    const rows = await fetch('/api/admin/ui-config').then(r => r.json());
+    const tbody = document.getElementById('cfg-body');
+    tbody.innerHTML = '';
+    for (const row of rows) {
+      const tr = document.createElement('tr');
+      tr.innerHTML = \`<td class="key">\${row.key}</td><td class="val"><input type="number" id="val-\${row.key}" value="\${row.value}" /></td><td class="desc">\${row.description||''}</td><td class="action"><button id="btn-\${row.key}" onclick="save('\${row.key}')">Save</button></td>\`;
+      tbody.appendChild(tr);
+    }
+  }
+  async function save(key) {
+    const btn = document.getElementById('btn-'+key);
+    const res = await fetch('/admin/ui-config/'+key, { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({value:Number(document.getElementById('val-'+key).value)}) });
+    btn.textContent = res.ok ? '✓ Saved' : 'Error';
+    if (res.ok) { btn.classList.add('saved'); setTimeout(()=>{btn.textContent='Save';btn.classList.remove('saved');},2000); }
+  }`)));
+
+// ── Game / UI config routes (must be before catch-all) ───────────────────────
+
+app.get('/admin/config', async (_, res) => {
+  try {
+    const { rows } = await db.query('SELECT key, value, description FROM game_config ORDER BY key');
+    res.json(rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.put('/admin/config/:key', async (req, res) => {
+  try {
+    const { key } = req.params;
+    const { value } = req.body;
+    if (value === undefined || isNaN(Number(value))) return res.status(400).json({ error: 'numeric value required' });
+    const { rowCount } = await db.query('UPDATE game_config SET value=$1 WHERE key=$2', [Number(value), key]);
+    if (!rowCount) return res.status(404).json({ error: 'unknown config key' });
+    cfg[key] = Number(value);
+    res.json({ ok: true, key, value: cfg[key] });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.get('/api/config/ui', (_, res) => res.json(uiCfg));
+
+app.get('/api/admin/ui-config', async (_, res) => {
+  try {
+    const { rows } = await db.query('SELECT key, value, description FROM ui_config ORDER BY key');
+    res.json(rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.put('/admin/ui-config/:key', async (req, res) => {
+  try {
+    const { key } = req.params;
+    const { value } = req.body;
+    if (value === undefined || isNaN(Number(value))) return res.status(400).json({ error: 'numeric value required' });
+    const { rowCount } = await db.query('UPDATE ui_config SET value=$1 WHERE key=$2', [Number(value), key]);
+    if (!rowCount) return res.status(404).json({ error: 'unknown ui_config key' });
+    uiCfg[key] = Number(value);
+    res.json({ ok: true, key, value: uiCfg[key] });
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 // ── Web client (SPA) ──────────────────────────────────────────────────────────
@@ -1105,25 +1343,6 @@ async function loadGameConfig() {
   }
 }
 
-app.get('/admin/config', async (_, res) => {
-  try {
-    const { rows } = await db.query('SELECT key, value, description FROM game_config ORDER BY key');
-    res.json(rows);
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-app.put('/admin/config/:key', async (req, res) => {
-  try {
-    const { key } = req.params;
-    const { value } = req.body;
-    if (value === undefined || isNaN(Number(value))) return res.status(400).json({ error: 'numeric value required' });
-    const { rowCount } = await db.query('UPDATE game_config SET value=$1 WHERE key=$2', [Number(value), key]);
-    if (!rowCount) return res.status(404).json({ error: 'unknown config key' });
-    cfg[key] = Number(value);
-    res.json({ ok: true, key, value: cfg[key] });
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
 async function loadUiConfig() {
   await db.query(`
     CREATE TABLE IF NOT EXISTS ui_config (
@@ -1163,27 +1382,6 @@ async function loadUiConfig() {
   console.log('[ui-config] loaded:', loaded);
   return loaded;
 }
-
-app.get('/api/config/ui', (_, res) => res.json(uiCfg));
-
-app.get('/admin/ui-config', async (_, res) => {
-  try {
-    const { rows } = await db.query('SELECT key, value, description FROM ui_config ORDER BY key');
-    res.json(rows);
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-app.put('/admin/ui-config/:key', async (req, res) => {
-  try {
-    const { key } = req.params;
-    const { value } = req.body;
-    if (value === undefined || isNaN(Number(value))) return res.status(400).json({ error: 'numeric value required' });
-    const { rowCount } = await db.query('UPDATE ui_config SET value=$1 WHERE key=$2', [Number(value), key]);
-    if (!rowCount) return res.status(404).json({ error: 'unknown ui_config key' });
-    uiCfg[key] = Number(value);
-    res.json({ ok: true, key, value: uiCfg[key] });
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
 
 // ── Start ─────────────────────────────────────────────────────────────────────
 
