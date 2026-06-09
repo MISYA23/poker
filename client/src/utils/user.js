@@ -13,14 +13,27 @@ export async function setUser(fields) {
   catch {}
 }
 
+function browserSlug() {
+  if (typeof navigator === 'undefined') return 'web';
+  const ua = navigator.userAgent;
+  if (ua.includes('Edg/'))     return 'edge';
+  if (ua.includes('Chrome/'))  return 'chrome';
+  if (ua.includes('Firefox/')) return 'firefox';
+  if (ua.includes('Safari/'))  return 'safari';
+  return 'web';
+}
+
 async function generateGuestId() {
+  const rand = Math.random().toString(36).slice(2, 7);
   if (Platform.OS === 'android') {
     try {
       const androidId = await Application.getAndroidIdAsync();
-      if (androidId) return `a_${androidId}`;
+      if (androidId) return `guest_android_${androidId.slice(-6)}`;
     } catch {}
+    return `guest_android_${rand}`;
   }
-  return 'guest_' + Math.random().toString(36).slice(2) + Date.now().toString(36);
+  if (Platform.OS === 'ios') return `guest_ios_${rand}`;
+  return `guest_${browserSlug()}_${rand}`;
 }
 
 export async function getOrCreatePlayerId() {
