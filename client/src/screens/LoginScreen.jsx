@@ -1,9 +1,8 @@
 import React, { useState, useEffect, useContext } from 'react';
 import {
   View, Text, TextInput, Pressable,
-  ScrollView, StyleSheet, KeyboardAvoidingView, Platform, ActivityIndicator,
+  StyleSheet, KeyboardAvoidingView, Platform, ActivityIndicator,
 } from 'react-native';
-import ScaledBg from '../components/ScaledBg';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as WebBrowser from 'expo-web-browser';
 import * as AuthSession from 'expo-auth-session';
@@ -25,7 +24,7 @@ const GOOGLE_DISCOVERY = {
 export default function LoginScreen() {
   const { onLogin } = useContext(GameContext);
 
-  const [name, setName]       = useState('');
+  const [name, setName]               = useState('');
   const [googleLoading, setGoogleLoading] = useState(false);
 
   const isExpoGo = Constants.appOwnership === 'expo';
@@ -131,89 +130,65 @@ export default function LoginScreen() {
     onLogin(trimmed, 'cigar', playerId);
   };
 
-  const card = (
-    <View style={s.card}>
-      <Pressable
-        style={[s.googleBtn, (googleLoading || !request) && s.dim]}
-        onPress={() => {
-          if (Platform.OS === 'web') {
-            if (!request) return;
-            sessionStorage.setItem('pkce_code_verifier', request.codeVerifier || '');
-            window.location.href = request.url;
-          } else {
-            setGoogleLoading(true);
-            promptAsync({ createTask: false }).finally(() => setGoogleLoading(false));
-          }
-        }}
-        disabled={googleLoading || !request}
-      >
-        {googleLoading
-          ? <ActivityIndicator color="#444" size="small" />
-          : <><Text style={s.googleG}>G</Text><Text style={s.googleTxt}>Log in with Google</Text></>
-        }
-      </Pressable>
-      <View style={s.divider}>
-        <View style={s.divLine} /><Text style={s.divTxt}>or</Text><View style={s.divLine} />
-      </View>
-      <Text style={s.sectionLabel}>Play as Guest</Text>
-      <TextInput
-        style={s.input}
-        placeholder="Enter your name"
-        placeholderTextColor={colors.gray}
-        value={name}
-        onChangeText={setName}
-        maxLength={20}
-        returnKeyType="done"
-        onSubmitEditing={handleGuestJoin}
-      />
-      <Pressable style={[s.joinBtn, !name.trim() && s.dim]} onPress={handleGuestJoin} disabled={!name.trim()}>
-        <Text style={s.joinTxt}>Play as Guest</Text>
-      </Pressable>
-    </View>
-  );
-
-  const topBar = (
-    <View style={s.topBar}>
-      <Text style={s.topLogo}>♠ Poker Monkey ♣ <Text style={s.topLogoVersion}>{VERSION_DISPLAY}</Text></Text>
-    </View>
-  );
-
-  if (Platform.OS === 'web') {
-    return (
-      <View style={s.webRoot}>
-        <View style={s.webCenter}>
-          <Text style={s.webTitle}>♠ Poker Monkey ♣ <Text style={s.webTitleVersion}>{VERSION_DISPLAY}</Text></Text>
-          {card}
-        </View>
-      </View>
-    );
-  }
-
   return (
-    <ScaledBg source={require('../../assets/jungle-menu.png')} tint={0.22} cover>
-      <SafeAreaView style={s.safe}>
-        {topBar}
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={s.kav}>
-          <ScrollView contentContainerStyle={s.scroll} keyboardShouldPersistTaps="handled">
-            {card}
-          </ScrollView>
-        </KeyboardAvoidingView>
-      </SafeAreaView>
-    </ScaledBg>
+    <SafeAreaView style={s.root}>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={s.kav}>
+        <View style={s.center}>
+          <View style={s.heading}>
+            <Text style={s.title}>♠ Poker Monkey ♣</Text>
+            <Text style={s.version}>{VERSION_DISPLAY}</Text>
+          </View>
+          <View style={s.card}>
+            <Pressable
+              style={[s.googleBtn, (googleLoading || !request) && s.dim]}
+              onPress={() => {
+                if (Platform.OS === 'web') {
+                  if (!request) return;
+                  sessionStorage.setItem('pkce_code_verifier', request.codeVerifier || '');
+                  window.location.href = request.url;
+                } else {
+                  setGoogleLoading(true);
+                  promptAsync({ createTask: false }).finally(() => setGoogleLoading(false));
+                }
+              }}
+              disabled={googleLoading || !request}
+            >
+              {googleLoading
+                ? <ActivityIndicator color="#444" size="small" />
+                : <><Text style={s.googleG}>G</Text><Text style={s.googleTxt}>Log in with Google</Text></>
+              }
+            </Pressable>
+            <View style={s.divider}>
+              <View style={s.divLine} /><Text style={s.divTxt}>or</Text><View style={s.divLine} />
+            </View>
+            <Text style={s.sectionLabel}>Play as Guest</Text>
+            <TextInput
+              style={s.input}
+              placeholder="Enter your name"
+              placeholderTextColor={colors.gray}
+              value={name}
+              onChangeText={setName}
+              maxLength={20}
+              returnKeyType="done"
+              onSubmitEditing={handleGuestJoin}
+            />
+            <Pressable style={[s.joinBtn, !name.trim() && s.dim]} onPress={handleGuestJoin} disabled={!name.trim()}>
+              <Text style={s.joinTxt}>Play as Guest</Text>
+            </Pressable>
+          </View>
+        </View>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 
 const s = StyleSheet.create({
-  webRoot:   { backgroundColor: '#0a1628', width: '100%', height: '100vh' },
-  webCenter: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24, gap: 24 },
-  webTitle:        { fontSize: 26, fontWeight: '900', color: colors.goldLight, letterSpacing: 1, textAlign: 'center' },
-  webTitleVersion: { fontSize: 14, fontWeight: '900', color: colors.goldLight },
-  safe: { flex: 1 },
-  kav: { flex: 1 },
-  scroll: { flexGrow: 1, alignItems: 'center', justifyContent: 'center', padding: 24, gap: 16 },
-  topBar:          { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 12, paddingBottom: 8 },
-  topLogo:         { fontSize: 20, fontWeight: '900', color: colors.goldLight, letterSpacing: 1 },
-  topLogoVersion:  { fontSize: 14, fontWeight: '900', color: colors.goldLight },
+  root:    { flex: 1, backgroundColor: '#0a1628', ...Platform.select({ web: { height: '100vh', width: '100%' } }) },
+  kav:     { flex: 1 },
+  center:  { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24, gap: 24 },
+  heading: { alignItems: 'center', gap: 4 },
+  title:   { fontSize: 26, fontWeight: '900', color: colors.goldLight, letterSpacing: 1, textAlign: 'center' },
+  version: { fontSize: 13, fontWeight: '700', color: colors.goldLight, textAlign: 'center', opacity: 0.7 },
   card: {
     backgroundColor: '#12121e',
     borderWidth: 1.5, borderColor: 'rgba(255,220,160,0.22)',
@@ -222,15 +197,15 @@ const s = StyleSheet.create({
     shadowColor: '#000', shadowOpacity: 0.6, shadowRadius: 18,
     shadowOffset: { width: 0, height: 8 }, elevation: 10,
   },
-  googleBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#fff', borderRadius: 50, paddingVertical: 13, gap: 10 },
-  dim: { opacity: 0.45 },
-  googleG: { fontSize: 17, fontWeight: '700', color: '#4285F4' },
-  googleTxt: { fontSize: 15, fontWeight: '600', color: '#444' },
-  divider: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  divLine: { flex: 1, height: 1, backgroundColor: 'rgba(255,255,255,0.15)' },
-  divTxt: { color: 'rgba(255,255,255,0.4)', fontSize: 12 },
-  sectionLabel: { color: colors.gray, fontSize: 11, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 1 },
-  input: { backgroundColor: 'rgba(0,0,0,0.4)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)', borderRadius: 8, paddingHorizontal: 14, paddingVertical: 12, color: colors.white, fontSize: 16 },
-  joinBtn: { backgroundColor: colors.gold, borderRadius: 12, paddingVertical: 14, alignItems: 'center' },
-  joinTxt: { color: '#000', fontSize: 16, fontWeight: '800' },
+  googleBtn:   { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#fff', borderRadius: 50, paddingVertical: 13, gap: 10 },
+  dim:         { opacity: 0.45 },
+  googleG:     { fontSize: 17, fontWeight: '700', color: '#4285F4' },
+  googleTxt:   { fontSize: 15, fontWeight: '600', color: '#444' },
+  divider:     { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  divLine:     { flex: 1, height: 1, backgroundColor: 'rgba(255,255,255,0.15)' },
+  divTxt:      { color: 'rgba(255,255,255,0.4)', fontSize: 12 },
+  sectionLabel:{ color: colors.gray, fontSize: 11, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 1 },
+  input:       { backgroundColor: 'rgba(0,0,0,0.4)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)', borderRadius: 8, paddingHorizontal: 14, paddingVertical: 12, color: colors.white, fontSize: 16 },
+  joinBtn:     { backgroundColor: colors.gold, borderRadius: 12, paddingVertical: 14, alignItems: 'center' },
+  joinTxt:     { color: '#000', fontSize: 16, fontWeight: '800' },
 });
