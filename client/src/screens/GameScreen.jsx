@@ -29,10 +29,10 @@ const DESIGN_H = 760;
 
 // ─── Table geometry (spec §16: 1024×1536 asset, aspect 0.667) ────────────────
 const TABLE_ASPECT = 1024 / 1536;
-const TABLE_W  = Math.round(1.27 * DESIGN_W);                    // 491 — rail fills stage width (new image has ~8% dark margin/side)
-const TABLE_H  = Math.round(TABLE_W / TABLE_ASPECT);             // 566
-const TABLE_L  = Math.round((DESIGN_W - TABLE_W) / 2);           // 8
-const TABLE_T  = Math.round(0.48 * DESIGN_H - TABLE_H / 2);      // 29 — raised from 0.46 to keep opp cards clear of top chrome
+const TABLE_W  = Math.round(1.27 * DESIGN_W);
+const TABLE_H  = Math.round(TABLE_W / TABLE_ASPECT);
+const TABLE_L  = Math.round((DESIGN_W - TABLE_W) / 2);
+const TABLE_T  = Math.round(0.5 * DESIGN_H - TABLE_H / 2);
 
 // ─── Pod geometry — static canvas-unit values ─────────────────────────────────
 // Circle diameter drives everything. Nameplate clears the circle with a fixed
