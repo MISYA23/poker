@@ -22,14 +22,15 @@ const TABLE_VARIANT = 'fat';
 const INGAME_TABLE  = TABLE_VARIANTS[TABLE_VARIANT];
 
 const TURN_DURATION_MS = 20000;
-const TOP_BAR_H    = 48;
+const TOP_BAR_H    = 50;
 const ACTION_BAR_H = 125;
 
 // ─── Group A reference canvas ─────────────────────────────────────────────────
 // 393×590 (1:1.5) — matches the content area left between the top bar and the
 // betting controls on most phones, so width binds and the canvas fills the screen.
 const DESIGN_W = 393;
-const DESIGN_H = Math.round(DESIGN_W * 1.5);  // 590
+const DESIGN_H = Math.round(DESIGN_W * 1.6);  // 629 — 1:1.6, matches the table asset
+                                              // and budget-Android (20:9) content areas
 
 // ─── Table geometry (spec §16: 1024×1536 asset, aspect 0.667) ────────────────
 // The asset is natively 1:1.5 like the canvas — it fills it edge to edge,
