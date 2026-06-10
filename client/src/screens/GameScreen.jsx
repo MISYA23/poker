@@ -76,7 +76,10 @@ const FRAME_GAP  = 4;                                                      // px
 // Opponent pod: avatar LEFT edge just inside the left frame; vertical on the A2/B2 (row-2) line
 const ROW2_Y     = TABLE_T + 1 * (TABLE_H / 8);
 const OPP_POD_L  = FRAME_GAP;                                              // avatar left edge ≈ left frame
-const OPP_POD_T  = Math.round(ROW2_Y - AV_TOP - AVATAR_SZ / 2);
+// Push the pod up so the hole cards (ABOVE the nameplate) almost touch the
+// play-area top. Card top = OPP_POD_T + NP_TOP + 10 − 59, so this lands it at the gap.
+const OPP_CARDS_TOP_GAP = 3;
+const OPP_POD_T  = OPP_CARDS_TOP_GAP - (NP_TOP + 10 - 59);
 // Player pod: avatar RIGHT edge just inside the right frame; vertical on the D8/E8 (row-8) line
 const ROW8_Y     = TABLE_T + 7 * (TABLE_H / 8);
 const MY_POD_L   = Math.round(DESIGN_W - FRAME_GAP - POD_W);              // avatar right edge ≈ right frame
@@ -91,29 +94,29 @@ const DEALER_SZ    = Math.round(0.07 * DESIGN_W);
 const DEALER_OPP_L = Math.round(TABLE_L + 3 * (TABLE_W / 4) - DEALER_SZ);
 const DEALER_OPP_T = Math.round(TABLE_T + 2 * (TABLE_H / 8) - DEALER_SZ / 2);
 // Bottom dealer button: just ABOVE the B7 cross (centered on B-col, bottom on row-7 line)
-const DEALER_MY_L  = Math.round(TABLE_L + 1 * (TABLE_W / 4) - DEALER_SZ / 2) + 6;
+const DEALER_MY_L  = Math.round(TABLE_L + 1 * (TABLE_W / 4) - DEALER_SZ / 2) - 12;
 const DEALER_MY_T  = Math.round(TABLE_T + 6 * (TABLE_H / 8) - DEALER_SZ);
-// ── Nameplate horizontal placement (slid toward table center, width unchanged) ──
+// ── Nameplate placement — anchored to each avatar's INNER edge with a fixed
+// overlap, so it works on any table width (extends toward center; width unchanged).
 const NP_WIDTH    = POD_W - 16 - NAMEPLATE_OVERLAP;                       // 179 — nameplate box width
-const NP_STEP     = TABLE_W / 4;                                          // one grid column
 const NP_RADIUS   = 32;                                                   // outer corner radius (avatar-side corners squared)
 const TIMER_OUTER_INSET = 20;                                             // pull the timer's outer end in past the corner so every segment touches the plate
-// Bottom nameplate: LEFT edge touches B8 (= COL_C_X − one column)
-const NP_ME_LEFT  = Math.round((COL_C_X - NP_STEP) - MY_POD_L);
+const NP_AV_OVERLAP   = 16;                                              // how far the plate tucks behind the avatar's inner edge
+const AV_BOTTOM_INNER = MY_POD_L + POD_W - AVATAR_SZ;                     // bottom avatar's left (inner) edge
+const AV_TOP_INNER    = OPP_POD_L + AVATAR_SZ;                            // top avatar's right (inner) edge
+// Bottom nameplate: RIGHT edge tucks behind the avatar; plate runs toward center
+const NP_ME_LEFT  = Math.round((AV_BOTTOM_INNER + NP_AV_OVERLAP - NP_WIDTH) - MY_POD_L);
 const NP_ME_RIGHT = POD_W - NP_ME_LEFT - NP_WIDTH;
-// Top nameplate: RIGHT edge touches D2 (= COL_C_X + one column)
-const NP_OPP_LEFT  = Math.round((COL_C_X + NP_STEP - NP_WIDTH) - OPP_POD_L);
+// Top nameplate: LEFT edge tucks behind the avatar; plate runs toward center
+const NP_OPP_LEFT  = Math.round((AV_TOP_INNER - NP_AV_OVERLAP) - OPP_POD_L);
 const NP_OPP_RIGHT = POD_W - NP_OPP_LEFT - NP_WIDTH;
-// Cards centered over each (moved) nameplate
 // Cards sit a fixed gap from each avatar's INNER edge → same spacing for both players
 const CARD_AV_GAP     = 8;                                                // px between avatar edge and nearest card
 const MY_CARD_PAIR_W  = 58 * 2;                                           // player pair width (cards render flush: gap 6 + marginLeft -6 = 0)
-const AV_BOTTOM_INNER = MY_POD_L + POD_W - AVATAR_SZ;                     // bottom avatar's left (inner) edge
-const AV_TOP_INNER    = OPP_POD_L + AVATAR_SZ;                            // top avatar's right (inner) edge
 const MY_CARDS_L      = AV_BOTTOM_INNER - CARD_AV_GAP - MY_CARD_PAIR_W;   // pair right edge = avatar edge − gap
 const MY_CARDS_T      = MY_POD_T + NP_TOP + 10 - 59;                      // cards bottom 10px into nameplate
 const OPP_CARDS_L     = AV_TOP_INNER + CARD_AV_GAP;                       // pair left edge = avatar edge + gap
-const OPP_CARDS_T     = OPP_POD_T + NP_TOP + 10 - 59;                     // cards bottom 10px into nameplate (xl card height)
+const OPP_CARDS_T     = OPP_POD_T + NP_TOP + 10 - 59;                     // cards ABOVE the nameplate, bottom 10px tucked in
 
 // ─── TimerRing ────────────────────────────────────────────────────────────────
 function TimerRing({ deadline }) {
