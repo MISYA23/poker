@@ -208,13 +208,13 @@ function broadcastMatchList() {
   for (const sp of socketPlayers.values()) {
     if (sp.playerName && !seen.has(sp.playerId)) {
       seen.add(sp.playerId);
-      online.push({ id: sp.playerId, name: sp.playerName, avatarId: sp.avatarId, inMatch: sp.matchId !== null });
+      online.push({ id: sp.playerId, name: sp.playerName, avatarId: sp.avatarId, inMatch: sp.matchId !== null, elo: eloCache[sp.playerId] || 1200 });
     }
   }
 
   // Bots are always online
   for (const [botId, b] of Object.entries(BOTS)) {
-    online.push({ id: botId, name: b.name, avatarId: b.avatarId, inMatch: botInMatch(botId), isBot: true });
+    online.push({ id: botId, name: b.name, avatarId: b.avatarId, inMatch: botInMatch(botId), isBot: true, elo: eloCache[botId] || 1200 });
   }
 
   for (const [sid, sp] of socketPlayers.entries()) {
@@ -385,11 +385,18 @@ io.on('connection', (socket) => {
 
   socket.on('enter-lobby', async ({ playerId } = {}) => {
     if (playerId) {
-      // Load display_name and avatar_id from DB — client never sends these
+      // Load display_name, avatar_id and ELO from DB — client never sends these
       let playerName = 'Player', avatarId = 'cigar';
       try {
-        const { rows } = await db.query('SELECT display_name, avatar_id FROM players WHERE id=$1', [playerId]);
-        if (rows.length) { playerName = rows[0].display_name; avatarId = rows[0].avatar_id; }
+        const { rows } = await db.query(
+          `SELECT p.display_name, p.avatar_id, s.elo
+             FROM players p LEFT JOIN player_stats s ON s.player_id = p.id
+            WHERE p.id=$1`, [playerId]);
+        if (rows.length) {
+          playerName = rows[0].display_name;
+          avatarId = rows[0].avatar_id;
+          if (rows[0].elo != null && eloCache[playerId] == null) eloCache[playerId] = rows[0].elo;
+        }
       } catch (e) { console.error('[enter-lobby] db lookup failed:', e.message); }
 
       const existing = socketPlayers.get(socket.id);
@@ -1671,6 +1678,10 @@ async function initBots() {
       [id, b.name, b.avatarId]
     ).catch(e => console.error(`[bots] upsert ${id} failed:`, e.message));
   }
+  // Seed bot ELOs so the lobby list shows them before their first match
+  await db.query('SELECT player_id, elo FROM player_stats WHERE player_id = ANY($1)', [Object.keys(BOTS)])
+    .then(({ rows }) => rows.forEach(r => { eloCache[r.player_id] = r.elo; }))
+    .catch(e => console.error('[bots] elo seed failed:', e.message));
   console.log('[bots] online:', Object.values(BOTS).map(b => `${b.name} (${b.profile.name})`).join(', '));
 }
 

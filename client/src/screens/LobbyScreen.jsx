@@ -17,18 +17,25 @@ const TAB_NAMES = ['Players', 'Leaderboard'];
 
 function PlayersTab({ onlinePlayers, myPlayerId, outgoingChallenges, onPressPlayer }) {
   if (!onlinePlayers?.length) return <Text style={s.tabEmpty}>No players online</Text>;
+
+  const isChallengeable = (p) => p.id !== myPlayerId && !p.isBot && !p.inMatch;
+  // Challengeable players first, then everyone else; ELO descending within each group
+  const sorted = [...onlinePlayers].sort((a, b) =>
+    (isChallengeable(b) - isChallengeable(a)) || ((b.elo || 1200) - (a.elo || 1200)));
+
   return (
     <View style={s.tabContent}>
-      {onlinePlayers.map((p) => {
+      {sorted.map((p) => {
         const isMe = p.id === myPlayerId;
-        const challengeable = !isMe && !p.isBot;
+        const tappable = !isMe && !p.isBot;
         const pending = outgoingChallenges.some(c => c.toId === p.id);
         return (
-          <Pressable key={p.id} style={s.onlineRow} disabled={!challengeable}
+          <Pressable key={p.id} style={s.onlineRow} disabled={!tappable}
             onPress={() => onPressPlayer(p)}>
             <View style={[s.statusDot, p.inMatch ? s.dotInMatch : s.dotOnline]} />
             <Text style={s.onlineName} numberOfLines={1}>{p.name}{isMe ? ' (you)' : ''}</Text>
             {pending && <Text style={s.pendingTag}>⚔️ pending</Text>}
+            <Text style={s.onlineElo}>{p.elo || 1200}</Text>
             <Text style={s.onlineStatus}>{p.inMatch ? 'In match' : 'Online'}</Text>
           </Pressable>
         );
@@ -315,7 +322,8 @@ const s = StyleSheet.create({
   dotOnline: { backgroundColor: '#4ade80' },
   dotInMatch: { backgroundColor: '#facc15' },
   onlineName: { flex: 1, color: colors.white, fontSize: 13, fontWeight: '600' },
-  onlineStatus: { color: colors.gray, fontSize: 11 },
+  onlineElo: { color: colors.goldLight, fontSize: 13, fontWeight: '800' },
+  onlineStatus: { color: colors.gray, fontSize: 11, width: 52, textAlign: 'right' },
   pendingTag: { color: colors.goldLight, fontSize: 11, fontWeight: '700' },
 
   // Challenge modal

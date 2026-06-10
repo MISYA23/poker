@@ -31,3 +31,6 @@ and log [START] / [DONE] entries for every task. See global CLAUDE.md for protoc
 [03:56 UTC] [START] feature/rated-bots — make bot matches ELO-rated + fix calcElo zero-sum bug (loser was charged K*E(winner))
 [03:58 UTC] [DONE] v5.107 pushed to main — bot matches ELO-rated, calcElo zero-sum fix — changed: server/index.js, server/matchmaker.js, client/src/config.js (note: local main ref is stale; pushed via feature/rated-bots:main because checkout is on feature/challenges)
 [04:01 UTC] [DONE] v5.107: challenge system on feature/challenges — accept buttons under PLAY BOT, challenge modal in Players tab, void-all-on-match-start/disconnect, 5min expiry; 12/12 socket tests passed — changed: server/index.js, client/App.js, client/src/screens/LobbyScreen.jsx, client/src/components/FriendsTab.jsx, server/scripts/challengeTest.js (new), client/src/config.js
+[04:04 UTC] [DONE] merged feature/challenges → main + pushed (Railway deploy dc5f60c); re-ran 12/12 challenge socket tests against merged code; branch deleted
+[04:07 UTC] [START] Players tab — add ELO, sort challengeable-first — branch feature/players-elo
+[04:09 UTC] [DONE] v5.108: Players tab shows ELO + sorts challengeable-first; eloCache seeded at enter-lobby + bot startup — changed: server/index.js, client/src/screens/LobbyScreen.jsx, client/src/config.js
