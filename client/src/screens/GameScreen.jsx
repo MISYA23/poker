@@ -34,7 +34,7 @@ const DESIGN_H = Math.round(DESIGN_W * 1.5);  // 590
 // ─── Table geometry (spec §16: 1024×1536 asset, aspect 0.667) ────────────────
 // The asset is natively 1:1.5 like the canvas — it fills it edge to edge,
 // minus ~5px margin per side.
-const TABLE_ASPECT = 1024 / 1536;
+const TABLE_ASPECT = 992 / 1586;
 const TABLE_W  = DESIGN_W - 10;
 const TABLE_H  = Math.round(TABLE_W / TABLE_ASPECT);
 const TABLE_L  = Math.round((DESIGN_W - TABLE_W) / 2);
