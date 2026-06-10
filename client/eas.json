@@ -19,7 +19,7 @@
     "production": {
       "android": {
         "serviceAccountKeyPath": "./playstore-key.json",
-        "track": "internal"
+        "track": "alpha"
       }
     }
   }
