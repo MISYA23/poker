@@ -49,3 +49,4 @@ and log [START] / [DONE] entries for every task. See global CLAUDE.md for protoc
 [13:52 UTC] [START] seat-level disconnect grace — vacancy on match object, enter-lobby rejoin priority, grace timer in endMatch — branch feature/disconnect-grace
 [13:56 UTC] [START] match format — escalating blinds every N hands + admin Match Format config section — branch feature/match-format (worktree)
 [14:00 UTC] [DONE] v5.113: seat-level disconnect grace (20s, DISCONNECT_GRACE_MS/cfg override) — vacancy on match object, enter-lobby rejoin priority, graceTimer reaped by endMatch, logout forfeits, banner restored; 42/42 local tests — changed: server/index.js, client/App.js, client/src/screens/GameScreen.jsx, server/scripts/matchLifecycleTest.js, client/src/config.js
+[14:05 UTC] [DONE] v5.113 deployed + verified on prod — 42/42 across all 3 suites incl. real 20s grace expiry + same-match rejoin
