@@ -48,36 +48,35 @@ const TABLE_T  = Math.round(0.5 * DESIGN_H - TABLE_H / 2);
 // Circle diameter drives everything. Nameplate clears the circle with a fixed
 // overlap (44px) + padding (10px gap) — works regardless of avatar size.
 const RING_W_PX  = 6;
-const AVATAR_SZ  = 96;                                     // circle diameter — scaled ×1.114 with table (1.14→1.27)
-const POD_H      = AVATAR_SZ + 14;                         // 100 — snug around circle
-const NP_H       = Math.round(0.75 * AVATAR_SZ);           // 72 — 75% of avatar height, centered (12.5% gap top + bottom)
-const NP_TOP     = Math.round((POD_H - NP_H) / 2);        // 7
-const AV_TOP     = Math.round((POD_H - AVATAR_SZ) / 2);   // 7
-const NAMEPLATE_OVERLAP = 49;                              // px nameplate extends behind circle — scaled ×1.114 with table
-const AVATAR_PAD = NAMEPLATE_OVERLAP + 10;                 // 54 — keeps text clear of circle
-const RING_R     = AVATAR_SZ / 2;                           // 43
-const RING_BOX   = Math.ceil(RING_R * 2 + RING_W_PX);     // 92
-const RING_CIRC  = 2 * Math.PI * RING_R;                   // ~270.2
+const AVATAR_SZ  = Math.round(96 * 1.6);                   // circle diameter — 60% bigger (96 → 154)
+const POD_H      = AVATAR_SZ + 14;                         // snug around circle
+const NP_H       = 72;                                     // nameplate height — FIXED, does not scale with avatar
+const NP_TOP     = Math.round((POD_H - NP_H) / 2);
+const AV_TOP     = Math.round((POD_H - AVATAR_SZ) / 2);
+const NAMEPLATE_OVERLAP = 49;                              // FIXED — nameplate size unchanged
+const AVATAR_PAD = NAMEPLATE_OVERLAP + 10;                 // keeps text clear of circle
+const RING_R     = (AVATAR_SZ - RING_W_PX) / 2;                            // ring sits inside the avatar edge (no overhang)
+const RING_BOX   = Math.ceil(RING_R * 2 + RING_W_PX);
+const RING_CIRC  = 2 * Math.PI * RING_R;
 
 // ─── Group A layout — spec §5 coordinate schema → 393×760 canvas pixels ──────
-// x/y = element CENTER as fraction of canvas; positions derived below.
-const POD_W        = Math.round(0.62 * DESIGN_W);                          // 244 — scaled ×1.114 with table
-const POD_L        = Math.round((DESIGN_W - POD_W) / 2);                  // 87
-// Ring center = TABLE_T + 6.5% of TABLE_H (skull ornament position in asset)
-const RING_TOP_Y   = Math.round(TABLE_T + 0.065 * TABLE_H);               // 146
-const RING_BOT_Y   = Math.round(TABLE_T + TABLE_H - 0.065 * TABLE_H);     // 638
-// Shared x-anchor: left edge of column C = TABLE_L + 2 * (TABLE_W / 4)
-const COL_C_X    = TABLE_L + 2 * (TABLE_W / 4);                            // 196.5
-// Pod left: avatar (right:0) center lands on COL_C_X
-const POD_ANCHOR_L = Math.round(COL_C_X - POD_W + AVATAR_SZ / 2);         // 20
-// Opponent pod: avatar center anchored to C2 top-left corner
-const C2_TL_Y    = TABLE_T + 1 * (TABLE_H / 8);                            // 179.75
-const OPP_POD_L  = POD_ANCHOR_L;                                            // 20
-const OPP_POD_T  = Math.round(C2_TL_Y - AV_TOP - AVATAR_SZ / 2);          // 130
-// Player pod: avatar center anchored to C7 bottom-left corner
-const C7_BL_Y    = TABLE_T + 7 * (TABLE_H / 8);                            // 604.25
-const MY_POD_L   = POD_ANCHOR_L;                                            // 20
-const MY_POD_T   = Math.round(C7_BL_Y - AV_TOP - AVATAR_SZ / 2);          // 554
+const POD_W        = Math.round(0.62 * DESIGN_W);                          // 244
+const POD_L        = Math.round((DESIGN_W - POD_W) / 2);
+const RING_TOP_Y   = Math.round(TABLE_T + 0.065 * TABLE_H);
+const RING_BOT_Y   = Math.round(TABLE_T + TABLE_H - 0.065 * TABLE_H);
+// Debug-grid column lines: A=0, B=1, C=2, D=3, E=4 (× TABLE_W/4 from TABLE_L)
+const COL_C_X    = TABLE_L + 2 * (TABLE_W / 4);                            // used by dealer buttons
+// Stage clips at the canvas edges (overflow:hidden), so the visible play-area
+// side frames are x=0 (left) and x=DESIGN_W (right). Hug them, but don't touch.
+const FRAME_GAP  = 4;                                                      // px gap kept from the side frame
+// Opponent pod: avatar LEFT edge just inside the left frame; vertical on the A2/B2 (row-2) line
+const ROW2_Y     = TABLE_T + 1 * (TABLE_H / 8);
+const OPP_POD_L  = FRAME_GAP;                                              // avatar left edge ≈ left frame
+const OPP_POD_T  = Math.round(ROW2_Y - AV_TOP - AVATAR_SZ / 2);
+// Player pod: avatar RIGHT edge just inside the right frame; vertical on the D8/E8 (row-8) line
+const ROW8_Y     = TABLE_T + 7 * (TABLE_H / 8);
+const MY_POD_L   = Math.round(DESIGN_W - FRAME_GAP - POD_W);              // avatar right edge ≈ right frame
+const MY_POD_T   = Math.round(ROW8_Y - AV_TOP - AVATAR_SZ / 2);
 const CC_T         = Math.round(0.455 * DESIGN_H - 25);                   // 363
 const POT_T        = Math.round(TABLE_T + 4 * (TABLE_H / 8) + 20);        // 20px past row 5 line
 const OPP_BET_T    = Math.round(TABLE_T + 2 * (TABLE_H / 8));             // row 3 line
@@ -88,13 +87,22 @@ const DEALER_OPP_L = Math.round(COL_C_X);                                 // C3 
 const DEALER_OPP_T = Math.round(TABLE_T + 2 * (TABLE_H / 8));             // C3 top-left y
 const DEALER_MY_L  = Math.round(COL_C_X);                                 // C7 top-left x
 const DEALER_MY_T  = Math.round(TABLE_T + 6 * (TABLE_H / 8));             // C7 top-left y
-// Cards locked to nameplate edges (4px gap)
-// Cards centered above the nameplate (nameplate center x = POD_ANCHOR_L + 16 + (POD_W-16-NAMEPLATE_OVERLAP)/2 = 116)
-const NP_CENTER_X  = POD_ANCHOR_L + 16 + Math.round((POD_W - 16 - NAMEPLATE_OVERLAP) / 2); // 116
-const MY_CARDS_L   = NP_CENTER_X - Math.round((58 * 2 + 6) / 2);         // 55
-const MY_CARDS_T   = MY_POD_T + NP_TOP + 10 - 59;                         // cards bottom 10px into nameplate (pod zIndex covers bottom)
-const OPP_CARDS_L  = NP_CENTER_X - Math.round((42 * 2 + 6) / 2);         // 71
-const OPP_CARDS_T  = OPP_POD_T + NP_TOP + 10 - 50;                       // cards bottom 10px into nameplate (mirrors player)
+// ── Nameplate horizontal placement (slid toward table center, width unchanged) ──
+const NP_WIDTH    = POD_W - 16 - NAMEPLATE_OVERLAP;                       // 179 — nameplate box width
+const NP_STEP     = TABLE_W / 4;                                          // one grid column
+// Bottom nameplate: LEFT edge at 10% off B8 (= COL_C_X − 0.9·step)
+const NP_ME_LEFT  = Math.round((COL_C_X - 0.9 * NP_STEP) - MY_POD_L);
+const NP_ME_RIGHT = POD_W - NP_ME_LEFT - NP_WIDTH;
+// Top nameplate: RIGHT edge at 90% off C2 (= COL_C_X + 0.9·step)
+const NP_OPP_LEFT  = Math.round((COL_C_X + 0.9 * NP_STEP - NP_WIDTH) - OPP_POD_L);
+const NP_OPP_RIGHT = POD_W - NP_OPP_LEFT - NP_WIDTH;
+// Cards centered over each (moved) nameplate
+const NP_CENTER_X     = MY_POD_L + NP_ME_LEFT + Math.round(NP_WIDTH / 2);
+const MY_CARDS_L      = NP_CENTER_X - Math.round((58 * 2 + 6) / 2);
+const MY_CARDS_T      = MY_POD_T + NP_TOP + 10 - 59;                      // cards bottom 10px into nameplate
+const NP_CENTER_X_OPP = OPP_POD_L + NP_OPP_LEFT + Math.round(NP_WIDTH / 2);
+const OPP_CARDS_L     = NP_CENTER_X_OPP - Math.round((42 * 2 + 6) / 2);
+const OPP_CARDS_T     = OPP_POD_T + NP_TOP + 10 - 50;                       // cards bottom 10px into nameplate (mirrors player)
 
 // ─── TimerRing ────────────────────────────────────────────────────────────────
 function TimerRing({ deadline }) {
@@ -248,7 +256,7 @@ function PlayerPod({ player, isMe, turnDeadline, lastAction, win, displayChips, 
     <View style={[
       s.avatarBlock,
       { top: AV_TOP, width: AVATAR_SZ, height: AVATAR_SZ },
-      s.avatarBlockMe,
+      isMe ? s.avatarBlockMe : s.avatarBlockOpp,
       !present && s.avatarPlaceholder,
     ]}>
       <Avatar size={AVATAR_SZ} avatarId={player?.avatarId} />
@@ -264,7 +272,9 @@ function PlayerPod({ player, isMe, turnDeadline, lastAction, win, displayChips, 
     <View style={[
       s.nameplate,
       { top: NP_TOP, height: NP_H },
-      { left: 16, right: NAMEPLATE_OVERLAP, paddingLeft: 12, paddingRight: AVATAR_PAD },
+      isMe
+        ? { left: NP_ME_LEFT,  right: NP_ME_RIGHT,  paddingLeft: 12, paddingRight: AVATAR_PAD }
+        : { left: NP_OPP_LEFT, right: NP_OPP_RIGHT, paddingLeft: AVATAR_PAD, paddingRight: 12 },
       isActive && s.nameplateActive,
       allIn   && s.nameplateAllIn,
       present && player.folded && s.nameplateFolded,
