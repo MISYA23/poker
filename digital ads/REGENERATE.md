@@ -69,6 +69,31 @@ banner is a PNG overlay, don't try drawtext again).
 - Silent by design + `anullsrc` AAC track (some platforms reject zero audio streams).
   Brian adds music later: `ffmpeg -i vid.mp4 -i track.mp3 -map 0:v -map 1:a -c:v copy -shortest out.mp4`.
 
+## Step 3b — animate.js (motion-graphics ad, the "marketing-style" video)
+
+`node _build/animate.js` → `video/poker_monkey_15s_9x16_motion.mp4` (9:16, 15s, 30fps).
+
+- Scene timeline, all timings in ms inside the script: logo hook (0–2.2s) → headline
+  card "All in. / Zero cost." (2.2–4.6s) → floating tilted phone playing real gameplay
+  (4.6–11.8s) → CTA end card with pulse (11.8–15s). Suit-pattern background drifts
+  throughout.
+- How it works: one HTML page, every animation built with element.animate() and
+  immediately paused; `window.seekTo(ms)` scrubs all animations AND the embedded
+  <video> to an exact timestamp; node loops 450 frames at 33.3ms steps, screenshots
+  each, ffmpeg assembles. Fully deterministic — re-runs are pixel-identical.
+  ~2 min render.
+- Needs `raw/ad_clip.webm` first (built in this doc's Step 3 prep):
+  `ffmpeg -ss 60 -t 3.5 -i raw/gameplay.webm -ss 91.8 -t 3.7 -i raw/gameplay.webm \
+   -filter_complex "[0:v][1:v]concat=n=2:v=1,fps=30[v]" -map "[v]" -c:v libvpx-vp9 -crf 24 -b:v 0 raw/ad_clip.webm`
+  (re-pick those timestamps per capture). MUST be VP8/VP9 webm — Playwright's
+  Chromium has no H.264 decoder, an mp4 will render a black phone screen.
+- Video seeking: each seek awaits the 'seeked' event with a 400ms safety timeout.
+  Without the timeout the frame loop hangs on missed events.
+- For 1:1 / 16:9 motion versions: change W/H consts and re-flow the CSS (font sizes
+  and the phone width are absolute px tuned for 1080x1920).
+- Rebrand inputs: same as render.js — LOGO const, colors in the <style> block,
+  headline/CTA copy in the HTML body.
+
 ## Step 4 — package & ship
 
 - Curate ~6 stills from `_build/raw/shots/` into `screenshots/` with semantic names.

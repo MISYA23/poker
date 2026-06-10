@@ -61,3 +61,4 @@ and log [START] / [DONE] entries for every task. See global CLAUDE.md for protoc
 [21:42 UTC] [START] geo provider swap ipwho.is → ip-api.com (ipwho.is blocks Node fetch) — branch fix/geo-provider
 [21:45 UTC] [DONE] digital ads REGENERATE.md playbook saved + memory pointer — pipeline reusable for post-redesign rerun
 [22:09 UTC] [START] animated motion-graphics ad prototype (9:16) — WAAPI/HTML rig + frame-stepped capture in digital ads/_build/animate.js — this session owns digital ads/ until DONE
+[22:15 UTC] [DONE] animated motion-graphics ad prototype — digital ads/video/poker_monkey_15s_9x16_motion.mp4 (15s, 4 scenes, frame-stepped WAAPI rig) — changed: digital ads/_build/animate.js (new), REGENERATE.md, README.md — digital ads/ released

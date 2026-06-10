@@ -11,6 +11,7 @@ Everything requested for Google Ads + Meta (Facebook/Instagram) campaigns.
 | poker_monkey_15s_16x9_1920x1080.mp4 | 16:9 | 1920x1080 | Google video ads, YouTube |
 | poker_monkey_15s_1x1_1080x1080.mp4 | 1:1 | 1080x1080 | FB/IG feed |
 | poker_monkey_15s_9x16_1080x1920.mp4 | 9:16 | 1080x1920 | Stories/Reels, YouTube Shorts |
+| poker_monkey_15s_9x16_motion.mp4 | 9:16 | 1080x1920 | Motion-graphics version: logo hook → headline card → floating-phone gameplay → animated CTA |
 
 Structure: real gameplay (betting controls + an all-in) → branded end card with CTA.
 Footage is a genuine match vs the "Rick Deckard" bot on prod, captured in-browser.
