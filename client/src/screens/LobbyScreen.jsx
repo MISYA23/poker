@@ -112,7 +112,7 @@ function FeaturedMatch({ matchList, onObserve }) {
 }
 
 export default function LobbyScreen({ navigation }) {
-  const { onFindMatch, onCancelMatch, onObserve, onLogout,
+  const { onFindMatch, onPlayBot, onCancelMatch, onObserve, onLogout,
           error, matchList, onlinePlayers, inQueue, myElo, playerInfo, navigationRef,
           myRecentMatches } = useContext(GameContext);
 
@@ -170,9 +170,14 @@ export default function LobbyScreen({ navigation }) {
                 </Pressable>
               </View>
             ) : (
-              <Pressable style={s.playBtn} onPress={() => onFindMatch(playerInfo.playerId)}>
-                <Text style={s.playTxt}>PLAY!</Text>
-              </Pressable>
+              <View style={s.playCol}>
+                <Pressable style={s.playBtn} onPress={() => onFindMatch(playerInfo.playerId)}>
+                  <Text style={s.playTxt}>PLAY!</Text>
+                </Pressable>
+                <Pressable style={s.playBotBtn} onPress={() => onPlayBot(playerInfo.playerId)}>
+                  <Text style={s.playBotTxt}>🤖 PLAY BOT</Text>
+                </Pressable>
+              </View>
             )}
 
             {/* Dashboard tabs */}
@@ -217,8 +222,11 @@ const s = StyleSheet.create({
   hi: { fontSize: 36, fontWeight: '900', color: colors.white, textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 8 },
   elo: { fontSize: 14, color: colors.gray, fontWeight: '600' },
   error: { color: '#f87171', fontSize: 13, textAlign: 'center' },
+  playCol: { alignItems: 'center', gap: 14 },
   playBtn: { backgroundColor: colors.gold, borderRadius: 20, paddingVertical: 22, paddingHorizontal: 60, alignItems: 'center', shadowColor: colors.gold, shadowOpacity: 0.4, shadowRadius: 16, elevation: 6 },
   playTxt: { color: '#000', fontSize: 28, fontWeight: '900', letterSpacing: 3 },
+  playBotBtn: { borderRadius: 16, paddingVertical: 12, paddingHorizontal: 36, alignItems: 'center', borderWidth: 2, borderColor: colors.gold },
+  playBotTxt: { color: colors.gold, fontSize: 16, fontWeight: '800', letterSpacing: 2 },
   queueBox: { alignItems: 'center', gap: 14 },
   queueTxt: { color: colors.white, fontSize: 18, fontWeight: '600' },
   cancelBtn: { paddingHorizontal: 24, paddingVertical: 10, borderRadius: 10, borderWidth: 1, borderColor: 'rgba(255,255,255,0.3)' },
