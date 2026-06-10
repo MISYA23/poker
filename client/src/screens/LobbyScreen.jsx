@@ -269,11 +269,14 @@ export default function LobbyScreen({ navigation }) {
                 ))}
               </View>
               <View style={s.tabPanel}>
-                {activeTab === 0 && (
-                  <PlayersTab onlinePlayers={onlinePlayers} myPlayerId={playerInfo?.playerId}
-                    outgoingChallenges={outgoingChallenges || []} onPressPlayer={setChallengeTarget} />
-                )}
-                {activeTab === 1 && <LeaderboardTab navigationRef={navigationRef} />}
+                <ScrollView style={s.tabScroll} showsVerticalScrollIndicator={false}
+                  nestedScrollEnabled keyboardShouldPersistTaps="handled">
+                  {activeTab === 0 && (
+                    <PlayersTab onlinePlayers={onlinePlayers} myPlayerId={playerInfo?.playerId}
+                      outgoingChallenges={outgoingChallenges || []} onPressPlayer={setChallengeTarget} />
+                  )}
+                  {activeTab === 1 && <LeaderboardTab navigationRef={navigationRef} />}
+                </ScrollView>
               </View>
             </View>
 
@@ -306,10 +309,10 @@ const s = StyleSheet.create({
   hi: { fontSize: 36, fontWeight: '900', color: colors.white, textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 8 },
   elo: { fontSize: 14, color: colors.gray, fontWeight: '600' },
   error: { color: '#f87171', fontSize: 13, textAlign: 'center' },
-  playCol: { alignItems: 'center', gap: 14 },
-  playBtn: { backgroundColor: colors.gold, borderRadius: 20, paddingVertical: 22, paddingHorizontal: 60, alignItems: 'center', shadowColor: colors.gold, shadowOpacity: 0.4, shadowRadius: 16, elevation: 6 },
+  playCol: { width: '100%', maxWidth: 420, alignItems: 'stretch', gap: 14 },
+  playBtn: { backgroundColor: colors.gold, borderRadius: 20, height: 72, alignItems: 'center', justifyContent: 'center', shadowColor: colors.gold, shadowOpacity: 0.4, shadowRadius: 16, elevation: 6 },
   playTxt: { color: '#000', fontSize: 28, fontWeight: '900', letterSpacing: 3 },
-  playBotBtn: { borderRadius: 16, paddingVertical: 12, paddingHorizontal: 36, alignItems: 'center', borderWidth: 2, borderColor: colors.gold },
+  playBotBtn: { borderRadius: 20, height: 72, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: colors.gold },
   playBotTxt: { color: colors.gold, fontSize: 16, fontWeight: '800', letterSpacing: 2 },
   acceptChallengeBtn: { borderRadius: 16, paddingVertical: 12, paddingHorizontal: 28, alignItems: 'center', borderWidth: 2, borderColor: '#4ade80', backgroundColor: 'rgba(74,222,128,0.12)' },
   acceptChallengeTxt: { color: '#4ade80', fontSize: 14, fontWeight: '800', letterSpacing: 1 },
@@ -332,6 +335,7 @@ const s = StyleSheet.create({
   tabLabel: { color: 'rgba(255,255,255,0.5)', fontSize: 13, fontWeight: '700' },
   tabLabelActive: { color: '#000', fontWeight: '800' },
   tabPanel: { backgroundColor: 'rgba(0,0,0,0.55)', borderBottomLeftRadius: 12, borderBottomRightRadius: 12, borderWidth: 1, borderTopWidth: 0, borderColor: 'rgba(255,255,255,0.1)', minHeight: 80, padding: 14 },
+  tabScroll: { maxHeight: 360 },
   tabContent: { gap: 8 },
   tabEmpty: { color: colors.gray, fontSize: 13, fontStyle: 'italic', textAlign: 'center', paddingVertical: 4 },
   tabSubLabel: { color: colors.gray, fontSize: 10, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 1 },
