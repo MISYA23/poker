@@ -536,6 +536,11 @@ export default function GameScreen({ navigation }) {
         {/* Top bar */}
         <View style={[s.topBar, debugUI && { borderWidth: 2, borderColor: 'red' }]} pointerEvents="box-none">
           <Text style={s.version}>{VERSION_DISPLAY}</Text>
+          {gameState?.handNumber > 0 && (
+            <View style={s.blindsPill} pointerEvents="none">
+              <Text style={s.blindsTxt}>Hand {gameState.handNumber} · Blinds {gameState.smallBlind}/{gameState.bigBlind}</Text>
+            </View>
+          )}
           <Pressable style={s.menuBtn} onPress={() => setMenuOpen(o => !o)}>
             <Text style={s.menuBtnTxt}>☰</Text>
           </Pressable>
@@ -784,6 +789,11 @@ const s = StyleSheet.create({
     paddingHorizontal: 16,
   },
   version:    { color: 'rgba(255,255,255,0.2)', fontSize: 11 },
+  blindsPill: {
+    position: 'absolute', left: 0, right: 0, top: 0, height: TOP_BAR_H,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  blindsTxt:  { color: 'rgba(255,255,255,0.45)', fontSize: 12, fontWeight: '600' },
   menuBtn:    { width: 36, height: 36, borderRadius: 8, backgroundColor: 'rgba(0,0,0,0.5)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)', alignItems: 'center', justifyContent: 'center' },
   menuBtnTxt: { color: colors.white, fontSize: 16 },
   disconnectBanner: { marginHorizontal: 12, marginTop: 4, backgroundColor: 'rgba(251,146,60,0.18)', borderWidth: 1, borderColor: 'rgba(251,146,60,0.5)', borderRadius: 8, paddingVertical: 6, paddingHorizontal: 12 },

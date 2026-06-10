@@ -11,6 +11,7 @@ const { startHand: logStartHand, logAction, flushHandToDb } = require('./handLog
 const { enqueue, dequeue, tryPair, calcElo } = require('./matchmaker');
 const { decideAction, stateFromGame } = require('./bot/botBrain');
 const { getProfile } = require('./bot/profiles');
+const { DEFAULT_FORMAT, parseLevels, serializeLevels, levelForHand, blindsForHand } = require('./matchFormat');
 
 const path = require('path');
 
@@ -30,6 +31,9 @@ let cfg = {};
 
 // Populated from ui_config table on startup — client fetches once per session
 let uiCfg = {};
+
+// Populated from match_format table on startup — { handsPerLevel, levels: [{sb,bb}] }
+let fmt = DEFAULT_FORMAT;
 
 // matchId → { id, game, p1, p2, observers, rematchVotes, timers... }
 const matches = new Map();
@@ -83,7 +87,7 @@ function createMatch(p1, p2) {
   const id = randomUUID();
   const m = {
     id,
-    game: new PokerGame(id, { startingChips: cfg.starting_chips, bigBlind: cfg.big_blind, smallBlind: cfg.small_blind }),
+    game: new PokerGame(id, { startingChips: cfg.starting_chips, smallBlind: fmt.levels[0].sb, bigBlind: fmt.levels[0].bb }),
     p1, p2,                  // { playerId, playerName, avatarId, socketId }
     observers: new Set(),    // socketIds watching
     rematchVotes: new Set(),
@@ -112,7 +116,7 @@ function resetRoom(m) {
   m.timerPlayerId = null;
   m.turnDeadline = null;
   m.rematchVotes = new Set();
-  m.game = new PokerGame(m.id, { startingChips: cfg.starting_chips, bigBlind: cfg.big_blind, smallBlind: cfg.small_blind });
+  m.game = new PokerGame(m.id, { startingChips: cfg.starting_chips, smallBlind: fmt.levels[0].sb, bigBlind: fmt.levels[0].bb });
 }
 
 // ── Turn timer ────────────────────────────────────────────────────────────────
@@ -195,6 +199,7 @@ function broadcastMatchState(m) {
       matchId: m.id,
       gameOver: m.game.gameOver || false,
       turnDeadline: m.turnDeadline,
+      handNumber: m.handCount,
     });
   }
   // Observers see face-down cards
@@ -203,6 +208,7 @@ function broadcastMatchState(m) {
       ...m.game.getStateFor(null),
       atTable: false, observing: true,
       matchId: m.id, turnDeadline: m.turnDeadline,
+      handNumber: m.handCount,
     });
   }
 }
@@ -271,6 +277,11 @@ function voidChallengesFor(playerId) {
 async function beginHand(m) {
   m.handCount = (m.handCount || 0) + 1;
   m.handEventSeq = 0;
+  // Escalating blinds — every fmt.handsPerLevel hands move to the next level.
+  // Must be set before startHand(), which posts blinds from game.smallBlind/bigBlind.
+  const blinds = blindsForHand(m.handCount, fmt);
+  m.game.smallBlind = blinds.sb;
+  m.game.bigBlind   = blinds.bb;
   m.game.startHand();
   m.currentHandUuid = await logStartHand(m, m.game).catch(e => { console.error('[hand] startHand failed:', e.message); return null; });
   console.log('[hand] started uuid:', m.currentHandUuid?.slice(0, 8));
@@ -1492,7 +1503,11 @@ app.get('/admin', (_, res) => res.send(ADMIN_SHELL('Admin', `
     <div style="display:flex;flex-direction:column;gap:12px;max-width:400px;margin-top:8px">
       <a href="/admin/game-config" style="display:block;background:#161b22;border:1px solid #30363d;border-radius:10px;padding:20px 24px;text-decoration:none;color:#e6edf3">
         <div style="font-size:1rem;font-weight:700;margin-bottom:4px">⚙️ Game Config</div>
-        <div style="font-size:0.82rem;color:#8b949e">Blinds, starting chips, turn timer</div>
+        <div style="font-size:0.82rem;color:#8b949e">Starting chips, turn timer, hand delays</div>
+      </a>
+      <a href="/admin/match-format" style="display:block;background:#161b22;border:1px solid #30363d;border-radius:10px;padding:20px 24px;text-decoration:none;color:#e6edf3">
+        <div style="font-size:1rem;font-weight:700;margin-bottom:4px">🏁 Match Format</div>
+        <div style="font-size:0.82rem;color:#8b949e">Blind escalation schedule — hands per level, blind levels</div>
       </a>
       <a href="/admin/ui-config" style="display:block;background:#161b22;border:1px solid #30363d;border-radius:10px;padding:20px 24px;text-decoration:none;color:#e6edf3">
         <div style="font-size:1rem;font-weight:700;margin-bottom:4px">🎨 UI Config</div>
@@ -1530,6 +1545,83 @@ app.get('/admin/game-config', (_, res) => res.send(ADMIN_SHELL('Game Config', `
     const res = await fetch('/admin/config/'+key, { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({value:Number(document.getElementById('val-'+key).value)}) });
     btn.textContent = res.ok ? '✓ Saved' : 'Error';
     if (res.ok) { btn.classList.add('saved'); setTimeout(()=>{btn.textContent='Save';btn.classList.remove('saved');},2000); }
+  }`)));
+
+app.get('/admin/match-format', (_, res) => res.send(ADMIN_SHELL('Match Format', `
+  <h1>♠ Match Format</h1>
+  <div class="nav"><a href="/admin">← Admin</a></div>
+  ${ADMIN_AUTH_BLOCK}
+  <div id="main" style="max-width:680px">
+    <div style="background:#161b22;border:1px solid #30363d;border-radius:10px;padding:16px 20px;margin-bottom:16px;display:flex;align-items:center;gap:12px">
+      <span style="font-size:0.9rem">Blinds increase every</span>
+      <input type="number" id="hands-per-level" min="1" oninput="render()" style="background:#0d1117;border:1px solid #30363d;border-radius:5px;color:#e6edf3;font-size:0.9rem;padding:6px 10px;width:70px;text-align:right;outline:none" />
+      <span style="font-size:0.9rem">hands</span>
+    </div>
+    <table><thead><tr><th>Level</th><th>Hand #</th><th>Small blind</th><th>Big blind</th><th>Stack depth</th><th></th></tr></thead>
+    <tbody id="fmt-body"></tbody></table>
+    <div style="display:flex;justify-content:space-between;margin-top:16px">
+      <button onclick="addLevel()" style="background:none;border:1px solid #30363d;color:#8b949e;border-radius:6px;padding:6px 14px;font-size:0.8rem;cursor:pointer">+ Add level</button>
+      <button id="save-btn" onclick="saveAll()" style="background:#238636;color:#fff;border:none;border-radius:6px;padding:8px 20px;font-size:0.85rem;cursor:pointer;font-weight:600">Save</button>
+    </div>
+    <div id="fmt-err" style="color:#f85149;font-size:0.85rem;margin-top:10px;display:none"></div>
+  </div>`, `
+  let levels = [];
+  let startingChips = 1000;
+  async function onLogin() { load(); }
+  async function load() {
+    const f = await fetch('/api/admin/match-format').then(r => r.json());
+    levels = f.levels;
+    startingChips = f.startingChips;
+    document.getElementById('hands-per-level').value = f.handsPerLevel;
+    render();
+  }
+  function render() {
+    const per = Math.max(1, Number(document.getElementById('hands-per-level').value) || 1);
+    const tbody = document.getElementById('fmt-body');
+    tbody.innerHTML = '';
+    levels.forEach((l, i) => {
+      const last = i === levels.length - 1;
+      const range = (i * per + 1) + '\\u2013' + ((i + 1) * per) + (last ? '+' : '');
+      const depth = l.bb > 0 ? Math.round(startingChips / l.bb) + ' BB' : '\\u2014';
+      const tr = document.createElement('tr');
+      tr.innerHTML = '<td class="key">' + (i + 1) + '</td>'
+        + '<td class="desc">' + range + '</td>'
+        + '<td class="val"><input type="number" min="1" value="' + l.sb + '" oninput="levels[' + i + '].sb=Number(this.value);renderDepths()" /></td>'
+        + '<td class="val"><input type="number" min="1" value="' + l.bb + '" oninput="levels[' + i + '].bb=Number(this.value);renderDepths()" /></td>'
+        + '<td class="desc" id="depth-' + i + '">' + depth + '</td>'
+        + '<td class="action">' + (levels.length > 1 ? '<button style="background:#da3633" onclick="removeLevel(' + i + ')">\\u2715</button>' : '') + '</td>';
+      tbody.appendChild(tr);
+    });
+  }
+  function renderDepths() {
+    levels.forEach((l, i) => {
+      const el = document.getElementById('depth-' + i);
+      if (el) el.textContent = l.bb > 0 ? Math.round(startingChips / l.bb) + ' BB' : '\\u2014';
+    });
+  }
+  function addLevel() {
+    const last = levels[levels.length - 1] || { sb: 10, bb: 20 };
+    levels.push({ sb: last.sb * 2, bb: last.bb * 2 });
+    render();
+  }
+  function removeLevel(i) { levels.splice(i, 1); render(); }
+  async function saveAll() {
+    const btn = document.getElementById('save-btn');
+    const err = document.getElementById('fmt-err');
+    err.style.display = 'none';
+    const res = await fetch('/admin/match-format', {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ handsPerLevel: Number(document.getElementById('hands-per-level').value), levels }),
+    });
+    if (res.ok) {
+      btn.textContent = '\\u2713 Saved';
+      setTimeout(() => { btn.textContent = 'Save'; }, 2000);
+      load();
+    } else {
+      const j = await res.json().catch(() => ({}));
+      err.textContent = j.error || 'Save failed';
+      err.style.display = 'block';
+    }
   }`)));
 
 app.get('/admin/ui-config', (_, res) => res.send(ADMIN_SHELL('UI Config', `
@@ -1577,6 +1669,29 @@ app.put('/admin/config/:key', async (req, res) => {
     if (!rowCount) return res.status(404).json({ error: 'unknown config key' });
     cfg[key] = Number(value);
     res.json({ ok: true, key, value: cfg[key] });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.get('/api/admin/match-format', (_, res) => {
+  res.json({ handsPerLevel: fmt.handsPerLevel, levels: fmt.levels, startingChips: cfg.starting_chips });
+});
+
+app.put('/admin/match-format', async (req, res) => {
+  try {
+    const { handsPerLevel, levels } = req.body;
+    const per = Number(handsPerLevel);
+    if (!Number.isInteger(per) || per < 1) return res.status(400).json({ error: 'handsPerLevel must be a positive integer' });
+    if (!Array.isArray(levels) || !levels.length) return res.status(400).json({ error: 'at least one blind level required' });
+    for (const l of levels) {
+      if (!Number.isInteger(l?.sb) || !Number.isInteger(l?.bb) || l.sb < 1 || l.bb < l.sb) {
+        return res.status(400).json({ error: 'each level needs integer blinds with 1 <= small blind <= big blind' });
+      }
+    }
+    const clean = levels.map(l => ({ sb: l.sb, bb: l.bb }));
+    await db.query('UPDATE match_format SET value=$1 WHERE key=$2', [String(per), 'hands_per_level']);
+    await db.query('UPDATE match_format SET value=$1 WHERE key=$2', [serializeLevels(clean), 'blind_levels']);
+    fmt = { handsPerLevel: per, levels: clean };
+    res.json({ ok: true, ...fmt });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -1689,8 +1804,6 @@ app.get('/api/avatars', async (_, res) => {
 async function loadGameConfig() {
   const defaults = [
     ['starting_chips',     1000, 'Starting chip count per player'],
-    ['big_blind',            20, 'Big blind amount'],
-    ['small_blind',          10, 'Small blind amount'],
     ['turn_seconds',         20, 'Seconds a player has to act'],
     ['inter_hand_delay_ms', 5000, 'Pause between hands (ms)'],
     ['auto_start_delay_ms', 3000, 'Delay before first hand starts (ms)'],
@@ -1712,6 +1825,10 @@ async function loadGameConfig() {
       );
     }
 
+    // small_blind/big_blind are superseded by the match_format blind schedule —
+    // drop the rows so the admin Game Config page doesn't show dead knobs
+    await db.query(`DELETE FROM game_config WHERE key IN ('small_blind', 'big_blind')`);
+
     const { rows } = await db.query('SELECT key, value FROM game_config');
     const loaded = {};
     for (const { key, value } of rows) loaded[key] = Number(value);
@@ -1724,6 +1841,43 @@ async function loadGameConfig() {
     for (const [key, value] of defaults) loaded[key] = value;
     console.error('[config] DB unavailable, using defaults:', e.message);
     return loaded;
+  }
+}
+
+// ── Match format ──────────────────────────────────────────────────────────────
+
+async function loadMatchFormat() {
+  const defaults = [
+    ['hands_per_level', String(DEFAULT_FORMAT.handsPerLevel), 'Hands played at each blind level before blinds increase'],
+    ['blind_levels',    serializeLevels(DEFAULT_FORMAT.levels), 'Blind schedule, comma-separated sb/bb pairs'],
+  ];
+
+  try {
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS match_format (
+        key         TEXT PRIMARY KEY,
+        value       TEXT NOT NULL,
+        description TEXT
+      )
+    `);
+
+    for (const [key, value, description] of defaults) {
+      await db.query(
+        `INSERT INTO match_format (key, value, description) VALUES ($1, $2, $3) ON CONFLICT (key) DO NOTHING`,
+        [key, value, description]
+      );
+    }
+
+    const { rows } = await db.query('SELECT key, value FROM match_format');
+    const raw = Object.fromEntries(rows.map(r => [r.key, r.value]));
+    const handsPerLevel = Math.max(1, Math.floor(Number(raw.hands_per_level)) || DEFAULT_FORMAT.handsPerLevel);
+    const levels = parseLevels(raw.blind_levels) || DEFAULT_FORMAT.levels;
+    const loaded = { handsPerLevel, levels };
+    console.log('[format] loaded:', handsPerLevel, 'hands/level,', serializeLevels(levels));
+    return loaded;
+  } catch (e) {
+    console.error('[format] DB unavailable, using defaults:', e.message);
+    return DEFAULT_FORMAT;
   }
 }
 
@@ -1828,6 +1982,7 @@ async function initBots() {
 async function start() {
   await redis.connect().catch(e => console.error('[redis] connect failed:', e.message));
   cfg = await loadGameConfig();
+  fmt = await loadMatchFormat();
   uiCfg = await loadUiConfig();
   validAvatars = await initAvatars();
   await initBots();
