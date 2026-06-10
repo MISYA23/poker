@@ -34,3 +34,6 @@ and log [START] / [DONE] entries for every task. See global CLAUDE.md for protoc
 [04:04 UTC] [DONE] merged feature/challenges → main + pushed (Railway deploy dc5f60c); re-ran 12/12 challenge socket tests against merged code; branch deleted
 [04:07 UTC] [START] Players tab — add ELO, sort challengeable-first — branch feature/players-elo
 [04:09 UTC] [DONE] v5.108: Players tab shows ELO + sorts challengeable-first; eloCache seeded at enter-lobby + bot startup — changed: server/index.js, client/src/screens/LobbyScreen.jsx, client/src/config.js
+[04:09 UTC] [DONE] merged feature/players-elo → main + pushed (Railway deploy)
+[04:11 UTC] [START] Players tab → Online, mid-match players not challengeable — branch feature/online-tab
+[04:12 UTC] [DONE] v5.109: Players tab renamed Online; mid-match rows not tappable — changed: client/src/screens/LobbyScreen.jsx, client/src/config.js

@@ -13,7 +13,7 @@ const AVATAR_IMAGES = {
   queen: require('../../assets/queen.png'),
 };
 
-const TAB_NAMES = ['Players', 'Leaderboard'];
+const TAB_NAMES = ['Online', 'Leaderboard'];
 
 function PlayersTab({ onlinePlayers, myPlayerId, outgoingChallenges, onPressPlayer }) {
   if (!onlinePlayers?.length) return <Text style={s.tabEmpty}>No players online</Text>;
@@ -27,7 +27,8 @@ function PlayersTab({ onlinePlayers, myPlayerId, outgoingChallenges, onPressPlay
     <View style={s.tabContent}>
       {sorted.map((p) => {
         const isMe = p.id === myPlayerId;
-        const tappable = !isMe && !p.isBot;
+        // Mid-match players can't be challenged — row isn't tappable
+        const tappable = !isMe && !p.isBot && !p.inMatch;
         const pending = outgoingChallenges.some(c => c.toId === p.id);
         return (
           <Pressable key={p.id} style={s.onlineRow} disabled={!tappable}
