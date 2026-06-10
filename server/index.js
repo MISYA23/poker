@@ -392,6 +392,10 @@ async function endMatch(m, winnerId) {
       newElo:    isWin ? wNewElo : lNewElo,
     });
   }
+  // Observers get the result too — without it they'd sit on a frozen table forever
+  for (const sid of m.observers) {
+    io.to(sid).emit('match-over', { winnerId, winnerName: winner.playerName, observer: true });
+  }
   console.log(`[match] ended — winner: ${winner.playerName}, elo: ${wElo}→${wNewElo}`);
   broadcastMatchList();
 
@@ -611,13 +615,16 @@ io.on('connection', (socket) => {
 
   socket.on('observe', ({ matchId }) => {
     const m = matches.get(matchId);
-    if (!m) return;
+    // Ended matches linger in the map for the 90s rematch window — never let
+    // anyone start observing a dead table.
+    if (!m || m.ended) { socket.emit('observe-rejected', { matchId }); return; }
     m.observers.add(socket.id);
     // Send current state immediately
     io.to(socket.id).emit('game-state', {
       ...m.game.getStateFor(null),
       atTable: false, observing: true,
       matchId: m.id, turnDeadline: m.turnDeadline,
+      handNumber: m.handCount,
     });
   });
 
