@@ -15,6 +15,12 @@ const AVATAR_IMAGES = {
 
 const TAB_NAMES = ['Online', 'Leaderboard'];
 
+// 'US' → 🇺🇸 via regional indicator codepoints; unknown → 🌐
+function flagEmoji(cc) {
+  if (!cc || cc.length !== 2) return '🌐';
+  return String.fromCodePoint(...[...cc.toUpperCase()].map(c => 0x1F1E6 + c.charCodeAt(0) - 65));
+}
+
 function PlayersTab({ onlinePlayers, myPlayerId, outgoingChallenges, onPressPlayer }) {
   if (!onlinePlayers?.length) return <Text style={s.tabEmpty}>No players online</Text>;
 
@@ -31,13 +37,15 @@ function PlayersTab({ onlinePlayers, myPlayerId, outgoingChallenges, onPressPlay
         const tappable = !isMe && !p.isBot && !p.inMatch;
         const pending = outgoingChallenges.some(c => c.toId === p.id);
         return (
-          <Pressable key={p.id} style={s.onlineRow} disabled={!tappable}
-            onPress={() => onPressPlayer(p)}>
-            <View style={[s.statusDot, p.inMatch ? s.dotInMatch : s.dotOnline]} />
+          <Pressable key={p.id} disabled={!tappable} onPress={() => onPressPlayer(p)}
+            style={({ pressed }) => [s.playerBtn, !tappable && s.playerBtnDisabled, pressed && s.playerBtnPressed]}>
+            <Text style={s.playerFlag}>{flagEmoji(p.country)}</Text>
             <Text style={s.onlineName} numberOfLines={1}>{p.name}{isMe ? ' (you)' : ''}</Text>
-            {pending && <Text style={s.pendingTag}>⚔️ pending</Text>}
             <Text style={s.onlineElo}>{p.elo || 1200}</Text>
-            <Text style={s.onlineStatus}>{p.inMatch ? 'In match' : 'Online'}</Text>
+            <View style={{ flex: 1 }} />
+            {pending && <Text style={s.pendingTag}>⚔️</Text>}
+            {p.inMatch && <Text style={s.inMatchTag}>in match</Text>}
+            <View style={[s.statusDot, p.inMatch ? s.dotInMatch : s.dotOnline]} />
           </Pressable>
         );
       })}
@@ -62,7 +70,7 @@ function ChallengeModal({ target, outgoingChallenges, onChallenge, onClose }) {
             <Text style={s.modalPendingTxt}>IN A MATCH — TRY LATER</Text>
           </View>
         ) : (
-          <Pressable style={s.modalChallengeBtn} onPress={() => onChallenge(target.id)}>
+          <Pressable style={s.modalChallengeBtn} onPress={() => { onChallenge(target.id); onClose(); }}>
             <Text style={s.modalChallengeTxt}>⚔️ CHALLENGE {target.name.toUpperCase()}</Text>
           </Pressable>
         )}
@@ -159,7 +167,7 @@ export default function LobbyScreen({ navigation }) {
   const { onFindMatch, onPlayBot, onCancelMatch, onObserve, onLogout,
           error, matchList, onlinePlayers, inQueue, myElo, playerInfo, navigationRef,
           myRecentMatches, incomingChallenges, outgoingChallenges,
-          onChallenge, onAcceptChallenge } = useContext(GameContext);
+          onChallenge, onAcceptChallenge, onWithdrawChallenge } = useContext(GameContext);
 
   useEffect(() => {
     if (Platform.OS === 'web' && !playerInfo) {
@@ -225,7 +233,13 @@ export default function LobbyScreen({ navigation }) {
                 </Pressable>
                 {(incomingChallenges || []).map(c => (
                   <Pressable key={c.fromId} style={s.acceptChallengeBtn} onPress={() => onAcceptChallenge(c.fromId)}>
-                    <Text style={s.acceptChallengeTxt}>⚔️ ACCEPT {c.fromName.toUpperCase()}'S CHALLENGE</Text>
+                    <Text style={s.acceptChallengeTxt}>⚔️ CHALLENGE ISSUED! PLAY {c.fromName.toUpperCase()}?</Text>
+                  </Pressable>
+                ))}
+                {(outgoingChallenges || []).map(c => (
+                  <Pressable key={c.toId} style={s.outgoingChallengeBtn} onPress={() => onWithdrawChallenge(c.toId)}>
+                    <Text style={s.outgoingChallengeTxt}>⏳ CHALLENGE TO {c.toName.toUpperCase()} PENDING</Text>
+                    <Text style={s.outgoingChallengeSub}>tap to withdraw</Text>
                   </Pressable>
                 ))}
               </View>
@@ -286,6 +300,9 @@ const s = StyleSheet.create({
   playBotTxt: { color: colors.gold, fontSize: 16, fontWeight: '800', letterSpacing: 2 },
   acceptChallengeBtn: { borderRadius: 16, paddingVertical: 12, paddingHorizontal: 28, alignItems: 'center', borderWidth: 2, borderColor: '#4ade80', backgroundColor: 'rgba(74,222,128,0.12)' },
   acceptChallengeTxt: { color: '#4ade80', fontSize: 14, fontWeight: '800', letterSpacing: 1 },
+  outgoingChallengeBtn: { borderRadius: 16, paddingVertical: 10, paddingHorizontal: 28, alignItems: 'center', borderWidth: 2, borderColor: 'rgba(255,255,255,0.3)', borderStyle: 'dashed', gap: 1 },
+  outgoingChallengeTxt: { color: 'rgba(255,255,255,0.7)', fontSize: 13, fontWeight: '800', letterSpacing: 1 },
+  outgoingChallengeSub: { color: colors.gray, fontSize: 10, fontStyle: 'italic' },
   queueBox: { alignItems: 'center', gap: 14 },
   queueTxt: { color: colors.white, fontSize: 18, fontWeight: '600' },
   cancelBtn: { paddingHorizontal: 24, paddingVertical: 10, borderRadius: 10, borderWidth: 1, borderColor: 'rgba(255,255,255,0.3)' },
@@ -317,15 +334,18 @@ const s = StyleSheet.create({
   eloPos: { color: '#4ade80' },
   eloNeg: { color: '#f87171' },
 
-  // Players tab
-  onlineRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  statusDot: { width: 8, height: 8, borderRadius: 4, flexShrink: 0 },
+  // Online tab — player rows styled as buttons
+  playerBtn: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 13, paddingHorizontal: 14, borderRadius: 12, borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.25)', backgroundColor: 'rgba(255,255,255,0.05)' },
+  playerBtnPressed: { backgroundColor: 'rgba(212,175,55,0.18)', borderColor: colors.gold },
+  playerBtnDisabled: { opacity: 0.55, borderColor: 'rgba(255,255,255,0.12)', backgroundColor: 'transparent' },
+  playerFlag: { fontSize: 18 },
+  statusDot: { width: 10, height: 10, borderRadius: 5, flexShrink: 0 },
   dotOnline: { backgroundColor: '#4ade80' },
   dotInMatch: { backgroundColor: '#facc15' },
-  onlineName: { flex: 1, color: colors.white, fontSize: 13, fontWeight: '600' },
-  onlineElo: { color: colors.goldLight, fontSize: 13, fontWeight: '800' },
-  onlineStatus: { color: colors.gray, fontSize: 11, width: 52, textAlign: 'right' },
-  pendingTag: { color: colors.goldLight, fontSize: 11, fontWeight: '700' },
+  onlineName: { color: colors.white, fontSize: 15, fontWeight: '700', flexShrink: 1 },
+  onlineElo: { color: colors.goldLight, fontSize: 14, fontWeight: '800' },
+  inMatchTag: { color: '#facc15', fontSize: 11, fontStyle: 'italic' },
+  pendingTag: { color: colors.goldLight, fontSize: 13 },
 
   // Challenge modal
   modalOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.6)', alignItems: 'center', justifyContent: 'center', zIndex: 100 },

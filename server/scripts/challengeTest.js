@@ -108,6 +108,18 @@ async function makePlayer(tag) {
   const dec = await dDeclined;
   check('challenger notified of decline with byId', dec?.byId === C.playerId);
 
+  // ── Withdraw flow: D challenges C, then withdraws ──
+  console.log('Withdraw flow:');
+  const cReceivesW = waitFor(C.socket, 'challenge-received');
+  D.socket.emit('challenge-send', { toId: C.playerId });
+  await cReceivesW;
+  const cVoidW = waitFor(C.socket, 'challenge-voided');
+  const dVoidW = waitFor(D.socket, 'challenge-voided');
+  D.socket.emit('challenge-withdraw', { toId: C.playerId });
+  const [cvw, dvw] = await Promise.all([cVoidW, dVoidW]);
+  check('target notified when challenge withdrawn', cvw?.otherId === D.playerId);
+  check('challenger gets void ack on withdraw', dvw?.otherId === C.playerId);
+
   // ── Disconnect voids: D challenges C again, then D disconnects ──
   console.log('Disconnect voids outgoing challenges:');
   const cReceives3 = waitFor(C.socket, 'challenge-received');

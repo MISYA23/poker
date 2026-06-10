@@ -202,6 +202,11 @@ export default function App() {
     setIncomingChallenges(list => list.filter(c => c.fromId !== fromId));
   }, [emit]);
 
+  const onWithdrawChallenge = useCallback((toId) => {
+    emit('challenge-withdraw', { toId });
+    setOutgoingChallenges(list => list.filter(c => c.toId !== toId));
+  }, [emit]);
+
   const onObserve = useCallback((matchId) => {
     matchIdRef.current = matchId;
     isObserverRef.current = true;
@@ -240,7 +245,7 @@ export default function App() {
     <GameContext.Provider value={{
       gameState, myId, error, inQueue, matchList, onlinePlayers, myElo, matchOver,
       playerInfo, myRecentMatches, deckStyle, setDeckStyle, opponentDisconnected,
-      incomingChallenges, outgoingChallenges, onChallenge, onAcceptChallenge, onDeclineChallenge,
+      incomingChallenges, outgoingChallenges, onChallenge, onAcceptChallenge, onDeclineChallenge, onWithdrawChallenge,
       pendingFriendRequests, setPendingFriendRequests,
       uiConfig, emit, onLogin, onLogout, onUpdateProfile, onFindMatch, onPlayBot, onCancelMatch,
       onObserve, onAction, onLeave, onRematch, navigationRef,

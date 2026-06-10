@@ -46,13 +46,34 @@ const eloCache = {};
 // `${fromId}:${toId}` → { timer } — pending direct challenges
 const challenges = new Map();
 
+// ip → 2-letter country code (or null) — avoids re-hitting the geo API
+const ipCountryCache = new Map();
+
+function socketIp(socket) {
+  const fwd = (socket.handshake.headers['x-forwarded-for'] || '').split(',')[0].trim();
+  return fwd || socket.handshake.address || '';
+}
+
+async function lookupCountry(ip) {
+  if (!ip || ip === '::1' || ip.startsWith('127.') || ip.startsWith('10.') ||
+      ip.startsWith('192.168.') || ip.startsWith('::ffff:127.')) return null;
+  if (ipCountryCache.has(ip)) return ipCountryCache.get(ip);
+  try {
+    const r = await fetch(`https://ipwho.is/${encodeURIComponent(ip)}?fields=success,country_code`);
+    const j = await r.json();
+    const cc = j?.success && j.country_code ? j.country_code : null;
+    ipCountryCache.set(ip, cc);
+    return cc;
+  } catch { return null; }
+}
+
 // ── Bot opponents ─────────────────────────────────────────────────────────────
 // Always shown online in the lobby. Each has a fixed personality profile.
 
 const BOTS = {
-  bot_rickdeckard: { name: 'Rick Deckard', avatarId: 'cigar', profile: getProfile('tag') },     // tight-aggressive pro
-  bot_hal:         { name: 'HAL 9000',     avatarId: 'queen', profile: getProfile('nit') },     // cold, patient, only moves with the goods
-  bot_johnny5:     { name: 'Johnny 5',     avatarId: 'cigar', profile: getProfile('maniac') },  // any two cards, max pressure
+  bot_rickdeckard: { name: 'Rick Deckard', avatarId: 'cigar', country: 'US', profile: getProfile('tag') },     // tight-aggressive pro
+  bot_hal:         { name: 'HAL 9000',     avatarId: 'queen', country: 'US', profile: getProfile('nit') },     // cold, patient, only moves with the goods
+  bot_johnny5:     { name: 'Johnny 5',     avatarId: 'cigar', country: 'US', profile: getProfile('maniac') },  // any two cards, max pressure
 };
 
 function botInMatch(botId) {
@@ -208,13 +229,13 @@ function broadcastMatchList() {
   for (const sp of socketPlayers.values()) {
     if (sp.playerName && !seen.has(sp.playerId)) {
       seen.add(sp.playerId);
-      online.push({ id: sp.playerId, name: sp.playerName, avatarId: sp.avatarId, inMatch: sp.matchId !== null, elo: eloCache[sp.playerId] || 1200 });
+      online.push({ id: sp.playerId, name: sp.playerName, avatarId: sp.avatarId, inMatch: sp.matchId !== null, elo: eloCache[sp.playerId] || 1200, country: sp.country || null });
     }
   }
 
   // Bots are always online
   for (const [botId, b] of Object.entries(BOTS)) {
-    online.push({ id: botId, name: b.name, avatarId: b.avatarId, inMatch: botInMatch(botId), isBot: true, elo: eloCache[botId] || 1200 });
+    online.push({ id: botId, name: b.name, avatarId: b.avatarId, inMatch: botInMatch(botId), isBot: true, elo: eloCache[botId] || 1200, country: b.country || null });
   }
 
   for (const [sid, sp] of socketPlayers.entries()) {
@@ -385,16 +406,17 @@ io.on('connection', (socket) => {
 
   socket.on('enter-lobby', async ({ playerId } = {}) => {
     if (playerId) {
-      // Load display_name, avatar_id and ELO from DB — client never sends these
-      let playerName = 'Player', avatarId = 'cigar';
+      // Load display_name, avatar_id, ELO and country from DB — client never sends these
+      let playerName = 'Player', avatarId = 'cigar', country = null;
       try {
         const { rows } = await db.query(
-          `SELECT p.display_name, p.avatar_id, s.elo
+          `SELECT p.display_name, p.avatar_id, p.country, s.elo
              FROM players p LEFT JOIN player_stats s ON s.player_id = p.id
             WHERE p.id=$1`, [playerId]);
         if (rows.length) {
           playerName = rows[0].display_name;
           avatarId = rows[0].avatar_id;
+          country = rows[0].country;
           if (rows[0].elo != null && eloCache[playerId] == null) eloCache[playerId] = rows[0].elo;
         }
       } catch (e) { console.error('[enter-lobby] db lookup failed:', e.message); }
@@ -406,8 +428,19 @@ io.on('connection', (socket) => {
         playerId,
         playerName,
         avatarId,
+        country,
         socketId: socket.id,
       });
+
+      // First sight of this player: geolocate their IP in the background
+      if (!country) {
+        lookupCountry(socketIp(socket)).then(cc => {
+          if (!cc) return;
+          db.query('UPDATE players SET country=$1 WHERE id=$2', [cc, playerId]).catch(() => {});
+          const cur = socketPlayers.get(socket.id);
+          if (cur && cur.playerId === playerId) { cur.country = cc; broadcastMatchList(); }
+        });
+      }
 
       // Rejoin an active match if this player was in a disconnect grace period
       const pending = pendingDisconnects.get(playerId);
@@ -715,6 +748,19 @@ io.on('connection', (socket) => {
     broadcastMatchState(m);
     broadcastMatchList();
     tryAutoStart(m);
+  });
+
+  // Challenger withdraws their own pending challenge
+  socket.on('challenge-withdraw', ({ toId }) => {
+    const sp = socketPlayers.get(socket.id);
+    if (!sp) return;
+    const key = `${sp.playerId}:${toId}`;
+    const ch  = challenges.get(key);
+    if (!ch) return;
+    clearTimeout(ch.timer);
+    challenges.delete(key);
+    io.to(ch.toSocketId).emit('challenge-voided', { otherId: sp.playerId });
+    socket.emit('challenge-voided', { otherId: toId });
   });
 
   socket.on('challenge-decline', ({ fromId }) => {
