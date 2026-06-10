@@ -10,7 +10,7 @@ const { redis }      = require('./redis');
 const { startHand: logStartHand, logAction, flushHandToDb } = require('./handLogger');
 const { enqueue, dequeue, tryPair, calcElo } = require('./matchmaker');
 const { decideAction, stateFromGame } = require('./bot/botBrain');
-const { PROFILES, getProfile } = require('./bot/profiles');
+const { getProfile } = require('./bot/profiles');
 
 const path = require('path');
 
@@ -46,11 +46,18 @@ const eloCache = {};
 // `${fromId}:${toId}` → { timer } — pending direct challenges
 const challenges = new Map();
 
-// ── Bot opponent ──────────────────────────────────────────────────────────────
+// ── Bot opponents ─────────────────────────────────────────────────────────────
+// Always shown online in the lobby. Each has a fixed personality profile.
 
-const BOT_ID     = 'bot_checkcall';
-const BOT_NAME   = 'Monkey Bot';
-const BOT_AVATAR = 'cigar';
+const BOTS = {
+  bot_rickdeckard: { name: 'Rick Deckard', avatarId: 'cigar', profile: getProfile('tag') },     // tight-aggressive pro
+  bot_hal:         { name: 'HAL 9000',     avatarId: 'queen', profile: getProfile('nit') },     // cold, patient, only moves with the goods
+  bot_johnny5:     { name: 'Johnny 5',     avatarId: 'cigar', profile: getProfile('maniac') },  // any two cards, max pressure
+};
+
+function botInMatch(botId) {
+  return [...matches.values()].some(m => !m.ended && m.botId === botId);
+}
 
 // ── Match helpers ─────────────────────────────────────────────────────────────
 
@@ -65,7 +72,7 @@ function createMatch(p1, p2) {
     ended: false,
     autoStartTimer: null, nextHandTimer: null,
     turnTimer: null, timerPlayerId: null, turnDeadline: null,
-    botTimer: null, isBotMatch: false,
+    botTimer: null, isBotMatch: false, botId: null,
     handCount: 0, handEventSeq: 0, currentHandUuid: null,
     maxPlayers: 2, name: `match:${id.slice(0, 8)}`, emoji: '♠',
   };
@@ -121,17 +128,17 @@ function startTurnTimer(m) {
 // illegal action, fall back to check/call so the match never stalls.
 function maybeScheduleBotAction(m) {
   if (!m.isBotMatch || m.ended || m.botTimer) return;
-  if (m.game.currentPlayerId !== BOT_ID) return;
+  if (m.game.currentPlayerId !== m.botId) return;
   m.botTimer = setTimeout(() => {
     m.botTimer = null;
-    if (m.ended || m.game.currentPlayerId !== BOT_ID) return;
-    const bot = m.game.players.find(p => p.id === BOT_ID);
+    if (m.ended || m.game.currentPlayerId !== m.botId) return;
+    const bot = m.game.players.find(p => p.id === m.botId);
     if (!bot) return;
     const fallback = () => ({ action: bot.roundBet >= m.game.currentBet ? 'check' : 'call' });
     let d;
     try {
-      d = decideAction(stateFromGame(m.game, BOT_ID), m.botProfile || getProfile('tag'));
-      console.log(`[bot] ${m.botProfile?.name || 'tag'}: ${d.action}${d.amount ? ' to ' + d.amount : ''}`, JSON.stringify(d.meta));
+      d = decideAction(stateFromGame(m.game, m.botId), m.botProfile || getProfile('tag'));
+      console.log(`[bot] ${BOTS[m.botId]?.name} (${m.botProfile?.name || 'tag'}): ${d.action}${d.amount ? ' to ' + d.amount : ''}`, JSON.stringify(d.meta));
     } catch (e) {
       console.error('[bot] brain error, using check/call:', e.message);
       d = fallback();
@@ -139,13 +146,13 @@ function maybeScheduleBotAction(m) {
     try {
       const prevCC = m.game.communityCards?.length || 0;
       try {
-        m.game.handleAction(BOT_ID, d.action, d.amount);
+        m.game.handleAction(m.botId, d.action, d.amount);
       } catch (e) {
         console.error(`[bot] ${d.action} rejected (${e.message}) — using check/call`);
         d = fallback();
-        m.game.handleAction(BOT_ID, d.action);
+        m.game.handleAction(m.botId, d.action);
       }
-      logAction(m, m.game, BOT_ID, d.action, d.amount, prevCC)
+      logAction(m, m.game, m.botId, d.action, d.amount, prevCC)
         .catch(e => console.error('[bot] logAction:', e.message));
       broadcastMatchState(m);
       if (m.game.phase === 'showdown') scheduleNextHand(m, cfg.inter_hand_delay_ms);
@@ -203,6 +210,11 @@ function broadcastMatchList() {
       seen.add(sp.playerId);
       online.push({ id: sp.playerId, name: sp.playerName, avatarId: sp.avatarId, inMatch: sp.matchId !== null });
     }
+  }
+
+  // Bots are always online
+  for (const [botId, b] of Object.entries(BOTS)) {
+    online.push({ id: botId, name: b.name, avatarId: b.avatarId, inMatch: botInMatch(botId), isBot: true });
   }
 
   for (const [sid, sp] of socketPlayers.entries()) {
@@ -443,21 +455,26 @@ io.on('connection', (socket) => {
 
     dequeue(sp.playerId); // in case they were sitting in the matchmaking queue
 
+    // Prefer a bot that isn't already seated; fall back to any of them
+    const free = Object.keys(BOTS).filter(id => !botInMatch(id));
+    const pool = free.length ? free : Object.keys(BOTS);
+    const botId = pool[Math.floor(Math.random() * pool.length)];
+    const bot = BOTS[botId];
+
     const p1 = { playerId: sp.playerId, playerName: sp.playerName, avatarId: sp.avatarId, socketId: socket.id };
     // Bot gets a fake socketId — io.to() on an empty room is a harmless no-op
-    const p2 = { playerId: BOT_ID, playerName: BOT_NAME, avatarId: BOT_AVATAR, socketId: `bot:${randomUUID()}` };
+    const p2 = { playerId: botId, playerName: bot.name, avatarId: bot.avatarId, socketId: `bot:${randomUUID()}` };
     const m = createMatch(p1, p2);
     m.isBotMatch = true;
-    // Random personality per match (tag/lag/nit/station/maniac) — kept across rematches
-    const names = Object.keys(PROFILES);
-    m.botProfile = getProfile(names[Math.floor(Math.random() * names.length)]);
-    console.log(`[bot] new bot match vs ${sp.playerName} — profile: ${m.botProfile.name}`);
+    m.botId = botId;
+    m.botProfile = bot.profile;
+    console.log(`[bot] new bot match vs ${sp.playerName} — ${bot.name} (${bot.profile.name})`);
     sp.matchId = m.id;
 
     m.game.addPlayer(p1.playerId, p1.playerName, p1.avatarId);
     m.game.addPlayer(p2.playerId, p2.playerName, p2.avatarId);
 
-    socket.emit('match-found', { matchId: m.id, opponent: { name: BOT_NAME } });
+    socket.emit('match-found', { matchId: m.id, opponent: { name: bot.name } });
     broadcastMatchState(m);
     broadcastMatchList();
     tryAutoStart(m);
@@ -511,7 +528,7 @@ io.on('connection', (socket) => {
 
     if (vote) {
       m.rematchVotes.add(sp.playerId);
-      if (m.isBotMatch) m.rematchVotes.add(BOT_ID); // bot always accepts a rematch
+      if (m.isBotMatch) m.rematchVotes.add(m.botId); // bot always accepts a rematch
       // Notify the other player that this player wants a rematch
       const other = matchPlayers(m).find(p => p.playerId !== sp.playerId);
       if (other) {
@@ -529,6 +546,7 @@ io.on('connection', (socket) => {
         newMatch.previousMatchUuid = m.id; // link back for DB
         newMatch.isBotMatch = m.isBotMatch;
         newMatch.botProfile = m.botProfile;
+        newMatch.botId = m.botId;
         matches.set(newMatchId, newMatch);
 
         // Update socketPlayers to point to the new match
@@ -1620,11 +1638,24 @@ async function initAvatars() {
 
 const PORT = process.env.PORT || 3843;
 
+async function initBots() {
+  for (const [id, b] of Object.entries(BOTS)) {
+    await db.query(
+      `INSERT INTO players (id, display_name, avatar_id, is_guest)
+       VALUES ($1, $2, $3, false)
+       ON CONFLICT (id) DO UPDATE SET display_name=$2, avatar_id=$3, last_seen_at=NOW()`,
+      [id, b.name, b.avatarId]
+    ).catch(e => console.error(`[bots] upsert ${id} failed:`, e.message));
+  }
+  console.log('[bots] online:', Object.values(BOTS).map(b => `${b.name} (${b.profile.name})`).join(', '));
+}
+
 async function start() {
   await redis.connect().catch(e => console.error('[redis] connect failed:', e.message));
   cfg = await loadGameConfig();
   uiCfg = await loadUiConfig();
   validAvatars = await initAvatars();
+  await initBots();
   server.listen(PORT, () => console.log(`Poker server on port ${PORT}`));
 }
 
