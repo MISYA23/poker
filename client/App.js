@@ -161,6 +161,16 @@ export default function App() {
     emit('find-match', { playerId });
   }, [emit]);
 
+  const onPlayBot = useCallback((playerId) => {
+    if (isObserverRef.current) {
+      emit('unobserve', { matchId: matchIdRef.current });
+      isObserverRef.current = false;
+      matchIdRef.current = null;
+    }
+    setError(null);
+    emit('play-bot', { playerId });
+  }, [emit]);
+
   const onCancelMatch = useCallback(() => {
     emit('cancel-match', {});
     setInQueue(false);
@@ -205,7 +215,7 @@ export default function App() {
       gameState, myId, error, inQueue, matchList, onlinePlayers, myElo, matchOver,
       playerInfo, myRecentMatches, deckStyle, setDeckStyle, opponentDisconnected,
       incomingChallenge, setIncomingChallenge, pendingFriendRequests, setPendingFriendRequests,
-      uiConfig, emit, onLogin, onLogout, onUpdateProfile, onFindMatch, onCancelMatch,
+      uiConfig, emit, onLogin, onLogout, onUpdateProfile, onFindMatch, onPlayBot, onCancelMatch,
       onObserve, onAction, onLeave, onRematch, navigationRef,
     }}>
       <GestureHandlerRootView style={{ flex: 1 }}>

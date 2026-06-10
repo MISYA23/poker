@@ -44,6 +44,12 @@ const eloCache = {};
 // `${fromId}:${toId}` → { timer } — pending direct challenges
 const challenges = new Map();
 
+// ── Bot opponent ──────────────────────────────────────────────────────────────
+
+const BOT_ID     = 'bot_checkcall';
+const BOT_NAME   = 'Monkey Bot';
+const BOT_AVATAR = 'cigar';
+
 // ── Match helpers ─────────────────────────────────────────────────────────────
 
 function createMatch(p1, p2) {
@@ -57,6 +63,7 @@ function createMatch(p1, p2) {
     ended: false,
     autoStartTimer: null, nextHandTimer: null,
     turnTimer: null, timerPlayerId: null, turnDeadline: null,
+    botTimer: null, isBotMatch: false,
     handCount: 0, handEventSeq: 0, currentHandUuid: null,
     maxPlayers: 2, name: `match:${id.slice(0, 8)}`, emoji: '♠',
   };
@@ -73,7 +80,8 @@ function resetRoom(m) {
   clearTimeout(m.autoStartTimer);
   clearTimeout(m.nextHandTimer);
   clearTimeout(m.turnTimer);
-  m.autoStartTimer = m.nextHandTimer = m.turnTimer = null;
+  clearTimeout(m.botTimer);
+  m.autoStartTimer = m.nextHandTimer = m.turnTimer = m.botTimer = null;
   m.timerPlayerId = null;
   m.turnDeadline = null;
   m.rematchVotes = new Set();
@@ -103,10 +111,37 @@ function startTurnTimer(m) {
   }, cfg.turn_seconds * 1000);
 }
 
+// ── Bot play ──────────────────────────────────────────────────────────────────
+
+// Check if legal, otherwise call. Scheduled from broadcastMatchState so every
+// state change (hand start, human action, next hand) gives the bot its turn.
+function maybeScheduleBotAction(m) {
+  if (!m.isBotMatch || m.ended || m.botTimer) return;
+  if (m.game.currentPlayerId !== BOT_ID) return;
+  m.botTimer = setTimeout(() => {
+    m.botTimer = null;
+    if (m.ended || m.game.currentPlayerId !== BOT_ID) return;
+    const bot = m.game.players.find(p => p.id === BOT_ID);
+    if (!bot) return;
+    const action = bot.roundBet >= m.game.currentBet ? 'check' : 'call';
+    try {
+      const prevCC = m.game.communityCards?.length || 0;
+      m.game.handleAction(BOT_ID, action);
+      logAction(m, m.game, BOT_ID, action, undefined, prevCC)
+        .catch(e => console.error('[bot] logAction:', e.message));
+      broadcastMatchState(m);
+      if (m.game.phase === 'showdown') scheduleNextHand(m, cfg.inter_hand_delay_ms);
+    } catch (err) {
+      console.error('[bot] action failed:', err.message);
+    }
+  }, 600 + Math.floor(Math.random() * 900));
+}
+
 // ── Broadcast ─────────────────────────────────────────────────────────────────
 
 function broadcastMatchState(m) {
   startTurnTimer(m);
+  maybeScheduleBotAction(m);
   for (const p of matchPlayers(m)) {
     const sp = socketPlayers.get(p.socketId);
     if (!sp) continue;
@@ -216,6 +251,8 @@ function scheduleNextHand(m, delay = 5000) {
 async function endMatch(m, winnerId) {
   if (m.ended) return;
   m.ended = true;
+  clearTimeout(m.botTimer);
+  m.botTimer = null;
 
   const loser  = matchPlayers(m).find(p => p.playerId !== winnerId);
   const winner = matchPlayers(m).find(p => p.playerId === winnerId);
@@ -233,7 +270,8 @@ async function endMatch(m, winnerId) {
           .then(r => r.rows[0]?.elo ?? 1200).catch(() => 1200),
   ]);
 
-  const { winnerGain, loserLoss } = calcElo(wElo, lElo);
+  // Bot matches are unrated — no ELO movement for either side
+  const { winnerGain, loserLoss } = m.isBotMatch ? { winnerGain: 0, loserLoss: 0 } : calcElo(wElo, lElo);
   const wNewElo = wElo + winnerGain;
   const lNewElo = lElo - loserLoss;
 
@@ -265,7 +303,9 @@ async function persistMatchResult(m, winner, loser, wEloBefore, lEloBefore, wElo
     [p.playerId, (p.playerName || 'Player').trim().slice(0, 20)]
   )));
 
-  await Promise.all([
+  // Bot matches don't touch player_stats — unrated, and the bot must never
+  // appear on the leaderboard (leaderboard reads from player_stats)
+  const statsQueries = m.isBotMatch ? [] : [
     db.query(
       `INSERT INTO player_stats (player_id, elo, matches_played, matches_won)
        VALUES ($1, $2, 1, 1)
@@ -281,6 +321,10 @@ async function persistMatchResult(m, winner, loser, wEloBefore, lEloBefore, wElo
          elo=$2, matches_played=player_stats.matches_played+1, updated_at=NOW()`,
       [loser.playerId, lEloAfter]
     ),
+  ];
+
+  await Promise.all([
+    ...statsQueries,
     db.query(
       `INSERT INTO matches (uuid, player1_id, player2_id, status, ended_at, winner_id,
         player1_elo_before, player2_elo_before, player1_elo_after, player2_elo_after)
@@ -372,6 +416,31 @@ io.on('connection', (socket) => {
     }
   });
 
+  socket.on('play-bot', ({ playerId }) => {
+    if (!playerId) { socket.emit('error', { message: 'Missing player ID.' }); return; }
+
+    const sp = socketPlayers.get(socket.id);
+    if (!sp?.playerName) { socket.emit('error', { message: 'Not in lobby.' }); return; }
+    if (sp.matchId) { socket.emit('error', { message: 'Finish your current match first.' }); return; }
+
+    dequeue(sp.playerId); // in case they were sitting in the matchmaking queue
+
+    const p1 = { playerId: sp.playerId, playerName: sp.playerName, avatarId: sp.avatarId, socketId: socket.id };
+    // Bot gets a fake socketId — io.to() on an empty room is a harmless no-op
+    const p2 = { playerId: BOT_ID, playerName: BOT_NAME, avatarId: BOT_AVATAR, socketId: `bot:${randomUUID()}` };
+    const m = createMatch(p1, p2);
+    m.isBotMatch = true;
+    sp.matchId = m.id;
+
+    m.game.addPlayer(p1.playerId, p1.playerName, p1.avatarId);
+    m.game.addPlayer(p2.playerId, p2.playerName, p2.avatarId);
+
+    socket.emit('match-found', { matchId: m.id, opponent: { name: BOT_NAME } });
+    broadcastMatchState(m);
+    broadcastMatchList();
+    tryAutoStart(m);
+  });
+
   socket.on('cancel-match', () => {
     const sp = socketPlayers.get(socket.id);
     if (sp) { dequeue(sp.playerId); sp.matchId = null; }
@@ -403,7 +472,7 @@ io.on('connection', (socket) => {
     try {
       const prevCC = m.game.communityCards?.length || 0;
       m.game.handleAction(sp.playerId, action, amount);
-      logAction(m, m.game, sp.playerId, sp.playerName, action, amount, prevCC)
+      logAction(m, m.game, sp.playerId, action, amount, prevCC)
         .catch(e => console.error('[hand] logAction:', e.message));
       broadcastMatchState(m);
       if (m.game.phase === 'showdown') scheduleNextHand(m, cfg.inter_hand_delay_ms);
@@ -420,6 +489,7 @@ io.on('connection', (socket) => {
 
     if (vote) {
       m.rematchVotes.add(sp.playerId);
+      if (m.isBotMatch) m.rematchVotes.add(BOT_ID); // bot always accepts a rematch
       // Notify the other player that this player wants a rematch
       const other = matchPlayers(m).find(p => p.playerId !== sp.playerId);
       if (other) {
@@ -435,6 +505,7 @@ io.on('connection', (socket) => {
         matches.delete(newMatch.id);
         newMatch.id = newMatchId;
         newMatch.previousMatchUuid = m.id; // link back for DB
+        newMatch.isBotMatch = m.isBotMatch;
         matches.set(newMatchId, newMatch);
 
         // Update socketPlayers to point to the new match
