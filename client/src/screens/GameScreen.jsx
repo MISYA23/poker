@@ -13,13 +13,14 @@ import BettingControls from '../components/BettingControls';
 import { colors } from '../theme';
 import { VERSION_DISPLAY } from '../config';
 
-// Table variants — switch by changing TABLE_VARIANT ('tall' | 'fat')
+// Table variants — switch by changing TABLE_VARIANT ('tall' | 'fat').
+// Each variant carries its own native aspect so the table box always matches it.
 const TABLE_VARIANTS = {
-  tall: require('../../assets/game-table.png'),
-  fat:  require('../../assets/game-table-fat.png'),
+  tall: { src: require('../../assets/game-table.png'),     aspect: 1024 / 1536 },
+  fat:  { src: require('../../assets/game-table-fat.png'), aspect: 960 / 1536 },
 };
 const TABLE_VARIANT = 'fat';
-const INGAME_TABLE  = TABLE_VARIANTS[TABLE_VARIANT];
+const INGAME_TABLE  = TABLE_VARIANTS[TABLE_VARIANT].src;
 
 const TURN_DURATION_MS = 20000;
 const TOP_BAR_H    = 50;
@@ -35,7 +36,7 @@ const DESIGN_H = Math.round(DESIGN_W * 1.6);  // 629 — 1:1.6, matches the tabl
 // ─── Table geometry (spec §16: 1024×1536 asset, aspect 0.667) ────────────────
 // The asset is natively 1:1.5 like the canvas — it fills it edge to edge,
 // minus ~5px margin per side.
-const TABLE_ASPECT = 960 / 1536;  // 1:1.6, same as the canvas
+const TABLE_ASPECT = TABLE_VARIANTS[TABLE_VARIANT].aspect;
 const TABLE_W  = DESIGN_W - 10;
 const TABLE_H  = Math.round(TABLE_W / TABLE_ASPECT);
 const TABLE_L  = Math.round((DESIGN_W - TABLE_W) / 2);
@@ -45,7 +46,7 @@ const TABLE_T  = Math.round(0.5 * DESIGN_H - TABLE_H / 2);
 // Circle diameter drives everything. Nameplate clears the circle with a fixed
 // overlap (44px) + padding (10px gap) — works regardless of avatar size.
 const RING_W_PX  = 6;
-const AVATAR_SZ  = 96;                                     // circle diameter — scaled ×1.114 with table (1.14→1.27)
+const AVATAR_SZ  = 96;                                     // circle diameter
 const POD_H      = AVATAR_SZ + 14;                         // 100 — snug around circle
 const NP_H       = Math.round(0.75 * AVATAR_SZ);           // 72 — 75% of avatar height, centered (12.5% gap top + bottom)
 const NP_TOP     = Math.round((POD_H - NP_H) / 2);        // 7
@@ -56,13 +57,9 @@ const RING_R     = AVATAR_SZ / 2;                           // 43
 const RING_BOX   = Math.ceil(RING_R * 2 + RING_W_PX);     // 92
 const RING_CIRC  = 2 * Math.PI * RING_R;                   // ~270.2
 
-// ─── Group A layout — spec §5 coordinate schema → 393×760 canvas pixels ──────
-// x/y = element CENTER as fraction of canvas; positions derived below.
-const POD_W        = Math.round(0.62 * DESIGN_W);                          // 244 — scaled ×1.114 with table
+// ─── Group A layout — canvas-pixel positions derived from table geometry ─────
+const POD_W        = Math.round(0.62 * DESIGN_W);                          // 244
 const POD_L        = Math.round((DESIGN_W - POD_W) / 2);                  // 87
-// Ring center = TABLE_T + 6.5% of TABLE_H (skull ornament position in asset)
-const RING_TOP_Y   = Math.round(TABLE_T + 0.065 * TABLE_H);               // 146
-const RING_BOT_Y   = Math.round(TABLE_T + TABLE_H - 0.065 * TABLE_H);     // 638
 // Shared x-anchor: left edge of column C = TABLE_L + 2 * (TABLE_W / 4)
 const COL_C_X    = TABLE_L + 2 * (TABLE_W / 4);                            // 196.5
 // Pod left: avatar (right:0) center lands on COL_C_X
