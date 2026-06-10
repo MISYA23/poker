@@ -235,12 +235,12 @@ function DisconnectBanner({ deadline }) {
 }
 
 // ─── PlayerPod — avatar + nameplate only (hole cards are now separate) ────────
-function PlayerPod({ player, isMe, turnDeadline, lastAction, win, displayChips, deckStyle }) {
+function PlayerPod({ player, isMe, observing, turnDeadline, lastAction, win, displayChips, deckStyle }) {
   const actionLbl = useActionFlash(player, lastAction);
   const present   = !!player;
   const isActive  = present && !!player.isCurrentPlayer;
   const allIn     = present && !!player.allIn;
-  const displayName = present ? player.name : (isMe ? 'You' : 'Waiting…');
+  const displayName = present ? player.name : (isMe && !observing ? 'You' : 'Waiting…');
   const chipLabel = !present ? '—'
     : (win ? '🏆 Winner!' : (actionLbl || (displayChips ?? player.chips).toLocaleString()));
 
@@ -344,8 +344,11 @@ export default function GameScreen({ navigation }) {
     }
   };
 
-  const me       = gameState?.players?.find(p => p.id === myId);
-  const opponent = gameState?.players?.find(p => p.id !== myId);
+  // Spectators aren't in players[] — seat player1 at the bottom, player2 on top
+  const observing = !!gameState?.observing;
+  const me       = observing ? gameState?.players?.[0] : gameState?.players?.find(p => p.id === myId);
+  const opponent = observing ? gameState?.players?.[1] : gameState?.players?.find(p => p.id !== myId);
+  const bottomId = observing ? me?.id : myId;
   const totalPot = gameState?.pot || 0;
 
   const winnerId = matchOver?.winnerId;
@@ -356,8 +359,8 @@ export default function GameScreen({ navigation }) {
   if (gameState?.phase === 'showdown' && gameState?.winners) {
     for (const w of gameState.winners) winnerMap[w.playerId] = w;
   }
-  const isMyTurn    = gameState?.currentPlayerId === myId && !['waiting','showdown'].includes(gameState?.phase);
-  const myDeadline  = isMyTurn ? gameState?.turnDeadline : null;
+  const isMyTurn    = !observing && gameState?.currentPlayerId === myId && !['waiting','showdown'].includes(gameState?.phase);
+  const myDeadline  = (observing ? me?.isCurrentPlayer : isMyTurn) ? gameState?.turnDeadline : null;
   const oppDeadline = opponent?.isCurrentPlayer ? gameState?.turnDeadline : null;
 
   // Staggered community card reveal
@@ -420,7 +423,7 @@ export default function GameScreen({ navigation }) {
       return;
     }
     const winner = gameState.winners[0];
-    const dir = winner.playerId === myId ? 1 : -1;
+    const dir = winner.playerId === bottomId ? 1 : -1;
     setFlightAmount(winner.amount || snap.pot || totalPot);
     flightY.setValue(0);
     flightScale.setValue(1);
@@ -569,9 +572,9 @@ export default function GameScreen({ navigation }) {
 
           {/* Player pod */}
           <View style={s.myPodSlot}>
-            <PlayerPod player={me} isMe={true}
+            <PlayerPod player={me} isMe={true} observing={observing}
               turnDeadline={myDeadline} lastAction={gameState?.lastAction}
-              win={me ? activeWinners[myId] : null}
+              win={me ? activeWinners[me.id] : null}
               displayChips={me ? chipsFor(me) : 0}
               deckStyle={deckStyle} />
           </View>
@@ -601,6 +604,13 @@ export default function GameScreen({ navigation }) {
             <Text style={s.feedbackBtnTxt}>💬 Feedback</Text>
           </Pressable>
         </View>
+
+        {/* Spectator banner */}
+        {observing && (
+          <View style={s.observingBanner} pointerEvents="none">
+            <Text style={s.observingTxt}>👁 Spectating</Text>
+          </View>
+        )}
 
         {/* Disconnect banner — opponent vacated their seat, grace running */}
         {opponentDisconnected && (
@@ -637,7 +647,7 @@ export default function GameScreen({ navigation }) {
                 <Pressable style={s.menuItem}
                   onPress={() => {
                     setMenuOpen(false);
-                    if (gameState && me && !matchOver) { setLeaveWarning(true); } else { onLeave(); }
+                    if (gameState && me && !matchOver && !observing) { setLeaveWarning(true); } else { onLeave(); }
                   }}>
                   <Text style={s.menuItemTxt}>🚪 Leave Table</Text>
                 </Pressable>
@@ -752,14 +762,22 @@ export default function GameScreen({ navigation }) {
               <Avatar size={104} avatarId={winnerAvatarId} />
             </View>
 
-            <View style={s.eloRow}>
-              <Text style={[s.eloChange, matchOver.eloChange >= 0 ? s.eloPos : s.eloNeg]}>
-                {matchOver.eloChange >= 0 ? '+' : ''}{matchOver.eloChange} ELO
-              </Text>
-              <Text style={s.eloNew}>→ {matchOver.newElo}</Text>
-            </View>
+            {matchOver.eloChange != null && (
+              <View style={s.eloRow}>
+                <Text style={[s.eloChange, matchOver.eloChange >= 0 ? s.eloPos : s.eloNeg]}>
+                  {matchOver.eloChange >= 0 ? '+' : ''}{matchOver.eloChange} ELO
+                </Text>
+                <Text style={s.eloNew}>→ {matchOver.newElo}</Text>
+              </View>
+            )}
 
-            {matchOver.myVote ? (
+            {matchOver.observer ? (
+              <View style={s.modalBtns}>
+                <Pressable style={[s.modalBtn, s.modalBtnYes]} onPress={onLeave}>
+                  <Text style={s.modalBtnTxt}>Back to Lobby</Text>
+                </Pressable>
+              </View>
+            ) : matchOver.myVote ? (
               <Text style={s.modalWaiting}>
                 {matchOver.opponentWantsRematch ? 'Starting rematch…' : 'Waiting for opponent…'}
               </Text>
@@ -919,6 +937,8 @@ const s = StyleSheet.create({
   blindsTxt:  { color: 'rgba(255,255,255,0.45)', fontSize: 12, fontWeight: '600' },
   menuBtn:    { width: 36, height: 36, borderRadius: 8, backgroundColor: 'rgba(0,0,0,0.5)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)', alignItems: 'center', justifyContent: 'center' },
   menuBtnTxt: { color: colors.white, fontSize: 16 },
+  observingBanner: { alignSelf: 'center', marginTop: 4, backgroundColor: 'rgba(0,0,0,0.5)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)', borderRadius: 8, paddingVertical: 4, paddingHorizontal: 12 },
+  observingTxt:    { color: 'rgba(255,255,255,0.7)', fontSize: 12, fontWeight: '700' },
   disconnectBanner: { marginHorizontal: 12, marginTop: 4, backgroundColor: 'rgba(251,146,60,0.18)', borderWidth: 1, borderColor: 'rgba(251,146,60,0.5)', borderRadius: 8, paddingVertical: 6, paddingHorizontal: 12 },
   disconnectTxt:    { color: '#fb923c', fontSize: 12, fontWeight: '700', textAlign: 'center' },
   bottomChrome: { paddingHorizontal: 12, paddingBottom: 10, paddingTop: 6, alignItems: 'center' },
