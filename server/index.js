@@ -300,8 +300,8 @@ async function endMatch(m, winnerId) {
           .then(r => r.rows[0]?.elo ?? 1200).catch(() => 1200),
   ]);
 
-  // Bot matches are unrated — no ELO movement for either side
-  const { winnerGain, loserLoss } = m.isBotMatch ? { winnerGain: 0, loserLoss: 0 } : calcElo(wElo, lElo);
+  // Bot matches are rated like any other — bots live or die by their ELO
+  const { winnerGain, loserLoss } = calcElo(wElo, lElo);
   const wNewElo = wElo + winnerGain;
   const lNewElo = lElo - loserLoss;
 
@@ -333,9 +333,7 @@ async function persistMatchResult(m, winner, loser, wEloBefore, lEloBefore, wElo
     [p.playerId, (p.playerName || 'Player').trim().slice(0, 20)]
   )));
 
-  // Bot matches don't touch player_stats — unrated, and the bot must never
-  // appear on the leaderboard (leaderboard reads from player_stats)
-  const statsQueries = m.isBotMatch ? [] : [
+  await Promise.all([
     db.query(
       `INSERT INTO player_stats (player_id, elo, matches_played, matches_won)
        VALUES ($1, $2, 1, 1)
@@ -351,10 +349,6 @@ async function persistMatchResult(m, winner, loser, wEloBefore, lEloBefore, wElo
          elo=$2, matches_played=player_stats.matches_played+1, updated_at=NOW()`,
       [loser.playerId, lEloAfter]
     ),
-  ];
-
-  await Promise.all([
-    ...statsQueries,
     db.query(
       `INSERT INTO matches (uuid, player1_id, player2_id, status, ended_at, winner_id,
         player1_elo_before, player2_elo_before, player1_elo_after, player2_elo_after)

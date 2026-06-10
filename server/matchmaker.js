@@ -22,12 +22,13 @@ function tryPair() {
 
 function queueSize() { return queue.length; }
 
-// Standard ELO — K=32
+// Standard ELO — K=32, zero-sum: the loser drops exactly what the winner gains.
+// (K * expectedWinner is what the loser would lose for an UPSET; the loser's
+// expected score is 1 - expectedWinner, so their loss mirrors the winner's gain.)
 function calcElo(winnerElo, loserElo, K = 32) {
   const expected = 1 / (1 + Math.pow(10, (loserElo - winnerElo) / 400));
   const winnerGain = Math.round(K * (1 - expected));
-  const loserLoss  = Math.round(K * expected);
-  return { winnerGain, loserLoss };
+  return { winnerGain, loserLoss: winnerGain };
 }
 
 module.exports = { enqueue, dequeue, tryPair, queueSize, calcElo };
