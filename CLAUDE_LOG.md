@@ -52,3 +52,6 @@ and log [START] / [DONE] entries for every task. See global CLAUDE.md for protoc
 [13:56 UTC] [START] match format — escalating blinds every N hands + admin Match Format config section — branch feature/match-format (worktree)
 [14:00 UTC] [DONE] v5.113: seat-level disconnect grace (20s, DISCONNECT_GRACE_MS/cfg override) — vacancy on match object, enter-lobby rejoin priority, graceTimer reaped by endMatch, logout forfeits, banner restored; 42/42 local tests — changed: server/index.js, client/App.js, client/src/screens/GameScreen.jsx, server/scripts/matchLifecycleTest.js, client/src/config.js
 [14:05 UTC] [DONE] v5.113 deployed + verified on prod — 42/42 across all 3 suites incl. real 20s grace expiry + same-match rejoin
+[21:10 UTC] [START] digital ads asset pack — logo exports, screenshots, 4:5/1:1 images, 15s video (16:9/1:1/9:16), ad copy — output to poker/digital ads/
+[21:20 UTC] [START] Lobby scroll fix — Online/Leaderboard section scrollable — branch fix/lobby-scroll
+[21:23 UTC] [DONE] v5.129: lobby Online/Leaderboard panel internal scroll (maxHeight 360, hidden scrollbar) + PLAY/PLAY BOT equal-size + challenge buttons full 420 width — changed: client/src/screens/LobbyScreen.jsx, client/src/config.js — branch fix/lobby-scroll pushed, NOT merged to main
