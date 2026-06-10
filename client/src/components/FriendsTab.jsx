@@ -35,7 +35,8 @@ function PlayerRow({ player, action, actionLabel, actionColor, secondAction, sec
 }
 
 export default function FriendsTab({ onlinePlayers }) {
-  const { playerInfo, emit, incomingChallenge, setIncomingChallenge, setPendingFriendRequests } = useContext(GameContext);
+  const { playerInfo, emit, incomingChallenges = [], onAcceptChallenge, onDeclineChallenge, setPendingFriendRequests } = useContext(GameContext);
+  const incomingChallenge = incomingChallenges[0] || null;
 
   const [friends, setFriends]             = useState(null);
   const [loading, setLoading]             = useState(true);
@@ -114,15 +115,11 @@ export default function FriendsTab({ onlinePlayers }) {
   };
 
   const acceptChallenge = () => {
-    if (!incomingChallenge) return;
-    emit('challenge-accept', { fromId: incomingChallenge.fromId });
-    setIncomingChallenge(null);
+    if (incomingChallenge) onAcceptChallenge(incomingChallenge.fromId);
   };
 
   const declineChallenge = () => {
-    if (!incomingChallenge) return;
-    emit('challenge-decline', { fromId: incomingChallenge.fromId });
-    setIncomingChallenge(null);
+    if (incomingChallenge) onDeclineChallenge(incomingChallenge.fromId);
   };
 
   const accepted  = friends?.filter(f => f.status === 'accepted') || [];

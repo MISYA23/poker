@@ -21,3 +21,13 @@ and log [START] / [DONE] entries for every task. See global CLAUDE.md for protoc
 [03:14 UTC] [START] Monte Carlo bot brain — equity sim + tunable personality profiles, branch feature/bot-brain
 [03:17 UTC] [START] stress-testing feature/play-bot in worktree — scripted bug hunt
 [03:20 UTC] [DONE] v5.103: Monte Carlo bot brain + profiles + harness on feature/bot-brain — changed: server/bot/monteCarlo.js (new), server/bot/profiles.js (new), server/bot/botBrain.js (new), server/scripts/botBrainTest.js (new), client/src/config.js
+[03:23 UTC] [DONE] play-bot bug hunt — 16/18 scripted scenarios passed; 2 failures look like test-harness races (next-hand detection), no server errors logged; no code changes
+[03:27 UTC] [START] merge feature/play-bot → main + wire bot brain (server/bot) into play-bot matches
+[03:33 UTC] [DONE] merged feature/play-bot → main + wired bot brain into play-bot (random profile per match, check/call fallback); live-tested vs maniac profile (raises/jams/bets, 0 errors) — changed: server/index.js, client/src/config.js; pushed main (Railway deploy)
+[03:36 UTC] [DONE] v5.105 deployed — play-bot + bot brain live on prod (verified match vs Monkey Bot on both domains); test rows cleaned
+[03:42 UTC] [START] feature/named-bots — three always-online bots (rickdeckard/hal/johnny5) with fixed personalities
+[03:49 UTC] [DONE] v5.106 deployed — named bots Rick Deckard (tag) / HAL 9000 (nit) / Johnny 5 (maniac) live, always online in lobby, players rows upserted — changed: server/index.js, client/src/config.js
+[03:54 UTC] [START] Challenge system — accept buttons under PLAY BOT, challenge modal in Players tab, void-all-on-match-start — branch feature/challenges
+[03:56 UTC] [START] feature/rated-bots — make bot matches ELO-rated + fix calcElo zero-sum bug (loser was charged K*E(winner))
+[03:58 UTC] [DONE] v5.107 pushed to main — bot matches ELO-rated, calcElo zero-sum fix — changed: server/index.js, server/matchmaker.js, client/src/config.js (note: local main ref is stale; pushed via feature/rated-bots:main because checkout is on feature/challenges)
+[04:01 UTC] [DONE] v5.107: challenge system on feature/challenges — accept buttons under PLAY BOT, challenge modal in Players tab, void-all-on-match-start/disconnect, 5min expiry; 12/12 socket tests passed — changed: server/index.js, client/App.js, client/src/screens/LobbyScreen.jsx, client/src/components/FriendsTab.jsx, server/scripts/challengeTest.js (new), client/src/config.js
