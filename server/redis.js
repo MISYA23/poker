@@ -1,6 +1,15 @@
 const Redis = require('ioredis');
 
-const redis = new Redis(process.env.REDIS_URL, { lazyConnect: true });
+// Fail fast when Redis is unreachable — hand logging is best-effort and must
+// never block dealing. Default ioredis retries (20 per command) would stall
+// beginHand for 30s+ during a Redis blip.
+const redis = new Redis(process.env.REDIS_URL, {
+  lazyConnect: true,
+  maxRetriesPerRequest: 1,
+  connectTimeout: 3000,
+  enableOfflineQueue: false,
+  retryStrategy: (times) => Math.min(times * 500, 5000), // keep reconnecting in background
+});
 
 redis.on('connect',       () => console.log('[redis] connected'));
 redis.on('error',         (e) => console.error('[redis] error:', e.message));

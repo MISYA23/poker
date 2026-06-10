@@ -24,7 +24,8 @@ function flagEmoji(cc) {
 function PlayersTab({ onlinePlayers, myPlayerId, outgoingChallenges, onPressPlayer }) {
   if (!onlinePlayers?.length) return <Text style={s.tabEmpty}>No players online</Text>;
 
-  const isChallengeable = (p) => p.id !== myPlayerId && !p.isBot && !p.inMatch;
+  // Bots are challengeable too — they auto-accept
+  const isChallengeable = (p) => p.id !== myPlayerId && !p.inMatch;
   // Challengeable players first, then everyone else; ELO descending within each group
   const sorted = [...onlinePlayers].sort((a, b) =>
     (isChallengeable(b) - isChallengeable(a)) || ((b.elo || 1200) - (a.elo || 1200)));
@@ -33,18 +34,19 @@ function PlayersTab({ onlinePlayers, myPlayerId, outgoingChallenges, onPressPlay
     <View style={s.tabContent}>
       {sorted.map((p) => {
         const isMe = p.id === myPlayerId;
-        // Mid-match players can't be challenged — row isn't tappable
-        const tappable = !isMe && !p.isBot && !p.inMatch;
+        // Mid-match players (and yourself) can't be challenged — row isn't tappable
+        const tappable = !isMe && !p.inMatch;
         const pending = outgoingChallenges.some(c => c.toId === p.id);
         return (
           <Pressable key={p.id} disabled={!tappable} onPress={() => onPressPlayer(p)}
             style={({ pressed }) => [s.playerBtn, !tappable && s.playerBtnDisabled, pressed && s.playerBtnPressed]}>
-            <Text style={s.playerFlag}>{flagEmoji(p.country)}</Text>
+            <Text style={s.playerFlag}>{p.isBot ? '🤖' : flagEmoji(p.country)}</Text>
             <Text style={s.onlineName} numberOfLines={1}>{p.name}{isMe ? ' (you)' : ''}</Text>
             <Text style={s.onlineElo}>{p.elo || 1200}</Text>
             <View style={{ flex: 1 }} />
             {pending && <Text style={s.pendingTag}>⚔️</Text>}
             {p.inMatch && <Text style={s.inMatchTag}>in match</Text>}
+            {!p.inMatch && p.isBot && <Text style={s.botTag}>bot</Text>}
             <View style={[s.statusDot, p.inMatch ? s.dotInMatch : s.dotOnline]} />
           </Pressable>
         );
@@ -60,7 +62,9 @@ function ChallengeModal({ target, outgoingChallenges, onChallenge, onClose }) {
     <Pressable style={s.modalOverlay} onPress={onClose}>
       <Pressable style={s.modalPanel} onPress={() => {}}>
         <Text style={s.modalTitle}>Challenge {target.name}</Text>
-        <Text style={s.modalSub}>{target.inMatch ? 'Currently in a match' : 'Online now'}</Text>
+        <Text style={s.modalSub}>
+          {target.isBot ? '🤖 House bot — accepts instantly' : target.inMatch ? 'Currently in a match' : 'Online now'}
+        </Text>
         {pending ? (
           <View style={[s.modalChallengeBtn, s.modalPendingBtn]}>
             <Text style={s.modalPendingTxt}>CHALLENGE TO {target.name.toUpperCase()} PENDING</Text>
@@ -71,7 +75,7 @@ function ChallengeModal({ target, outgoingChallenges, onChallenge, onClose }) {
           </View>
         ) : (
           <Pressable style={s.modalChallengeBtn} onPress={() => { onChallenge(target.id); onClose(); }}>
-            <Text style={s.modalChallengeTxt}>⚔️ CHALLENGE {target.name.toUpperCase()}</Text>
+            <Text style={s.modalChallengeTxt}>{target.isBot ? '🤖' : '⚔️'} CHALLENGE {target.name.toUpperCase()}</Text>
           </Pressable>
         )}
         <Pressable onPress={onClose}>
@@ -345,6 +349,7 @@ const s = StyleSheet.create({
   onlineName: { color: colors.white, fontSize: 15, fontWeight: '700', flexShrink: 1 },
   onlineElo: { color: colors.goldLight, fontSize: 14, fontWeight: '800' },
   inMatchTag: { color: '#facc15', fontSize: 11, fontStyle: 'italic' },
+  botTag: { color: colors.gray, fontSize: 10, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 1 },
   pendingTag: { color: colors.goldLight, fontSize: 13 },
 
   // Challenge modal

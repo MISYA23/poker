@@ -243,6 +243,15 @@ function broadcastMatchList() {
   }
 }
 
+// If a player's matchId points at a dead or ended match, clear it. Makes the
+// "stuck in a match that no longer exists" state self-healing — call before
+// any 'finish your current match first' style guard.
+function clearStaleMatch(sp) {
+  if (!sp?.matchId) return;
+  const m = matches.get(sp.matchId);
+  if (!m || m.ended) sp.matchId = null;
+}
+
 // ── Challenges ────────────────────────────────────────────────────────────────
 
 // Void every pending challenge involving this player (both directions) and
@@ -318,8 +327,27 @@ function scheduleNextHand(m, delay = 5000) {
 async function endMatch(m, winnerId) {
   if (m.ended) return;
   m.ended = true;
-  clearTimeout(m.botTimer);
-  m.botTimer = null;
+  // Kill every pending timer — a leftover nextHandTimer would deal a zombie
+  // hand on this ended match and keep spamming game-state at the players
+  clearTimeout(m.autoStartTimer); m.autoStartTimer = null;
+  clearTimeout(m.nextHandTimer);  m.nextHandTimer  = null;
+  clearTimeout(m.turnTimer);      m.turnTimer      = null;
+  clearTimeout(m.botTimer);       m.botTimer       = null;
+  m.timerPlayerId = null;
+  m.turnDeadline  = null;
+  m.game.gameOver = true; // every end path counts as game over, not just busts
+
+  // If nobody rematches within 90s, reap the match and free both players
+  m.cleanupTimer = setTimeout(() => {
+    if (!matches.has(m.id)) return;
+    matches.delete(m.id);
+    for (const p of matchPlayers(m)) {
+      for (const sp of socketPlayers.values()) {
+        if (sp.playerId === p.playerId && sp.matchId === m.id) sp.matchId = null;
+      }
+    }
+    broadcastMatchList();
+  }, 90000);
 
   const loser  = matchPlayers(m).find(p => p.playerId !== winnerId);
   const winner = matchPlayers(m).find(p => p.playerId === winnerId);
@@ -431,6 +459,7 @@ io.on('connection', (socket) => {
         country,
         socketId: socket.id,
       });
+      clearStaleMatch(socketPlayers.get(socket.id));
 
       // First sight of this player: geolocate their IP in the background
       if (!country) {
@@ -470,6 +499,7 @@ io.on('connection', (socket) => {
 
     const sp = socketPlayers.get(socket.id);
     if (!sp?.playerName) { socket.emit('error', { message: 'Not in lobby.' }); return; }
+    clearStaleMatch(sp);
 
     enqueue({ playerId: sp.playerId, playerName: sp.playerName, avatarId: sp.avatarId, socketId: socket.id });
 
@@ -498,21 +528,13 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on('play-bot', ({ playerId }) => {
-    if (!playerId) { socket.emit('error', { message: 'Missing player ID.' }); return; }
-
-    const sp = socketPlayers.get(socket.id);
-    if (!sp?.playerName) { socket.emit('error', { message: 'Not in lobby.' }); return; }
-    if (sp.matchId) { socket.emit('error', { message: 'Finish your current match first.' }); return; }
+  // Start a bot match for this player vs a specific bot. Shared by the
+  // PLAY BOT button (random bot) and direct bot challenges from the lobby.
+  function startBotMatch(sp, botId) {
+    const bot = BOTS[botId];
 
     dequeue(sp.playerId); // in case they were sitting in the matchmaking queue
     voidChallengesFor(sp.playerId);
-
-    // Prefer a bot that isn't already seated; fall back to any of them
-    const free = Object.keys(BOTS).filter(id => !botInMatch(id));
-    const pool = free.length ? free : Object.keys(BOTS);
-    const botId = pool[Math.floor(Math.random() * pool.length)];
-    const bot = BOTS[botId];
 
     const p1 = { playerId: sp.playerId, playerName: sp.playerName, avatarId: sp.avatarId, socketId: socket.id };
     // Bot gets a fake socketId — io.to() on an empty room is a harmless no-op
@@ -531,6 +553,21 @@ io.on('connection', (socket) => {
     broadcastMatchState(m);
     broadcastMatchList();
     tryAutoStart(m);
+  }
+
+  socket.on('play-bot', ({ playerId }) => {
+    if (!playerId) { socket.emit('error', { message: 'Missing player ID.' }); return; }
+
+    const sp = socketPlayers.get(socket.id);
+    if (!sp?.playerName) { socket.emit('error', { message: 'Not in lobby.' }); return; }
+    clearStaleMatch(sp);
+    if (sp.matchId) { socket.emit('error', { message: 'Finish your current match first.' }); return; }
+
+    // Prefer a bot that isn't already seated; fall back to any of them
+    const free = Object.keys(BOTS).filter(id => !botInMatch(id));
+    const pool = free.length ? free : Object.keys(BOTS);
+    const botId = pool[Math.floor(Math.random() * pool.length)];
+    startBotMatch(sp, botId);
   });
 
   socket.on('cancel-match', () => {
@@ -577,7 +614,10 @@ io.on('connection', (socket) => {
     const sp = socketPlayers.get(socket.id);
     if (!sp?.matchId) return;
     const m = matches.get(sp.matchId);
-    if (!m || !m.game.gameOver) return;
+    // A match can end without a bust (leave, forfeit, disconnect) — m.ended
+    // covers every path. The old gameOver-only check ate the decline vote and
+    // left players stuck "in a match" forever.
+    if (!m || !(m.ended || m.game.gameOver)) return;
 
     if (vote) {
       m.rematchVotes.add(sp.playerId);
@@ -610,6 +650,7 @@ io.on('connection', (socket) => {
 
         // Close out the old match
         m.ended = true;
+        clearTimeout(m.cleanupTimer);
         matches.delete(m.id);
 
         // Start the new match
@@ -620,6 +661,7 @@ io.on('connection', (socket) => {
       }
     } else {
       // Player declined — both go back to lobby
+      clearTimeout(m.cleanupTimer);
       for (const p of matchPlayers(m)) {
         const psp = socketPlayers.get(p.socketId);
         if (psp) psp.matchId = null;
@@ -688,7 +730,16 @@ io.on('connection', (socket) => {
   socket.on('challenge-send', ({ toId }) => {
     const sp = socketPlayers.get(socket.id);
     if (!sp) return;
+    clearStaleMatch(sp);
     if (sp.matchId) { socket.emit('error', { message: 'Finish your current match first.' }); return; }
+
+    // Challenging a bot: no handshake — the bot auto-accepts and the match starts now
+    if (BOTS[toId]) {
+      if (!sp.playerName) { socket.emit('error', { message: 'Not in lobby.' }); return; }
+      if (botInMatch(toId)) { socket.emit('error', { message: `${BOTS[toId].name} is in a match. Try again soon.` }); return; }
+      startBotMatch(sp, toId);
+      return;
+    }
 
     // Find target socket
     const toSocket = [...socketPlayers.entries()].find(([, s]) => s.playerId === toId);
@@ -716,6 +767,7 @@ io.on('connection', (socket) => {
   socket.on('challenge-accept', ({ fromId }) => {
     const sp = socketPlayers.get(socket.id);
     if (!sp) return;
+    clearStaleMatch(sp);
     if (sp.matchId) { socket.emit('error', { message: 'Finish your current match first.' }); return; }
     const key = `${fromId}:${sp.playerId}`;
     const ch  = challenges.get(key);
@@ -726,6 +778,7 @@ io.on('connection', (socket) => {
 
     const fromSp = socketPlayers.get(ch.fromSocketId);
     if (!fromSp) { socket.emit('error', { message: 'Challenger disconnected.' }); return; }
+    clearStaleMatch(fromSp);
     if (fromSp.matchId) { socket.emit('error', { message: 'Challenger is already in a match.' }); return; }
 
     // Starting a match voids every other challenge either player has going
