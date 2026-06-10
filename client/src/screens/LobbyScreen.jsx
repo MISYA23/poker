@@ -7,6 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { GameContext } from '../context/GameContext';
 import { colors } from '../theme';
 import { VERSION_DISPLAY, SERVER_URL } from '../config';
+import { flagEmoji } from '../utils/flag';
 
 const AVATAR_IMAGES = {
   cigar: require('../../assets/cigar.png'),
@@ -14,12 +15,6 @@ const AVATAR_IMAGES = {
 };
 
 const TAB_NAMES = ['Online', 'Leaderboard'];
-
-// 'US' → 🇺🇸 via regional indicator codepoints; unknown → 🌐
-function flagEmoji(cc) {
-  if (!cc || cc.length !== 2) return '🌐';
-  return String.fromCodePoint(...[...cc.toUpperCase()].map(c => 0x1F1E6 + c.charCodeAt(0) - 65));
-}
 
 function PlayersTab({ onlinePlayers, myPlayerId, outgoingChallenges, onPressPlayer }) {
   if (!onlinePlayers?.length) return <Text style={s.tabEmpty}>No players online</Text>;
@@ -109,6 +104,7 @@ function LeaderboardTab({ navigationRef }) {
             {p.rank <= 3 ? ['🥇','🥈','🥉'][p.rank-1] : p.rank}
           </Text>
           <Image source={AVATAR_IMAGES[p.avatarId] || AVATAR_IMAGES.cigar} style={s.lbAvatar} />
+          <Text style={s.lbFlag}>{p.isBot ? '🤖' : flagEmoji(p.country)}</Text>
           <Text style={s.lbName} numberOfLines={1}>{p.displayName}</Text>
           <Text style={s.lbElo}>{p.elo}</Text>
         </View>
@@ -380,6 +376,7 @@ const s = StyleSheet.create({
   lbRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   lbRank: { width: 28, textAlign: 'center', fontSize: 14, color: colors.gray, fontWeight: '700' },
   lbAvatar: { width: 24, height: 24, borderRadius: 12 },
+  lbFlag: { fontSize: 14 },
   lbName: { flex: 1, color: colors.white, fontSize: 13, fontWeight: '600' },
   lbElo: { color: colors.goldLight, fontSize: 13, fontWeight: '800' },
   lbMore: { color: colors.gold, fontSize: 12, textAlign: 'center', marginTop: 4 },
