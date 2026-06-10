@@ -26,14 +26,16 @@ const TOP_BAR_H    = 48;
 const ACTION_BAR_H = 125;
 
 // ─── Group A reference canvas ─────────────────────────────────────────────────
-// 393×760 (~1:1.93) — trimmed from 852 to eliminate dead bands above opponent
-// and below player; width now binds on most phones, filling the horizontal space.
+// 393×590 (1:1.5) — matches the content area left between the top bar and the
+// betting controls on most phones, so width binds and the canvas fills the screen.
 const DESIGN_W = 393;
-const DESIGN_H = 760;
+const DESIGN_H = Math.round(DESIGN_W * 1.5);  // 590
 
 // ─── Table geometry (spec §16: 1024×1536 asset, aspect 0.667) ────────────────
+// The asset is natively 1:1.5 like the canvas — it fills it edge to edge,
+// minus ~5px margin per side.
 const TABLE_ASPECT = 1024 / 1536;
-const TABLE_W  = Math.round(1.27 * DESIGN_W);
+const TABLE_W  = DESIGN_W - 10;
 const TABLE_H  = Math.round(TABLE_W / TABLE_ASPECT);
 const TABLE_L  = Math.round((DESIGN_W - TABLE_W) / 2);
 const TABLE_T  = Math.round(0.5 * DESIGN_H - TABLE_H / 2);
