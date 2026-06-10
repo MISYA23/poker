@@ -222,6 +222,22 @@ function broadcastMatchList() {
   }
 }
 
+// ── Challenges ────────────────────────────────────────────────────────────────
+
+// Void every pending challenge involving this player (both directions) and
+// notify both parties so their UIs drop pending/incoming entries. Called when
+// a player enters any match, disconnects, or logs out — you can't accept a
+// challenge from (or keep one pending with) someone who is already playing.
+function voidChallengesFor(playerId) {
+  for (const [key, ch] of [...challenges.entries()]) {
+    if (ch.fromId !== playerId && ch.toId !== playerId) continue;
+    clearTimeout(ch.timer);
+    challenges.delete(key);
+    io.to(ch.fromSocketId).emit('challenge-voided', { otherId: ch.toId });
+    io.to(ch.toSocketId).emit('challenge-voided', { otherId: ch.fromId });
+  }
+}
+
 // ── Hand lifecycle ────────────────────────────────────────────────────────────
 
 async function beginHand(m) {
@@ -425,6 +441,8 @@ io.on('connection', (socket) => {
 
     const pair = tryPair();
     if (pair) {
+      voidChallengesFor(pair.p1.playerId);
+      voidChallengesFor(pair.p2.playerId);
       const m = createMatch(pair.p1, pair.p2);
 
       const sp1 = socketPlayers.get(pair.p1.socketId);
@@ -454,6 +472,7 @@ io.on('connection', (socket) => {
     if (sp.matchId) { socket.emit('error', { message: 'Finish your current match first.' }); return; }
 
     dequeue(sp.playerId); // in case they were sitting in the matchmaking queue
+    voidChallengesFor(sp.playerId);
 
     // Prefer a bot that isn't already seated; fall back to any of them
     const free = Object.keys(BOTS).filter(id => !botInMatch(id));
@@ -597,6 +616,7 @@ io.on('connection', (socket) => {
     if (!sp) return;
     socketPlayers.delete(socket.id);
     dequeue(sp.playerId);
+    voidChallengesFor(sp.playerId);
     console.log('[server] disconnected:', sp.playerName || socket.id);
 
     if (sp.matchId) {
@@ -624,7 +644,7 @@ io.on('connection', (socket) => {
   // Explicit logout — remove from socketPlayers so they disappear from online list
   socket.on('logout', () => {
     const sp = socketPlayers.get(socket.id);
-    if (sp) dequeue(sp.playerId);
+    if (sp) { dequeue(sp.playerId); voidChallengesFor(sp.playerId); }
     socketPlayers.delete(socket.id);
     broadcastMatchList();
   });
@@ -649,8 +669,9 @@ io.on('connection', (socket) => {
     const timer = setTimeout(() => {
       challenges.delete(key);
       socket.emit('challenge-expired', { toId });
-    }, 30000);
-    challenges.set(key, { timer, fromSocketId: socket.id, toSocketId });
+      io.to(toSocketId).emit('challenge-voided', { otherId: sp.playerId });
+    }, 300000); // 5 min — challenges also void on match start / disconnect
+    challenges.set(key, { timer, fromId: sp.playerId, toId, fromSocketId: socket.id, toSocketId });
 
     io.to(toSocketId).emit('challenge-received', {
       fromId: sp.playerId, fromName: sp.playerName, fromAvatarId: sp.avatarId,
@@ -661,6 +682,7 @@ io.on('connection', (socket) => {
   socket.on('challenge-accept', ({ fromId }) => {
     const sp = socketPlayers.get(socket.id);
     if (!sp) return;
+    if (sp.matchId) { socket.emit('error', { message: 'Finish your current match first.' }); return; }
     const key = `${fromId}:${sp.playerId}`;
     const ch  = challenges.get(key);
     if (!ch) { socket.emit('error', { message: 'Challenge expired.' }); return; }
@@ -670,6 +692,13 @@ io.on('connection', (socket) => {
 
     const fromSp = socketPlayers.get(ch.fromSocketId);
     if (!fromSp) { socket.emit('error', { message: 'Challenger disconnected.' }); return; }
+    if (fromSp.matchId) { socket.emit('error', { message: 'Challenger is already in a match.' }); return; }
+
+    // Starting a match voids every other challenge either player has going
+    dequeue(sp.playerId);
+    dequeue(fromSp.playerId);
+    voidChallengesFor(sp.playerId);
+    voidChallengesFor(fromSp.playerId);
 
     // Create direct match
     const p1 = { playerId: fromSp.playerId, playerName: fromSp.playerName, avatarId: fromSp.avatarId, socketId: ch.fromSocketId };
@@ -683,6 +712,7 @@ io.on('connection', (socket) => {
     io.to(ch.fromSocketId).emit('match-found', { matchId: m.id, opponent: { name: sp.playerName } });
     io.to(socket.id).emit('match-found', { matchId: m.id, opponent: { name: fromSp.playerName } });
     broadcastMatchState(m);
+    broadcastMatchList();
     tryAutoStart(m);
   });
 
@@ -691,7 +721,7 @@ io.on('connection', (socket) => {
     const key = `${fromId}:${sp?.playerId}`;
     const ch  = challenges.get(key);
     if (ch) { clearTimeout(ch.timer); challenges.delete(key); }
-    if (ch) io.to(ch.fromSocketId).emit('challenge-declined', { byName: sp?.playerName });
+    if (ch) io.to(ch.fromSocketId).emit('challenge-declined', { byId: sp?.playerId, byName: sp?.playerName });
   });
 });
 

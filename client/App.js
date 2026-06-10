@@ -46,7 +46,8 @@ export default function App() {
   const [myRecentMatches, setMyRecentMatches] = useState([]);
   const [opponentDisconnected, setOpponentDisconnected] = useState(null);
   const [playerInfo, setPlayerInfo] = useState(null);
-  const [incomingChallenge, setIncomingChallenge] = useState(null); // { fromId, fromName, fromAvatarId }
+  const [incomingChallenges, setIncomingChallenges] = useState([]); // [{ fromId, fromName, fromAvatarId }]
+  const [outgoingChallenges, setOutgoingChallenges] = useState([]); // [{ toId, toName }]
   const [pendingFriendRequests, setPendingFriendRequests] = useState(0);
   const [uiConfig, setUiConfig] = useState({});
 
@@ -73,6 +74,9 @@ export default function App() {
       matchIdRef.current = matchId;
       setMatchOver(null);
       setOpponentDisconnected(null);
+      // Starting any match voids all challenges (server does the same)
+      setIncomingChallenges([]);
+      setOutgoingChallenges([]);
       navigationRef.navigate('Game');
     },
     'match-list':  ({ matches, onlinePlayers: op }) => { setMatchList(matches || []); setOnlinePlayers(op || []); },
@@ -93,9 +97,14 @@ export default function App() {
     },
     'opponent-disconnected':  ({ deadline }) => setOpponentDisconnected(deadline),
     'opponent-reconnected':   ()             => setOpponentDisconnected(null),
-    'challenge-received':     (data)         => setIncomingChallenge(data),
-    'challenge-declined':     ()             => setIncomingChallenge(null),
-    'challenge-expired':      ()             => {},
+    'challenge-received':     (data)         => setIncomingChallenges(list => [...list.filter(c => c.fromId !== data.fromId), data]),
+    'challenge-sent':         (data)         => setOutgoingChallenges(list => [...list.filter(c => c.toId !== data.toId), data]),
+    'challenge-declined':     ({ byId })     => setOutgoingChallenges(list => list.filter(c => c.toId !== byId)),
+    'challenge-expired':      ({ toId })     => setOutgoingChallenges(list => list.filter(c => c.toId !== toId)),
+    'challenge-voided':       ({ otherId })  => {
+      setIncomingChallenges(list => list.filter(c => c.fromId !== otherId));
+      setOutgoingChallenges(list => list.filter(c => c.toId !== otherId));
+    },
     'friend-request':         ()             => setPendingFriendRequests(n => n + 1),
     'friend-accepted':        ()             => {},
     error:         ({ message })     => setError(message),
@@ -139,6 +148,8 @@ export default function App() {
     setInQueue(false);
     setMatchOver(null);
     setGameState(null);
+    setIncomingChallenges([]);
+    setOutgoingChallenges([]);
     matchIdRef.current = null;
     navigationRef.reset({ index: 0, routes: [{ name: 'Login' }] });
   }, []);
@@ -174,6 +185,21 @@ export default function App() {
   const onCancelMatch = useCallback(() => {
     emit('cancel-match', {});
     setInQueue(false);
+  }, [emit]);
+
+  const onChallenge = useCallback((toId) => {
+    setError(null);
+    emit('challenge-send', { toId });
+  }, [emit]);
+
+  const onAcceptChallenge = useCallback((fromId) => {
+    setError(null);
+    emit('challenge-accept', { fromId });
+  }, [emit]);
+
+  const onDeclineChallenge = useCallback((fromId) => {
+    emit('challenge-decline', { fromId });
+    setIncomingChallenges(list => list.filter(c => c.fromId !== fromId));
   }, [emit]);
 
   const onObserve = useCallback((matchId) => {
@@ -214,7 +240,8 @@ export default function App() {
     <GameContext.Provider value={{
       gameState, myId, error, inQueue, matchList, onlinePlayers, myElo, matchOver,
       playerInfo, myRecentMatches, deckStyle, setDeckStyle, opponentDisconnected,
-      incomingChallenge, setIncomingChallenge, pendingFriendRequests, setPendingFriendRequests,
+      incomingChallenges, outgoingChallenges, onChallenge, onAcceptChallenge, onDeclineChallenge,
+      pendingFriendRequests, setPendingFriendRequests,
       uiConfig, emit, onLogin, onLogout, onUpdateProfile, onFindMatch, onPlayBot, onCancelMatch,
       onObserve, onAction, onLeave, onRematch, navigationRef,
     }}>

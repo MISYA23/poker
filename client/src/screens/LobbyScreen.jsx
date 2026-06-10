@@ -15,18 +15,54 @@ const AVATAR_IMAGES = {
 
 const TAB_NAMES = ['Players', 'Leaderboard'];
 
-function PlayersTab({ onlinePlayers }) {
+function PlayersTab({ onlinePlayers, myPlayerId, outgoingChallenges, onPressPlayer }) {
   if (!onlinePlayers?.length) return <Text style={s.tabEmpty}>No players online</Text>;
   return (
     <View style={s.tabContent}>
-      {onlinePlayers.map((p) => (
-        <View key={p.id} style={s.onlineRow}>
-          <View style={[s.statusDot, p.inMatch ? s.dotInMatch : s.dotOnline]} />
-          <Text style={s.onlineName} numberOfLines={1}>{p.name}</Text>
-          <Text style={s.onlineStatus}>{p.inMatch ? 'In match' : 'Online'}</Text>
-        </View>
-      ))}
+      {onlinePlayers.map((p) => {
+        const isMe = p.id === myPlayerId;
+        const challengeable = !isMe && !p.isBot;
+        const pending = outgoingChallenges.some(c => c.toId === p.id);
+        return (
+          <Pressable key={p.id} style={s.onlineRow} disabled={!challengeable}
+            onPress={() => onPressPlayer(p)}>
+            <View style={[s.statusDot, p.inMatch ? s.dotInMatch : s.dotOnline]} />
+            <Text style={s.onlineName} numberOfLines={1}>{p.name}{isMe ? ' (you)' : ''}</Text>
+            {pending && <Text style={s.pendingTag}>⚔️ pending</Text>}
+            <Text style={s.onlineStatus}>{p.inMatch ? 'In match' : 'Online'}</Text>
+          </Pressable>
+        );
+      })}
     </View>
+  );
+}
+
+function ChallengeModal({ target, outgoingChallenges, onChallenge, onClose }) {
+  if (!target) return null;
+  const pending = outgoingChallenges.some(c => c.toId === target.id);
+  return (
+    <Pressable style={s.modalOverlay} onPress={onClose}>
+      <Pressable style={s.modalPanel} onPress={() => {}}>
+        <Text style={s.modalTitle}>Challenge {target.name}</Text>
+        <Text style={s.modalSub}>{target.inMatch ? 'Currently in a match' : 'Online now'}</Text>
+        {pending ? (
+          <View style={[s.modalChallengeBtn, s.modalPendingBtn]}>
+            <Text style={s.modalPendingTxt}>CHALLENGE TO {target.name.toUpperCase()} PENDING</Text>
+          </View>
+        ) : target.inMatch ? (
+          <View style={[s.modalChallengeBtn, s.modalPendingBtn]}>
+            <Text style={s.modalPendingTxt}>IN A MATCH — TRY LATER</Text>
+          </View>
+        ) : (
+          <Pressable style={s.modalChallengeBtn} onPress={() => onChallenge(target.id)}>
+            <Text style={s.modalChallengeTxt}>⚔️ CHALLENGE {target.name.toUpperCase()}</Text>
+          </Pressable>
+        )}
+        <Pressable onPress={onClose}>
+          <Text style={s.modalClose}>Close</Text>
+        </Pressable>
+      </Pressable>
+    </Pressable>
   );
 }
 
@@ -114,7 +150,8 @@ function FeaturedMatch({ matchList, onObserve }) {
 export default function LobbyScreen({ navigation }) {
   const { onFindMatch, onPlayBot, onCancelMatch, onObserve, onLogout,
           error, matchList, onlinePlayers, inQueue, myElo, playerInfo, navigationRef,
-          myRecentMatches } = useContext(GameContext);
+          myRecentMatches, incomingChallenges, outgoingChallenges,
+          onChallenge, onAcceptChallenge } = useContext(GameContext);
 
   useEffect(() => {
     if (Platform.OS === 'web' && !playerInfo) {
@@ -124,6 +161,7 @@ export default function LobbyScreen({ navigation }) {
 
   const [menuOpen, setMenuOpen] = useState(false);
   const [activeTab, setActiveTab] = useState(0);
+  const [challengeTarget, setChallengeTarget] = useState(null);
 
   return (
     <View style={s.root}>
@@ -177,6 +215,11 @@ export default function LobbyScreen({ navigation }) {
                 <Pressable style={s.playBotBtn} onPress={() => onPlayBot(playerInfo.playerId)}>
                   <Text style={s.playBotTxt}>🤖 PLAY BOT</Text>
                 </Pressable>
+                {(incomingChallenges || []).map(c => (
+                  <Pressable key={c.fromId} style={s.acceptChallengeBtn} onPress={() => onAcceptChallenge(c.fromId)}>
+                    <Text style={s.acceptChallengeTxt}>⚔️ ACCEPT {c.fromName.toUpperCase()}'S CHALLENGE</Text>
+                  </Pressable>
+                ))}
               </View>
             )}
 
@@ -191,7 +234,10 @@ export default function LobbyScreen({ navigation }) {
                 ))}
               </View>
               <View style={s.tabPanel}>
-                {activeTab === 0 && <PlayersTab onlinePlayers={onlinePlayers} />}
+                {activeTab === 0 && (
+                  <PlayersTab onlinePlayers={onlinePlayers} myPlayerId={playerInfo?.playerId}
+                    outgoingChallenges={outgoingChallenges || []} onPressPlayer={setChallengeTarget} />
+                )}
                 {activeTab === 1 && <LeaderboardTab navigationRef={navigationRef} />}
               </View>
             </View>
@@ -200,6 +246,9 @@ export default function LobbyScreen({ navigation }) {
             <FeaturedMatch matchList={matchList} onObserve={onObserve} />
 
           </ScrollView>
+
+          <ChallengeModal target={challengeTarget} outgoingChallenges={outgoingChallenges || []}
+            onChallenge={onChallenge} onClose={() => setChallengeTarget(null)} />
         </SafeAreaView>
     </View>
   );
@@ -227,6 +276,8 @@ const s = StyleSheet.create({
   playTxt: { color: '#000', fontSize: 28, fontWeight: '900', letterSpacing: 3 },
   playBotBtn: { borderRadius: 16, paddingVertical: 12, paddingHorizontal: 36, alignItems: 'center', borderWidth: 2, borderColor: colors.gold },
   playBotTxt: { color: colors.gold, fontSize: 16, fontWeight: '800', letterSpacing: 2 },
+  acceptChallengeBtn: { borderRadius: 16, paddingVertical: 12, paddingHorizontal: 28, alignItems: 'center', borderWidth: 2, borderColor: '#4ade80', backgroundColor: 'rgba(74,222,128,0.12)' },
+  acceptChallengeTxt: { color: '#4ade80', fontSize: 14, fontWeight: '800', letterSpacing: 1 },
   queueBox: { alignItems: 'center', gap: 14 },
   queueTxt: { color: colors.white, fontSize: 18, fontWeight: '600' },
   cancelBtn: { paddingHorizontal: 24, paddingVertical: 10, borderRadius: 10, borderWidth: 1, borderColor: 'rgba(255,255,255,0.3)' },
@@ -265,6 +316,18 @@ const s = StyleSheet.create({
   dotInMatch: { backgroundColor: '#facc15' },
   onlineName: { flex: 1, color: colors.white, fontSize: 13, fontWeight: '600' },
   onlineStatus: { color: colors.gray, fontSize: 11 },
+  pendingTag: { color: colors.goldLight, fontSize: 11, fontWeight: '700' },
+
+  // Challenge modal
+  modalOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.6)', alignItems: 'center', justifyContent: 'center', zIndex: 100 },
+  modalPanel: { width: '85%', maxWidth: 360, backgroundColor: '#111c2e', borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)', borderRadius: 18, padding: 24, alignItems: 'center', gap: 12, elevation: 10 },
+  modalTitle: { color: colors.white, fontSize: 20, fontWeight: '900', textAlign: 'center' },
+  modalSub: { color: colors.gray, fontSize: 12 },
+  modalChallengeBtn: { borderRadius: 14, paddingVertical: 14, paddingHorizontal: 24, alignItems: 'center', backgroundColor: colors.gold, alignSelf: 'stretch', marginTop: 6 },
+  modalChallengeTxt: { color: '#000', fontSize: 14, fontWeight: '900', letterSpacing: 1 },
+  modalPendingBtn: { backgroundColor: 'transparent', borderWidth: 2, borderColor: 'rgba(255,255,255,0.25)' },
+  modalPendingTxt: { color: 'rgba(255,255,255,0.5)', fontSize: 13, fontWeight: '800', letterSpacing: 1, textAlign: 'center' },
+  modalClose: { color: colors.gray, fontSize: 13, marginTop: 4, padding: 6 },
 
   // Leaderboard tab
   lbRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
