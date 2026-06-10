@@ -52,20 +52,30 @@ const ipCountryCache = new Map();
 
 function socketIp(socket) {
   const fwd = (socket.handshake.headers['x-forwarded-for'] || '').split(',')[0].trim();
-  return fwd || socket.handshake.address || '';
+  // Strip IPv4-mapped-IPv6 prefix so private-range checks below actually match
+  return (fwd || socket.handshake.address || '').replace(/^::ffff:/i, '');
+}
+
+function isPrivateIp(ip) {
+  return !ip || ip === '::1' || ip.startsWith('127.') || ip.startsWith('10.') ||
+    ip.startsWith('192.168.') || /^172\.(1[6-9]|2\d|3[01])\./.test(ip) ||
+    ip.toLowerCase().startsWith('fd') || ip.toLowerCase().startsWith('fe80');
 }
 
 async function lookupCountry(ip) {
-  if (!ip || ip === '::1' || ip.startsWith('127.') || ip.startsWith('10.') ||
-      ip.startsWith('192.168.') || ip.startsWith('::ffff:127.')) return null;
+  if (isPrivateIp(ip)) { console.log('[geo] skipping private/empty ip:', ip || '(none)'); return null; }
   if (ipCountryCache.has(ip)) return ipCountryCache.get(ip);
   try {
-    const r = await fetch(`https://ipwho.is/${encodeURIComponent(ip)}?fields=success,country_code`);
+    // ip-api.com free tier: no key, 45 req/min, HTTP only — fine server-side, the IP is the only payload.
+    // (ipwho.is rejects Node fetch with a bogus "CORS not supported" error — never worked from the server.)
+    const r = await fetch(`http://ip-api.com/json/${encodeURIComponent(ip)}?fields=status,countryCode`);
     const j = await r.json();
-    const cc = j?.success && j.country_code ? j.country_code : null;
-    ipCountryCache.set(ip, cc);
+    const cc = j?.status === 'success' && j.countryCode ? j.countryCode : null;
+    // Only cache definitive answers — a transient API failure shouldn't pin null for this IP
+    if (cc) ipCountryCache.set(ip, cc);
+    else console.log('[geo] no result for', ip, JSON.stringify(j));
     return cc;
-  } catch { return null; }
+  } catch (e) { console.log('[geo] lookup failed for', ip, e.message); return null; }
 }
 
 // ── Bot opponents ─────────────────────────────────────────────────────────────
@@ -392,6 +402,10 @@ async function endMatch(m, winnerId) {
       newElo:    isWin ? wNewElo : lNewElo,
     });
   }
+  // Observers get the result too — without it they'd sit on a frozen table forever
+  for (const sid of m.observers) {
+    io.to(sid).emit('match-over', { winnerId, winnerName: winner.playerName, observer: true });
+  }
   console.log(`[match] ended — winner: ${winner.playerName}, elo: ${wElo}→${wNewElo}`);
   broadcastMatchList();
 
@@ -611,13 +625,16 @@ io.on('connection', (socket) => {
 
   socket.on('observe', ({ matchId }) => {
     const m = matches.get(matchId);
-    if (!m) return;
+    // Ended matches linger in the map for the 90s rematch window — never let
+    // anyone start observing a dead table.
+    if (!m || m.ended) { socket.emit('observe-rejected', { matchId }); return; }
     m.observers.add(socket.id);
     // Send current state immediately
     io.to(socket.id).emit('game-state', {
       ...m.game.getStateFor(null),
       atTable: false, observing: true,
       matchId: m.id, turnDeadline: m.turnDeadline,
+      handNumber: m.handCount,
     });
   });
 
@@ -1045,7 +1062,7 @@ app.get('/api/rooms', (_, res) => res.json([]));
 app.get('/api/leaderboard', async (req, res) => {
   try {
     const { rows } = await db.query(
-      `SELECT p.id, p.display_name, p.avatar_id, p.is_guest,
+      `SELECT p.id, p.display_name, p.avatar_id, p.is_guest, p.country,
               COALESCE(ps.elo, 1200) AS elo,
               COALESCE(ps.matches_played, 0) AS matches_played,
               COALESCE(ps.matches_won, 0) AS matches_won
@@ -1060,6 +1077,8 @@ app.get('/api/leaderboard', async (req, res) => {
       displayName:   r.display_name,
       avatarId:      r.avatar_id,
       isGuest:       r.is_guest,
+      country:       r.country,
+      isBot:         r.id.startsWith('bot_'),
       elo:           r.elo,
       wins:          r.matches_won,
       losses:        r.matches_played - r.matches_won,

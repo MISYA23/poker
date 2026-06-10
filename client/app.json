@@ -3,7 +3,7 @@
     "name": "Poker Monkey",
     "slug": "poker-monkey",
     "version": "1.0.0",
-    "scheme": "poker-monkey",
+    "scheme": ["poker-monkey", "com.googleusercontent.apps.1056319941649-see3orn4pr726lj32s8leecpn98sidpf"],
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",

@@ -54,6 +54,10 @@ export default function App() {
   const navigationRef = useNavigationContainerRef();
   const matchIdRef    = useRef(null);
   const isObserverRef = useRef(false);
+  // True between emitting 'observe' and receiving the first observed game-state.
+  // Observers only navigate to Game on that first state — later broadcasts must
+  // not yank them back if they've navigated away (Profile, Lobby).
+  const pendingObserveRef = useRef(false);
 
   useEffect(() => {
     fetch(`${SERVER_URL}/api/config/ui`)
@@ -70,6 +74,7 @@ export default function App() {
         emit('unobserve', { matchId: matchIdRef.current });
         isObserverRef.current = false;
       }
+      pendingObserveRef.current = false;
       setInQueue(false);
       matchIdRef.current = matchId;
       setMatchOver(null);
@@ -84,9 +89,20 @@ export default function App() {
       setGameState(state);
       if (state.atTable && !state.gameOver) setMatchOver(null);
       const belongsToUs = state.matchId === matchIdRef.current;
-      if (belongsToUs && (state.atTable || (state.observing && isObserverRef.current))) {
+      if (belongsToUs && state.atTable) {
+        navigationRef.navigate('Game');
+      } else if (belongsToUs && state.observing && isObserverRef.current && pendingObserveRef.current) {
+        pendingObserveRef.current = false;
         navigationRef.navigate('Game');
       }
+    },
+    'observe-rejected': ({ matchId }) => {
+      if (matchIdRef.current === matchId) {
+        matchIdRef.current = null;
+        isObserverRef.current = false;
+        pendingObserveRef.current = false;
+      }
+      setError('That match just ended');
     },
     'match-over':  (data)            => {
       setMatchOver({ ...data, myVote: null, opponentWantsRematch: null });
@@ -116,6 +132,7 @@ export default function App() {
       setOpponentDisconnected(null);
       matchIdRef.current = null;
       isObserverRef.current = false;
+      pendingObserveRef.current = false;
       navigationRef.reset({ index: 0, routes: [{ name: 'Lobby' }] });
     },
   });
@@ -141,6 +158,8 @@ export default function App() {
   // Called from Lobby hamburger → Log Out
   const onLogout = useCallback(async () => {
     if (isObserverRef.current) emit('unobserve', { matchId: matchIdRef.current });
+    isObserverRef.current = false;
+    pendingObserveRef.current = false;
     emit('logout', {});
     await clearUser();
     setMyId(null);
@@ -167,6 +186,7 @@ export default function App() {
       isObserverRef.current = false;
       matchIdRef.current = null;
     }
+    pendingObserveRef.current = false;
     setError(null);
     emit('find-match', { playerId });
   }, [emit]);
@@ -177,6 +197,7 @@ export default function App() {
       isObserverRef.current = false;
       matchIdRef.current = null;
     }
+    pendingObserveRef.current = false;
     setError(null);
     emit('play-bot', { playerId });
   }, [emit]);
@@ -209,8 +230,10 @@ export default function App() {
   const onObserve = useCallback((matchId) => {
     matchIdRef.current = matchId;
     isObserverRef.current = true;
+    pendingObserveRef.current = true;
+    // Navigation happens when the first observed game-state arrives — never
+    // jump to a table the server may have already torn down.
     emit('observe', { matchId });
-    navigationRef.navigate('Game');
   }, [emit]);
 
   const onAction = useCallback((action, amount) => {
@@ -224,6 +247,7 @@ export default function App() {
       emit('leave-table', {});
     }
     isObserverRef.current = false;
+    pendingObserveRef.current = false;
     setGameState(null); setMatchOver(null);
     matchIdRef.current = null;
     navigationRef.reset({ index: 0, routes: [{ name: 'Lobby' }] });

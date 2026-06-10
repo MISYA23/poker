@@ -29,6 +29,9 @@ yarn-error.*
 .DS_Store
 *.pem
 
+# Play Store service account key
+playstore-key.json
+
 # local env files
 .env*.local
 

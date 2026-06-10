@@ -18,6 +18,8 @@ and log [START] / [DONE] entries for every task. See global CLAUDE.md for protoc
 [18:26 UTC] [START] Rename Recent tab → Players tab with online/in-match status dots
 [20:03 UTC] [DONE] v5.99 (b1.46): Facebook login for web — changed: client/web/index.html (new), client/src/screens/LoginScreen.jsx, server/index.js, client/src/config.js
 [20:11 UTC] [DONE] v5.100: add /terms page — changed: server/index.js, client/src/config.js
+[02:59 UTC] [START] Slumbot API integration — new branch, connect to API, console.log recommended plays with gamestate
+[03:03 UTC] [DONE] v5.102: Slumbot API client + test harness on branch feature/slumbot-bot — changed: server/slumbot.js (new), server/scripts/slumbotTest.js (new), client/src/config.js
 [03:14 UTC] [START] Monte Carlo bot brain — equity sim + tunable personality profiles, branch feature/bot-brain
 [03:17 UTC] [START] stress-testing feature/play-bot in worktree — scripted bug hunt
 [03:20 UTC] [DONE] v5.103: Monte Carlo bot brain + profiles + harness on feature/bot-brain — changed: server/bot/monteCarlo.js (new), server/bot/profiles.js (new), server/bot/botBrain.js (new), server/scripts/botBrainTest.js (new), client/src/config.js
@@ -50,3 +52,13 @@ and log [START] / [DONE] entries for every task. See global CLAUDE.md for protoc
 [13:56 UTC] [START] match format — escalating blinds every N hands + admin Match Format config section — branch feature/match-format (worktree)
 [14:00 UTC] [DONE] v5.113: seat-level disconnect grace (20s, DISCONNECT_GRACE_MS/cfg override) — vacancy on match object, enter-lobby rejoin priority, graceTimer reaped by endMatch, logout forfeits, banner restored; 42/42 local tests — changed: server/index.js, client/App.js, client/src/screens/GameScreen.jsx, server/scripts/matchLifecycleTest.js, client/src/config.js
 [14:05 UTC] [DONE] v5.113 deployed + verified on prod — 42/42 across all 3 suites incl. real 20s grace expiry + same-match rejoin
+[21:10 UTC] [START] digital ads asset pack — logo exports, screenshots, 4:5/1:1 images, 15s video (16:9/1:1/9:16), ad copy — output to poker/digital ads/
+[21:20 UTC] [START] Lobby scroll fix — Online/Leaderboard section scrollable — branch fix/lobby-scroll
+[21:23 UTC] [DONE] v5.129: lobby Online/Leaderboard panel internal scroll (maxHeight 360, hidden scrollbar) + PLAY/PLAY BOT equal-size + challenge buttons full 420 width — changed: client/src/screens/LobbyScreen.jsx, client/src/config.js — branch fix/lobby-scroll pushed, NOT merged to main
+[21:25 UTC] [DONE] merged fix/lobby-scroll → main + pushed (Railway deploy 79b5692); branch deleted — ad-session untracked files untouched
+[21:31 UTC] [START] Flags in Online + Leaderboard tabs — branch feature/leaderboard-flags
+[21:39 UTC] [DONE] digital ads asset pack — poker/digital ads/: 3x 15s videos (16:9/1:1/9:16), 5 statics (2x 4:5, 2x 1:1, 1200x628), 3 logos, 6 screenshots, copy.md, README; pushed c62e967 direct to origin/main (checkout was switched to feature/leaderboard-flags by concurrent session mid-task — commit also sits on that branch, harmless); guest player AceMonkey (guest_chrome_*) left on prod
+[21:42 UTC] [START] geo provider swap ipwho.is → ip-api.com (ipwho.is blocks Node fetch) — branch fix/geo-provider
+[21:45 UTC] [DONE] digital ads REGENERATE.md playbook saved + memory pointer — pipeline reusable for post-redesign rerun
+[22:09 UTC] [START] animated motion-graphics ad prototype (9:16) — WAAPI/HTML rig + frame-stepped capture in digital ads/_build/animate.js — this session owns digital ads/ until DONE
+[22:15 UTC] [DONE] animated motion-graphics ad prototype — digital ads/video/poker_monkey_15s_9x16_motion.mp4 (15s, 4 scenes, frame-stepped WAAPI rig) — changed: digital ads/_build/animate.js (new), REGENERATE.md, README.md — digital ads/ released

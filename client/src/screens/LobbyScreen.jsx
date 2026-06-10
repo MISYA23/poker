@@ -7,6 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { GameContext } from '../context/GameContext';
 import { colors } from '../theme';
 import { VERSION_DISPLAY, SERVER_URL } from '../config';
+import { flagEmoji } from '../utils/flag';
 
 const AVATAR_IMAGES = {
   cigar: require('../../assets/cigar.png'),
@@ -14,12 +15,6 @@ const AVATAR_IMAGES = {
 };
 
 const TAB_NAMES = ['Online', 'Leaderboard'];
-
-// 'US' → 🇺🇸 via regional indicator codepoints; unknown → 🌐
-function flagEmoji(cc) {
-  if (!cc || cc.length !== 2) return '🌐';
-  return String.fromCodePoint(...[...cc.toUpperCase()].map(c => 0x1F1E6 + c.charCodeAt(0) - 65));
-}
 
 function PlayersTab({ onlinePlayers, myPlayerId, outgoingChallenges, onPressPlayer }) {
   if (!onlinePlayers?.length) return <Text style={s.tabEmpty}>No players online</Text>;
@@ -109,6 +104,7 @@ function LeaderboardTab({ navigationRef }) {
             {p.rank <= 3 ? ['🥇','🥈','🥉'][p.rank-1] : p.rank}
           </Text>
           <Image source={AVATAR_IMAGES[p.avatarId] || AVATAR_IMAGES.cigar} style={s.lbAvatar} />
+          <Text style={s.lbFlag}>{p.isBot ? '🤖' : flagEmoji(p.country)}</Text>
           <Text style={s.lbName} numberOfLines={1}>{p.displayName}</Text>
           <Text style={s.lbElo}>{p.elo}</Text>
         </View>
@@ -269,11 +265,14 @@ export default function LobbyScreen({ navigation }) {
                 ))}
               </View>
               <View style={s.tabPanel}>
-                {activeTab === 0 && (
-                  <PlayersTab onlinePlayers={onlinePlayers} myPlayerId={playerInfo?.playerId}
-                    outgoingChallenges={outgoingChallenges || []} onPressPlayer={setChallengeTarget} />
-                )}
-                {activeTab === 1 && <LeaderboardTab navigationRef={navigationRef} />}
+                <ScrollView style={s.tabScroll} showsVerticalScrollIndicator={false}
+                  nestedScrollEnabled keyboardShouldPersistTaps="handled">
+                  {activeTab === 0 && (
+                    <PlayersTab onlinePlayers={onlinePlayers} myPlayerId={playerInfo?.playerId}
+                      outgoingChallenges={outgoingChallenges || []} onPressPlayer={setChallengeTarget} />
+                  )}
+                  {activeTab === 1 && <LeaderboardTab navigationRef={navigationRef} />}
+                </ScrollView>
               </View>
             </View>
 
@@ -306,10 +305,10 @@ const s = StyleSheet.create({
   hi: { fontSize: 36, fontWeight: '900', color: colors.white, textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 8 },
   elo: { fontSize: 14, color: colors.gray, fontWeight: '600' },
   error: { color: '#f87171', fontSize: 13, textAlign: 'center' },
-  playCol: { alignItems: 'center', gap: 14 },
-  playBtn: { backgroundColor: colors.gold, borderRadius: 20, paddingVertical: 22, paddingHorizontal: 60, alignItems: 'center', shadowColor: colors.gold, shadowOpacity: 0.4, shadowRadius: 16, elevation: 6 },
+  playCol: { width: '100%', maxWidth: 420, alignItems: 'stretch', gap: 14 },
+  playBtn: { backgroundColor: colors.gold, borderRadius: 20, height: 72, alignItems: 'center', justifyContent: 'center', shadowColor: colors.gold, shadowOpacity: 0.4, shadowRadius: 16, elevation: 6 },
   playTxt: { color: '#000', fontSize: 28, fontWeight: '900', letterSpacing: 3 },
-  playBotBtn: { borderRadius: 16, paddingVertical: 12, paddingHorizontal: 36, alignItems: 'center', borderWidth: 2, borderColor: colors.gold },
+  playBotBtn: { borderRadius: 20, height: 72, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: colors.gold },
   playBotTxt: { color: colors.gold, fontSize: 16, fontWeight: '800', letterSpacing: 2 },
   acceptChallengeBtn: { borderRadius: 16, paddingVertical: 12, paddingHorizontal: 28, alignItems: 'center', borderWidth: 2, borderColor: '#4ade80', backgroundColor: 'rgba(74,222,128,0.12)' },
   acceptChallengeTxt: { color: '#4ade80', fontSize: 14, fontWeight: '800', letterSpacing: 1 },
@@ -332,6 +331,7 @@ const s = StyleSheet.create({
   tabLabel: { color: 'rgba(255,255,255,0.5)', fontSize: 13, fontWeight: '700' },
   tabLabelActive: { color: '#000', fontWeight: '800' },
   tabPanel: { backgroundColor: 'rgba(0,0,0,0.55)', borderBottomLeftRadius: 12, borderBottomRightRadius: 12, borderWidth: 1, borderTopWidth: 0, borderColor: 'rgba(255,255,255,0.1)', minHeight: 80, padding: 14 },
+  tabScroll: { maxHeight: 360 },
   tabContent: { gap: 8 },
   tabEmpty: { color: colors.gray, fontSize: 13, fontStyle: 'italic', textAlign: 'center', paddingVertical: 4 },
   tabSubLabel: { color: colors.gray, fontSize: 10, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 1 },
@@ -376,6 +376,7 @@ const s = StyleSheet.create({
   lbRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   lbRank: { width: 28, textAlign: 'center', fontSize: 14, color: colors.gray, fontWeight: '700' },
   lbAvatar: { width: 24, height: 24, borderRadius: 12 },
+  lbFlag: { fontSize: 14 },
   lbName: { flex: 1, color: colors.white, fontSize: 13, fontWeight: '600' },
   lbElo: { color: colors.goldLight, fontSize: 13, fontWeight: '800' },
   lbMore: { color: colors.gold, fontSize: 12, textAlign: 'center', marginTop: 4 },
