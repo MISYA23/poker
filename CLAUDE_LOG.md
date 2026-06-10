@@ -58,3 +58,4 @@ and log [START] / [DONE] entries for every task. See global CLAUDE.md for protoc
 [21:25 UTC] [DONE] merged fix/lobby-scroll → main + pushed (Railway deploy 79b5692); branch deleted — ad-session untracked files untouched
 [21:31 UTC] [START] Flags in Online + Leaderboard tabs — branch feature/leaderboard-flags
 [21:39 UTC] [DONE] digital ads asset pack — poker/digital ads/: 3x 15s videos (16:9/1:1/9:16), 5 statics (2x 4:5, 2x 1:1, 1200x628), 3 logos, 6 screenshots, copy.md, README; pushed c62e967 direct to origin/main (checkout was switched to feature/leaderboard-flags by concurrent session mid-task — commit also sits on that branch, harmless); guest player AceMonkey (guest_chrome_*) left on prod
+[21:42 UTC] [START] geo provider swap ipwho.is → ip-api.com (ipwho.is blocks Node fetch) — branch fix/geo-provider

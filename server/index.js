@@ -66,9 +66,11 @@ async function lookupCountry(ip) {
   if (isPrivateIp(ip)) { console.log('[geo] skipping private/empty ip:', ip || '(none)'); return null; }
   if (ipCountryCache.has(ip)) return ipCountryCache.get(ip);
   try {
-    const r = await fetch(`https://ipwho.is/${encodeURIComponent(ip)}?fields=success,country_code`);
+    // ip-api.com free tier: no key, 45 req/min, HTTP only — fine server-side, the IP is the only payload.
+    // (ipwho.is rejects Node fetch with a bogus "CORS not supported" error — never worked from the server.)
+    const r = await fetch(`http://ip-api.com/json/${encodeURIComponent(ip)}?fields=status,countryCode`);
     const j = await r.json();
-    const cc = j?.success && j.country_code ? j.country_code : null;
+    const cc = j?.status === 'success' && j.countryCode ? j.countryCode : null;
     // Only cache definitive answers — a transient API failure shouldn't pin null for this IP
     if (cc) ipCountryCache.set(ip, cc);
     else console.log('[geo] no result for', ip, JSON.stringify(j));
