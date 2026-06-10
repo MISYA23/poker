@@ -62,3 +62,6 @@ and log [START] / [DONE] entries for every task. See global CLAUDE.md for protoc
 [21:45 UTC] [DONE] digital ads REGENERATE.md playbook saved + memory pointer — pipeline reusable for post-redesign rerun
 [22:09 UTC] [START] animated motion-graphics ad prototype (9:16) — WAAPI/HTML rig + frame-stepped capture in digital ads/_build/animate.js — this session owns digital ads/ until DONE
 [22:15 UTC] [DONE] animated motion-graphics ad prototype — digital ads/video/poker_monkey_15s_9x16_motion.mp4 (15s, 4 scenes, frame-stepped WAAPI rig) — changed: digital ads/_build/animate.js (new), REGENERATE.md, README.md — digital ads/ released
+[22:17 UTC] [START] hand-history MP4 video — pick river hand from prod, build replay renderer + capture in server/scripts/handvideo/ (not touching digital ads/)
+[22:20 UTC] [START] motion ad: full phone body (bezel/island/buttons) in animate.js — digital ads/ claimed
+[22:24 UTC] [DONE] motion ad full phone body — re-rendered poker_monkey_15s_9x16_motion.mp4 — changed: digital ads/_build/animate.js, REGENERATE.md, video — digital ads/ released
