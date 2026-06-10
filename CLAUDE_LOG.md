@@ -55,3 +55,5 @@ and log [START] / [DONE] entries for every task. See global CLAUDE.md for protoc
 [21:10 UTC] [START] digital ads asset pack — logo exports, screenshots, 4:5/1:1 images, 15s video (16:9/1:1/9:16), ad copy — output to poker/digital ads/
 [21:20 UTC] [START] Lobby scroll fix — Online/Leaderboard section scrollable — branch fix/lobby-scroll
 [21:23 UTC] [DONE] v5.129: lobby Online/Leaderboard panel internal scroll (maxHeight 360, hidden scrollbar) + PLAY/PLAY BOT equal-size + challenge buttons full 420 width — changed: client/src/screens/LobbyScreen.jsx, client/src/config.js — branch fix/lobby-scroll pushed, NOT merged to main
+[21:25 UTC] [DONE] merged fix/lobby-scroll → main + pushed (Railway deploy 79b5692); branch deleted — ad-session untracked files untouched
+[21:31 UTC] [START] Flags in Online + Leaderboard tabs — branch feature/leaderboard-flags

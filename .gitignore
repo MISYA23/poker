@@ -1,3 +1,8 @@
 node_modules/
 .env
 .env.local
+
+# digital ads build artifacts (regenerable, heavy)
+digital ads/_build/node_modules/
+digital ads/_build/raw/
+digital ads/_build/_tmp.html
