@@ -36,6 +36,7 @@ Footage is a genuine match vs the "Rick Deckard" bot on prod, captured in-browse
 ### copy.md — headlines, descriptions, primary text for both platforms + policy notes
 
 ## Regenerating
+**Full re-run playbook with all gotchas: [REGENERATE.md](REGENERATE.md)** — read it first.
 All assets are scripted in `_build/` (gitignored raw footage):
 1. `node _build/capture.js` — plays a live bot match in headless Chromium, records video + stills (strips version watermark/feedback pill)
 2. `node _build/render.js` — renders static images/logos/end cards from HTML templates
