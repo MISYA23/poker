@@ -6,6 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { GameContext } from '../context/GameContext';
 import { colors } from '../theme';
 import { SERVER_URL } from '../config';
+import { flagEmoji } from '../utils/flag';
 
 const AVATAR_IMAGES = {
   cigar: require('../../assets/cigar.png'),
@@ -70,6 +71,7 @@ export default function LeaderboardScreen({ navigation }) {
                   source={AVATAR_IMAGES[p.avatarId] || AVATAR_IMAGES.cigar}
                   style={s.avatar}
                 />
+                <Text style={s.flag}>{p.isBot ? '🤖' : flagEmoji(p.country)}</Text>
                 <Text style={s.name} numberOfLines={1}>{p.displayName}</Text>
               </View>
               <Text style={[s.col, s.colElo, s.eloTxt]}>{p.elo}</Text>
@@ -117,6 +119,7 @@ const s = StyleSheet.create({
   colElo: { width: 52, textAlign: 'right' },
   colStat: { width: 32, textAlign: 'right' },
   avatar: { width: 28, height: 28, borderRadius: 14 },
+  flag: { fontSize: 15 },
   name: { flex: 1, color: colors.white, fontSize: 14, fontWeight: '700' },
   eloTxt: { color: colors.goldLight, fontSize: 14, fontWeight: '800' },
   winTxt: { color: '#4ade80', fontWeight: '700' },
