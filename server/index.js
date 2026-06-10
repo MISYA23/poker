@@ -9,6 +9,8 @@ const { PokerGame }  = require('./game/PokerGame');
 const { redis }      = require('./redis');
 const { startHand: logStartHand, logAction, flushHandToDb } = require('./handLogger');
 const { enqueue, dequeue, tryPair, calcElo } = require('./matchmaker');
+const { decideAction, stateFromGame } = require('./bot/botBrain');
+const { PROFILES, getProfile } = require('./bot/profiles');
 
 const path = require('path');
 
@@ -113,8 +115,10 @@ function startTurnTimer(m) {
 
 // ── Bot play ──────────────────────────────────────────────────────────────────
 
-// Check if legal, otherwise call. Scheduled from broadcastMatchState so every
-// state change (hand start, human action, next hand) gives the bot its turn.
+// Decisions come from the bot brain (Monte Carlo equity + personality profile).
+// Scheduled from broadcastMatchState so every state change (hand start, human
+// action, next hand) gives the bot its turn. If the brain errors or picks an
+// illegal action, fall back to check/call so the match never stalls.
 function maybeScheduleBotAction(m) {
   if (!m.isBotMatch || m.ended || m.botTimer) return;
   if (m.game.currentPlayerId !== BOT_ID) return;
@@ -123,11 +127,25 @@ function maybeScheduleBotAction(m) {
     if (m.ended || m.game.currentPlayerId !== BOT_ID) return;
     const bot = m.game.players.find(p => p.id === BOT_ID);
     if (!bot) return;
-    const action = bot.roundBet >= m.game.currentBet ? 'check' : 'call';
+    const fallback = () => ({ action: bot.roundBet >= m.game.currentBet ? 'check' : 'call' });
+    let d;
+    try {
+      d = decideAction(stateFromGame(m.game, BOT_ID), m.botProfile || getProfile('tag'));
+      console.log(`[bot] ${m.botProfile?.name || 'tag'}: ${d.action}${d.amount ? ' to ' + d.amount : ''}`, JSON.stringify(d.meta));
+    } catch (e) {
+      console.error('[bot] brain error, using check/call:', e.message);
+      d = fallback();
+    }
     try {
       const prevCC = m.game.communityCards?.length || 0;
-      m.game.handleAction(BOT_ID, action);
-      logAction(m, m.game, BOT_ID, action, undefined, prevCC)
+      try {
+        m.game.handleAction(BOT_ID, d.action, d.amount);
+      } catch (e) {
+        console.error(`[bot] ${d.action} rejected (${e.message}) — using check/call`);
+        d = fallback();
+        m.game.handleAction(BOT_ID, d.action);
+      }
+      logAction(m, m.game, BOT_ID, d.action, d.amount, prevCC)
         .catch(e => console.error('[bot] logAction:', e.message));
       broadcastMatchState(m);
       if (m.game.phase === 'showdown') scheduleNextHand(m, cfg.inter_hand_delay_ms);
@@ -430,6 +448,10 @@ io.on('connection', (socket) => {
     const p2 = { playerId: BOT_ID, playerName: BOT_NAME, avatarId: BOT_AVATAR, socketId: `bot:${randomUUID()}` };
     const m = createMatch(p1, p2);
     m.isBotMatch = true;
+    // Random personality per match (tag/lag/nit/station/maniac) — kept across rematches
+    const names = Object.keys(PROFILES);
+    m.botProfile = getProfile(names[Math.floor(Math.random() * names.length)]);
+    console.log(`[bot] new bot match vs ${sp.playerName} — profile: ${m.botProfile.name}`);
     sp.matchId = m.id;
 
     m.game.addPlayer(p1.playerId, p1.playerName, p1.avatarId);
@@ -506,6 +528,7 @@ io.on('connection', (socket) => {
         newMatch.id = newMatchId;
         newMatch.previousMatchUuid = m.id; // link back for DB
         newMatch.isBotMatch = m.isBotMatch;
+        newMatch.botProfile = m.botProfile;
         matches.set(newMatchId, newMatch);
 
         // Update socketPlayers to point to the new match
