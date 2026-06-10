@@ -1,0 +1,32 @@
+import React from 'react';
+import { Image, View, StyleSheet, useWindowDimensions } from 'react-native';
+
+// Jungle backgrounds at several aspect ratios — at runtime we pick whichever is
+// closest to the viewport so `cover` trims as little as possible on any device.
+const BGS = [
+  { ar: 21 / 9, src: require('../../assets/login-bg-21-9.png') },
+  { ar: 16 / 9, src: require('../../assets/login-bg-16-9.png') },
+  { ar: 4 / 3,  src: require('../../assets/login-bg-4-3.png') },
+  { ar: 9 / 16, src: require('../../assets/login-bg-9-16.png') },
+];
+
+// Drop in as the FIRST child of a screen's root <View> (which should be flex:1).
+// Renders the closest-aspect image + a subtle scrim behind the screen content.
+export default function ScreenBackground({ scrim = 0.3 }) {
+  const { width, height } = useWindowDimensions();
+  const vAR = width / Math.max(1, height);
+  const bg = BGS.reduce((best, cur) =>
+    Math.abs(Math.log(cur.ar / vAR)) < Math.abs(Math.log(best.ar / vAR)) ? cur : best
+  ).src;
+  return (
+    <>
+      <Image source={bg} style={styles.bg} resizeMode="cover" />
+      <View style={[styles.scrim, { backgroundColor: `rgba(0,0,0,${scrim})` }]} pointerEvents="none" />
+    </>
+  );
+}
+
+const styles = StyleSheet.create({
+  bg:    { ...StyleSheet.absoluteFillObject, width: '100%', height: '100%' },
+  scrim: { ...StyleSheet.absoluteFillObject },
+});

@@ -54,7 +54,7 @@ const NP_H       = 72;                                     // nameplate height �
 const NP_TOP     = Math.round((POD_H - NP_H) / 2);
 const AV_TOP     = Math.round((POD_H - AVATAR_SZ) / 2);
 const NAMEPLATE_OVERLAP = 49;                              // FIXED — nameplate size unchanged
-const AVATAR_PAD = NAMEPLATE_OVERLAP + 10;                 // keeps text clear of circle
+const AVATAR_PAD = 24;                                     // clears the avatar overlap (~16px) — small so the ID gets max width
 const RING_R     = (AVATAR_SZ - RING_W_PX) / 2;                            // ring sits inside the avatar edge (no overhang)
 const RING_BOX   = Math.ceil(RING_R * 2 + RING_W_PX);
 const RING_CIRC  = 2 * Math.PI * RING_R;
@@ -83,26 +83,33 @@ const OPP_BET_T    = Math.round(TABLE_T + 2 * (TABLE_H / 8));             // row
 const MY_BET_T     = Math.round(0.620 * DESIGN_H - 20 + TABLE_H / 16);   // down half row
 const MY_BET_L     = Math.round(TABLE_W / 4);                             // right half column (center +62px)
 const DEALER_SZ    = Math.round(0.07 * DESIGN_W);
-const DEALER_OPP_L = Math.round(COL_C_X);                                 // C3 top-left x
-const DEALER_OPP_T = Math.round(TABLE_T + 2 * (TABLE_H / 8));             // C3 top-left y
-const DEALER_MY_L  = Math.round(COL_C_X);                                 // C7 top-left x
-const DEALER_MY_T  = Math.round(TABLE_T + 6 * (TABLE_H / 8));             // C7 top-left y
+// Top dealer button: just to the LEFT of the D3 cross (right edge on D-col, centered on row-3 line)
+const DEALER_OPP_L = Math.round(TABLE_L + 3 * (TABLE_W / 4) - DEALER_SZ);
+const DEALER_OPP_T = Math.round(TABLE_T + 2 * (TABLE_H / 8) - DEALER_SZ / 2);
+// Bottom dealer button: just ABOVE the B7 cross (centered on B-col, bottom on row-7 line)
+const DEALER_MY_L  = Math.round(TABLE_L + 1 * (TABLE_W / 4) - DEALER_SZ / 2) + 6;
+const DEALER_MY_T  = Math.round(TABLE_T + 6 * (TABLE_H / 8) - DEALER_SZ);
 // ── Nameplate horizontal placement (slid toward table center, width unchanged) ──
 const NP_WIDTH    = POD_W - 16 - NAMEPLATE_OVERLAP;                       // 179 — nameplate box width
 const NP_STEP     = TABLE_W / 4;                                          // one grid column
-// Bottom nameplate: LEFT edge at 10% off B8 (= COL_C_X − 0.9·step)
-const NP_ME_LEFT  = Math.round((COL_C_X - 0.9 * NP_STEP) - MY_POD_L);
+const NP_RADIUS   = 32;                                                   // outer corner radius (avatar-side corners squared)
+const TIMER_OUTER_INSET = 20;                                             // pull the timer's outer end in past the corner so every segment touches the plate
+// Bottom nameplate: LEFT edge touches B8 (= COL_C_X − one column)
+const NP_ME_LEFT  = Math.round((COL_C_X - NP_STEP) - MY_POD_L);
 const NP_ME_RIGHT = POD_W - NP_ME_LEFT - NP_WIDTH;
-// Top nameplate: RIGHT edge at 90% off C2 (= COL_C_X + 0.9·step)
-const NP_OPP_LEFT  = Math.round((COL_C_X + 0.9 * NP_STEP - NP_WIDTH) - OPP_POD_L);
+// Top nameplate: RIGHT edge touches D2 (= COL_C_X + one column)
+const NP_OPP_LEFT  = Math.round((COL_C_X + NP_STEP - NP_WIDTH) - OPP_POD_L);
 const NP_OPP_RIGHT = POD_W - NP_OPP_LEFT - NP_WIDTH;
 // Cards centered over each (moved) nameplate
-const NP_CENTER_X     = MY_POD_L + NP_ME_LEFT + Math.round(NP_WIDTH / 2);
-const MY_CARDS_L      = NP_CENTER_X - Math.round((58 * 2 + 6) / 2);
+// Cards sit a fixed gap from each avatar's INNER edge → same spacing for both players
+const CARD_AV_GAP     = 8;                                                // px between avatar edge and nearest card
+const MY_CARD_PAIR_W  = 58 * 2;                                           // player pair width (cards render flush: gap 6 + marginLeft -6 = 0)
+const AV_BOTTOM_INNER = MY_POD_L + POD_W - AVATAR_SZ;                     // bottom avatar's left (inner) edge
+const AV_TOP_INNER    = OPP_POD_L + AVATAR_SZ;                            // top avatar's right (inner) edge
+const MY_CARDS_L      = AV_BOTTOM_INNER - CARD_AV_GAP - MY_CARD_PAIR_W;   // pair right edge = avatar edge − gap
 const MY_CARDS_T      = MY_POD_T + NP_TOP + 10 - 59;                      // cards bottom 10px into nameplate
-const NP_CENTER_X_OPP = OPP_POD_L + NP_OPP_LEFT + Math.round(NP_WIDTH / 2);
-const OPP_CARDS_L     = NP_CENTER_X_OPP - Math.round((42 * 2 + 6) / 2);
-const OPP_CARDS_T     = OPP_POD_T + NP_TOP + 10 - 50;                       // cards bottom 10px into nameplate (mirrors player)
+const OPP_CARDS_L     = AV_TOP_INNER + CARD_AV_GAP;                       // pair left edge = avatar edge + gap
+const OPP_CARDS_T     = OPP_POD_T + NP_TOP + 10 - 59;                     // cards bottom 10px into nameplate (xl card height)
 
 // ─── TimerRing ────────────────────────────────────────────────────────────────
 function TimerRing({ deadline }) {
@@ -133,6 +140,42 @@ function TimerRing({ deadline }) {
         strokeDasharray={RING_CIRC} strokeDashoffset={dashOffset}
         strokeLinecap="round" transform={`rotate(-90, ${c}, ${c})`} />
     </Svg>
+  );
+}
+
+// ─── TimerBar ─────────────────────────────────────────────────────────────────
+// Segmented gauge tucked under the nameplate (inset past the rounded corner so it
+// starts/stops on the curve, never beyond the plate). Segments run green→red
+// left→right; the gauge starts full and depletes from the left as the turn elapses.
+const TIMER_SEGMENTS = 20;
+function TimerBar({ deadline, isMe }) {
+  const [frac, setFrac] = useState(0);   // elapsed fraction 0→1
+  useEffect(() => {
+    if (!deadline) { setFrac(0); return; }
+    const tick = () => {
+      const rem = Math.max(0, deadline - Date.now());
+      setFrac(Math.min(1, (TURN_DURATION_MS - rem) / TURN_DURATION_MS));
+    };
+    tick();
+    const id = setInterval(tick, 100);
+    return () => clearInterval(id);
+  }, [deadline]);
+  if (!deadline) return null;
+  const offCount = Math.floor(frac * TIMER_SEGMENTS);   // drains from the rounded outer end toward the avatar
+  // Clip box mirrors the nameplate exactly → the bar's ends trace the plate's curve
+  return (
+    <View style={[s.timerClip, isMe ? s.timerClipMe : s.timerClipOpp]} pointerEvents="none">
+      <View style={s.timerRow}>
+        {Array.from({ length: TIMER_SEGMENTS }, (_, i) => {
+          // distance from the OUTER (rounded) end — bottom outer = left, top outer = right
+          const d   = isMe ? i : (TIMER_SEGMENTS - 1 - i);
+          const hue = Math.round(120 * (1 - d / (TIMER_SEGMENTS - 1)));  // green at outer → red at avatar
+          const on  = d >= offCount;                     // green/outer drains first
+          return <View key={i} style={[s.timerSeg,
+            { backgroundColor: on ? `hsl(${hue}, 85%, 52%)` : 'transparent' }]} />;
+        })}
+      </View>
+    </View>
   );
 }
 
@@ -173,7 +216,7 @@ function HoleCards({ player, isMe, deckStyle }) {
 
   if (!hasCards) return null;
 
-  const size = isMe ? 'xl' : 'md';
+  const size = 'xl';   // opponent cards render the same as the player's for clear reading
   const fd = (i) => !player?.holeCards?.[i] || !!player?.holeCards?.[i]?.hidden;
 
   return (
@@ -264,7 +307,6 @@ function PlayerPod({ player, isMe, turnDeadline, lastAction, win, displayChips, 
         <View style={[s.avatarAllInGlow, { width: AVATAR_SZ, height: AVATAR_SZ, borderRadius: AVATAR_SZ / 2 }]}
           pointerEvents="none" />
       )}
-      <TimerRing deadline={turnDeadline} />
     </View>
   );
 
@@ -272,9 +314,15 @@ function PlayerPod({ player, isMe, turnDeadline, lastAction, win, displayChips, 
     <View style={[
       s.nameplate,
       { top: NP_TOP, height: NP_H },
+      // Square off the corners that meet the avatar (flat edge tucks behind the
+      // circle) — keep the outer corners rounded.
       isMe
-        ? { left: NP_ME_LEFT,  right: NP_ME_RIGHT,  paddingLeft: 12, paddingRight: AVATAR_PAD }
-        : { left: NP_OPP_LEFT, right: NP_OPP_RIGHT, paddingLeft: AVATAR_PAD, paddingRight: 12 },
+        ? { left: NP_ME_LEFT,  right: NP_ME_RIGHT,  paddingLeft: 12, paddingRight: AVATAR_PAD,
+            borderTopLeftRadius: NP_RADIUS, borderBottomLeftRadius: NP_RADIUS,
+            borderTopRightRadius: 0, borderBottomRightRadius: 0 }
+        : { left: NP_OPP_LEFT, right: NP_OPP_RIGHT, paddingLeft: AVATAR_PAD, paddingRight: 12,
+            borderTopRightRadius: NP_RADIUS, borderBottomRightRadius: NP_RADIUS,
+            borderTopLeftRadius: 0, borderBottomLeftRadius: 0 },
       isActive && s.nameplateActive,
       allIn   && s.nameplateAllIn,
       present && player.folded && s.nameplateFolded,
@@ -282,12 +330,12 @@ function PlayerPod({ player, isMe, turnDeadline, lastAction, win, displayChips, 
     ]}>
       <View style={s.nameRow}>
         <Text style={s.podName} numberOfLines={1}>{displayName}</Text>
+        {present && player.isSmallBlind && <Text style={[s.badge, s.badgeSB]}>SB</Text>}
+        {present && player.isBigBlind   && <Text style={[s.badge, s.badgeBB]}>BB</Text>}
       </View>
       <View style={s.chipsRow}>
         <Text style={[s.podChips, win && s.podChipsWin, !!actionLbl && s.podChipsAction]}
           numberOfLines={1}>{chipLabel}</Text>
-        {present && player.isSmallBlind && <Text style={[s.badge, s.badgeSB]}>SB</Text>}
-        {present && player.isBigBlind   && <Text style={[s.badge, s.badgeBB]}>BB</Text>}
       </View>
     </View>
   );
@@ -295,6 +343,7 @@ function PlayerPod({ player, isMe, turnDeadline, lastAction, win, displayChips, 
   return (
     <View style={[s.pod, present && player.folded && { opacity: 0.8 }]}>
       {nameplate}
+      <TimerBar deadline={turnDeadline} isMe={isMe} />
       {avatar}
     </View>
   );
@@ -876,9 +925,30 @@ const s = StyleSheet.create({
   nameplateAllIn:   { borderColor: '#ef4444', shadowColor: '#ef4444', shadowOpacity: 0.8, shadowRadius: 14, shadowOffset: { width: 0, height: 0 }, elevation: 8 },
   nameplateFolded:  {},
   nameplateWaiting: {},
-  nameRow:   { flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' },
-  chipsRow:  { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  podName:   { color: colors.white, fontSize: 17, fontWeight: '800', flexShrink: 1 },
+
+  // Turn-timer gauge — a clip box that mirrors the nameplate's shape exactly
+  // (same width + corner radii); the bar sits at its bottom so its ends follow
+  // the plate's rounded corner. Segments run green→red, draining outer→avatar.
+  timerClip: {
+    position: 'absolute',
+    top: NP_TOP + 8, height: NP_H,               // nameplate box shifted down by the bar height
+    overflow: 'hidden',
+    justifyContent: 'flex-end',                  // bar pinned to the bottom → sits just below the plate, touching it
+    zIndex: 4, elevation: 5,
+  },
+  timerClipMe:  { left: NP_ME_LEFT + TIMER_OUTER_INSET, right: NP_ME_RIGHT,
+                  borderTopLeftRadius: NP_RADIUS, borderBottomLeftRadius: NP_RADIUS,
+                  borderTopRightRadius: 0, borderBottomRightRadius: 0 },
+  timerClipOpp: { left: NP_OPP_LEFT, right: NP_OPP_RIGHT + TIMER_OUTER_INSET,
+                  borderTopRightRadius: NP_RADIUS, borderBottomRightRadius: NP_RADIUS,
+                  borderTopLeftRadius: 0, borderBottomLeftRadius: 0 },
+  timerRow:    { flexDirection: 'row', alignItems: 'stretch', height: 8, gap: 1.5,
+                 paddingHorizontal: 2, backgroundColor: 'transparent' },
+  timerSeg:    { flex: 1, borderRadius: 1 },
+
+  nameRow:   { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-start', gap: 6, flexWrap: 'nowrap' },
+  chipsRow:  { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-start', gap: 6 },
+  podName:   { color: colors.white, fontSize: 17, fontWeight: '800', flexShrink: 1, minWidth: 0 },
   podChips:  { color: '#facc15', fontSize: 18, fontWeight: '900' },
   podChipsWin:    { color: '#4ade80' },
   podChipsAction: { color: colors.orange, fontSize: 14, fontWeight: '800' },

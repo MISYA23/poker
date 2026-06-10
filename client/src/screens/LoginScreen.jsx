@@ -11,6 +11,7 @@ import { GameContext } from '../context/GameContext';
 import { colors } from '../theme';
 import { SERVER_URL, VERSION_DISPLAY } from '../config';
 import { getUser, setUser, getOrCreatePlayerId } from '../utils/user';
+import ScreenBackground from '../components/ScreenBackground';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -131,7 +132,10 @@ export default function LoginScreen() {
   };
 
   return (
-    <SafeAreaView style={s.root}>
+    <View style={s.root}>
+      <ScreenBackground />
+
+      <SafeAreaView style={s.safe}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={s.kav}>
         <View style={s.center}>
           <View style={s.heading}>
@@ -178,17 +182,19 @@ export default function LoginScreen() {
           </View>
         </View>
       </KeyboardAvoidingView>
-    </SafeAreaView>
+      </SafeAreaView>
+    </View>
   );
 }
 
 const s = StyleSheet.create({
   root:    { flex: 1, backgroundColor: '#0a1628', ...Platform.select({ web: { height: '100vh', width: '100%' } }) },
+  safe:    { flex: 1 },
   kav:     { flex: 1 },
-  center:  { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24, gap: 24 },
-  heading: { alignItems: 'center', gap: 4 },
+  center:  { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
+  heading: { alignItems: 'center', gap: 4, marginBottom: 45 },
   title:   { fontSize: 26, fontWeight: '900', color: colors.goldLight, letterSpacing: 1, textAlign: 'center' },
-  version: { fontSize: 13, fontWeight: '700', color: colors.goldLight, textAlign: 'center', opacity: 0.7 },
+  version: { fontSize: 17, fontWeight: '800', color: colors.goldLight, textAlign: 'center', opacity: 0.95 },
   card: {
     backgroundColor: '#12121e',
     borderWidth: 1.5, borderColor: 'rgba(255,220,160,0.22)',
