@@ -44,6 +44,7 @@ export default function App() {
   const [deckStyle, setDeckStyle]           = useState('regular');
   const [matchOver, setMatchOver]           = useState(null);
   const [myRecentMatches, setMyRecentMatches] = useState([]);
+  const [opponentDisconnected, setOpponentDisconnected] = useState(null); // grace deadline ts
   const [playerInfo, setPlayerInfo] = useState(null);
   const [incomingChallenges, setIncomingChallenges] = useState([]); // [{ fromId, fromName, fromAvatarId }]
   const [outgoingChallenges, setOutgoingChallenges] = useState([]); // [{ toId, toName }]
@@ -72,6 +73,7 @@ export default function App() {
       setInQueue(false);
       matchIdRef.current = matchId;
       setMatchOver(null);
+      setOpponentDisconnected(null);
       // Starting any match voids all challenges (server does the same)
       setIncomingChallenges([]);
       setOutgoingChallenges([]);
@@ -88,11 +90,14 @@ export default function App() {
     },
     'match-over':  (data)            => {
       setMatchOver({ ...data, myVote: null, opponentWantsRematch: null });
+      setOpponentDisconnected(null);
       if (data.newElo != null) setMyElo(data.newElo);
     },
     'rematch-pending': ({ from })    => {
       setMatchOver(prev => prev ? { ...prev, opponentWantsRematch: from } : prev);
     },
+    'opponent-disconnected':  ({ deadline }) => setOpponentDisconnected(deadline),
+    'opponent-reconnected':   ()             => setOpponentDisconnected(null),
     'challenge-received':     (data)         => setIncomingChallenges(list => [...list.filter(c => c.fromId !== data.fromId), data]),
     'challenge-sent':         (data)         => setOutgoingChallenges(list => [...list.filter(c => c.toId !== data.toId), data]),
     'challenge-declined':     ({ byId })     => setOutgoingChallenges(list => list.filter(c => c.toId !== byId)),
@@ -108,6 +113,7 @@ export default function App() {
       if (isObserverRef.current) emit('unobserve', { matchId: matchIdRef.current });
       setGameState(null);
       setInQueue(false); setMatchOver(null);
+      setOpponentDisconnected(null);
       matchIdRef.current = null;
       isObserverRef.current = false;
       navigationRef.reset({ index: 0, routes: [{ name: 'Lobby' }] });
@@ -237,7 +243,7 @@ export default function App() {
   return (
     <GameContext.Provider value={{
       gameState, myId, error, inQueue, matchList, onlinePlayers, myElo, matchOver,
-      playerInfo, myRecentMatches, deckStyle, setDeckStyle,
+      playerInfo, myRecentMatches, deckStyle, setDeckStyle, opponentDisconnected,
       incomingChallenges, outgoingChallenges, onChallenge, onAcceptChallenge, onDeclineChallenge, onWithdrawChallenge,
       pendingFriendRequests, setPendingFriendRequests,
       uiConfig, emit, onLogin, onLogout, onUpdateProfile, onFindMatch, onPlayBot, onCancelMatch,

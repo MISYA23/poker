@@ -90,7 +90,7 @@ function createMatch(p1, p2) {
     ended: false,
     autoStartTimer: null, nextHandTimer: null,
     turnTimer: null, timerPlayerId: null, turnDeadline: null,
-    botTimer: null, isBotMatch: false, botId: null,
+    botTimer: null, isBotMatch: false, botId: null, graceTimer: null,
     handCount: 0, handEventSeq: 0, currentHandUuid: null,
     maxPlayers: 2, name: `match:${id.slice(0, 8)}`, emoji: '♠',
   };
@@ -331,6 +331,7 @@ async function endMatch(m, winnerId) {
   clearTimeout(m.nextHandTimer);  m.nextHandTimer  = null;
   clearTimeout(m.turnTimer);      m.turnTimer      = null;
   clearTimeout(m.botTimer);       m.botTimer       = null;
+  clearTimeout(m.graceTimer);     m.graceTimer     = null;
   m.timerPlayerId = null;
   m.turnDeadline  = null;
   m.game.gameOver = true; // every end path counts as game over, not just busts
@@ -467,8 +468,30 @@ io.on('connection', (socket) => {
         });
       }
 
-      // Lobby and table are mutually exclusive. If this socket still has a live
-      // match, arriving at the lobby means they abandoned it — opponent wins.
+      // A live match holding a vacant seat for this identity takes priority
+      // over the lobby — re-seat the new socket and send them to the table.
+      // (Refresh / connection-blip recovery.)
+      for (const m of matches.values()) {
+        if (m.ended) continue;
+        const seat = matchPlayers(m).find(p => p.playerId === playerId && p.vacant);
+        if (!seat) continue;
+        seat.vacant = false;
+        seat.socketId = socket.id;
+        socketPlayers.get(socket.id).matchId = m.id;
+        if (!matchPlayers(m).some(p => p.vacant)) { clearTimeout(m.graceTimer); m.graceTimer = null; }
+        const other = matchPlayers(m).find(p => p.playerId !== playerId);
+        if (other) io.to(other.socketId).emit('opponent-reconnected');
+        io.to(socket.id).emit('match-found', { matchId: m.id, opponent: { name: other?.playerName || '' } });
+        broadcastMatchState(m);
+        broadcastMatchList();
+        console.log(`[match] ${playerName} re-seated at ${m.id.slice(0, 8)} after reconnect`);
+        return;
+      }
+
+      // Lobby and table are mutually exclusive. If this socket is still seated
+      // at a live match, arriving at the lobby means they abandoned it —
+      // opponent wins. (A freshly reconnected socket is seated at nothing, so
+      // refreshes can never trip this.)
       const sp = socketPlayers.get(socket.id);
       const live = liveMatchOf(sp);
       if (live) {
@@ -701,12 +724,30 @@ io.on('connection', (socket) => {
     voidChallengesFor(sp.playerId);
     console.log('[server] disconnected:', sp.playerName || socket.id);
 
-    // No grace period: leaving the connection is leaving the table.
-    // The player still seated wins and the match is closed immediately.
+    // A dropped connection vacates the seat but doesn't end the match: the
+    // player has one grace window (per disconnect) to come back via
+    // enter-lobby, which re-seats them. The grace timer lives on the match, so
+    // endMatch reaps it along with every other timer.
     const m = liveMatchOf(sp);
     if (m) {
-      const otherId = matchPlayers(m).find(p => p.playerId !== sp.playerId)?.playerId;
-      endMatch(m, otherId ?? sp.playerId);
+      const seat  = matchPlayers(m).find(p => p.playerId === sp.playerId);
+      const other = matchPlayers(m).find(p => p.playerId !== sp.playerId);
+      if (other?.vacant) {
+        // Both seats empty — nobody is at the table, close it now.
+        // The player who stayed longer (this one) takes the win.
+        endMatch(m, sp.playerId);
+      } else if (seat) {
+        seat.vacant = true;
+        const graceMs = parseInt(process.env.DISCONNECT_GRACE_MS, 10) || cfg.disconnect_grace_ms || 20000;
+        if (other) io.to(other.socketId).emit('opponent-disconnected', { deadline: Date.now() + graceMs });
+        m.graceTimer = setTimeout(() => {
+          m.graceTimer = null;
+          if (m.ended) return;
+          const present = matchPlayers(m).find(p => !p.vacant);
+          endMatch(m, present?.playerId ?? sp.playerId);
+        }, graceMs);
+        console.log(`[match] ${sp.playerName} vacated seat at ${m.id.slice(0, 8)} — ${graceMs / 1000}s grace`);
+      }
     }
     broadcastMatchList();
   });
@@ -714,7 +755,16 @@ io.on('connection', (socket) => {
   // Explicit logout — remove from socketPlayers so they disappear from online list
   socket.on('logout', () => {
     const sp = socketPlayers.get(socket.id);
-    if (sp) { dequeue(sp.playerId); voidChallengesFor(sp.playerId); }
+    if (sp) {
+      dequeue(sp.playerId);
+      voidChallengesFor(sp.playerId);
+      // Logging out is deliberate — no grace, any live match is forfeited
+      const m = liveMatchOf(sp);
+      if (m) {
+        const otherId = matchPlayers(m).find(p => p.playerId !== sp.playerId)?.playerId;
+        endMatch(m, otherId ?? sp.playerId);
+      }
+    }
     socketPlayers.delete(socket.id);
     broadcastMatchList();
   });

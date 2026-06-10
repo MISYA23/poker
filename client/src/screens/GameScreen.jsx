@@ -179,6 +179,16 @@ function HoleCards({ player, isMe, deckStyle }) {
 }
 
 // ─── Hooks ────────────────────────────────────────────────────────────────────
+function useCountdown(deadline) {
+  const [t, setT] = useState(null);
+  useEffect(() => {
+    if (!deadline) { setT(null); return; }
+    const up = () => setT(Math.max(0, Math.ceil((deadline - Date.now()) / 1000)));
+    up(); const id = setInterval(up, 200); return () => clearInterval(id);
+  }, [deadline]);
+  return t;
+}
+
 function useActionFlash(player, lastAction) {
   const [label, setLabel] = useState(null);
   const seen = useRef(null);
@@ -198,6 +208,18 @@ function useActionFlash(player, lastAction) {
     return () => clearTimeout(id);
   }, [t]);
   return label;
+}
+
+// ─── DisconnectBanner ─────────────────────────────────────────────────────────
+function DisconnectBanner({ deadline }) {
+  const secsLeft = useCountdown(deadline);
+  return (
+    <View style={s.disconnectBanner}>
+      <Text style={s.disconnectTxt}>
+        Opponent disconnected — {secsLeft !== null ? `wins in ${secsLeft}s unless they return` : 'waiting…'}
+      </Text>
+    </View>
+  );
 }
 
 // ─── PlayerPod — avatar + nameplate only (hole cards are now separate) ────────
@@ -260,7 +282,7 @@ function PlayerPod({ player, isMe, turnDeadline, lastAction, win, displayChips, 
 export default function GameScreen({ navigation }) {
   const {
     gameState, myId, onAction, onLeave, onRematch, onLogout,
-    matchOver, navigationRef, deckStyle, playerInfo,
+    matchOver, navigationRef, deckStyle, opponentDisconnected, playerInfo,
   } = useContext(GameContext);
 
   useEffect(() => {
@@ -519,6 +541,13 @@ export default function GameScreen({ navigation }) {
           </Pressable>
         </View>
 
+        {/* Disconnect banner — opponent vacated their seat, grace running */}
+        {opponentDisconnected && (
+          <View pointerEvents="none">
+            <DisconnectBanner deadline={opponentDisconnected} />
+          </View>
+        )}
+
         {/* Spacer pushes betting controls to the bottom */}
         <View style={{ flex: 1 }} pointerEvents="none" />
 
@@ -757,6 +786,8 @@ const s = StyleSheet.create({
   version:    { color: 'rgba(255,255,255,0.2)', fontSize: 11 },
   menuBtn:    { width: 36, height: 36, borderRadius: 8, backgroundColor: 'rgba(0,0,0,0.5)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)', alignItems: 'center', justifyContent: 'center' },
   menuBtnTxt: { color: colors.white, fontSize: 16 },
+  disconnectBanner: { marginHorizontal: 12, marginTop: 4, backgroundColor: 'rgba(251,146,60,0.18)', borderWidth: 1, borderColor: 'rgba(251,146,60,0.5)', borderRadius: 8, paddingVertical: 6, paddingHorizontal: 12 },
+  disconnectTxt:    { color: '#fb923c', fontSize: 12, fontWeight: '700', textAlign: 'center' },
   bottomChrome: { paddingHorizontal: 12, paddingBottom: 10, paddingTop: 6, alignItems: 'center' },
 
   // Disconnect banner
