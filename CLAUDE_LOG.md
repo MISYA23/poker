@@ -18,3 +18,5 @@ and log [START] / [DONE] entries for every task. See global CLAUDE.md for protoc
 [18:26 UTC] [START] Rename Recent tab → Players tab with online/in-match status dots
 [20:03 UTC] [DONE] v5.99 (b1.46): Facebook login for web — changed: client/web/index.html (new), client/src/screens/LoginScreen.jsx, server/index.js, client/src/config.js
 [20:11 UTC] [DONE] v5.100: add /terms page — changed: server/index.js, client/src/config.js
+[02:59 UTC] [START] Slumbot API integration — new branch, connect to API, console.log recommended plays with gamestate
+[03:03 UTC] [DONE] v5.102: Slumbot API client + test harness on branch feature/slumbot-bot — changed: server/slumbot.js (new), server/scripts/slumbotTest.js (new), client/src/config.js
