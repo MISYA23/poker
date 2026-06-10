@@ -1,7 +1,7 @@
 import React, { useContext, useState, useEffect, useRef } from 'react';
 import {
   View, Text, Pressable, StyleSheet, Animated, Easing,
-  useWindowDimensions, Image, Platform,
+  useWindowDimensions, Image, Platform, TextInput,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle } from 'react-native-svg';
@@ -11,7 +11,13 @@ import Avatar from '../components/Avatar';
 import { ChipStack } from '../components/PokerChip';
 import BettingControls from '../components/BettingControls';
 import { colors } from '../theme';
-import { VERSION_DISPLAY } from '../config';
+import { VERSION_DISPLAY, SERVER_URL } from '../config';
+
+const FEEDBACK_OPTIONS = [
+  { value: 'bug',        label: '🐞 Bug' },
+  { value: 'game_issue', label: '🎮 Game issue' },
+  { value: 'feedback',   label: '💬 Feedback' },
+];
 
 // Table variants — switch by changing TABLE_VARIANT ('tall' | 'fat')
 const TABLE_VARIANTS = {
@@ -301,6 +307,43 @@ export default function GameScreen({ navigation }) {
   const [debugUI,       setDebugUI]       = useState(false);
   const [leaveWarning,  setLeaveWarning]  = useState(false);
 
+  // In-game feedback
+  const [feedbackOpen,   setFeedbackOpen]   = useState(false);
+  const [feedbackType,   setFeedbackType]   = useState('bug');
+  const [typeMenuOpen,   setTypeMenuOpen]   = useState(false);
+  const [feedbackText,   setFeedbackText]   = useState('');
+  const [feedbackState,  setFeedbackState]  = useState('idle'); // idle | sending | done | error
+
+  const openFeedback = () => {
+    setFeedbackType('bug');
+    setFeedbackText('');
+    setFeedbackState('idle');
+    setTypeMenuOpen(false);
+    setFeedbackOpen(true);
+  };
+
+  const submitFeedback = async () => {
+    if (!feedbackText.trim() || feedbackState === 'sending') return;
+    setFeedbackState('sending');
+    try {
+      const res = await fetch(`${SERVER_URL}/api/feedback`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: feedbackType,
+          details: feedbackText.trim(),
+          playerId: playerInfo?.playerId,
+          playerName: playerInfo?.name,
+        }),
+      });
+      if (!res.ok) throw new Error('bad status');
+      setFeedbackState('done');
+      setTimeout(() => setFeedbackOpen(false), 1200);
+    } catch (e) {
+      setFeedbackState('error');
+    }
+  };
+
   const me       = gameState?.players?.find(p => p.id === myId);
   const opponent = gameState?.players?.find(p => p.id !== myId);
   const totalPot = gameState?.pot || 0;
@@ -552,6 +595,13 @@ export default function GameScreen({ navigation }) {
           </Pressable>
         </View>
 
+        {/* Feedback button — sits just below the hamburger, top-right */}
+        <View style={s.feedbackBtnRow} pointerEvents="box-none">
+          <Pressable style={s.feedbackBtn} onPress={openFeedback}>
+            <Text style={s.feedbackBtnTxt}>💬 Feedback</Text>
+          </Pressable>
+        </View>
+
         {/* Disconnect banner — opponent vacated their seat, grace running */}
         {opponentDisconnected && (
           <View pointerEvents="none">
@@ -621,6 +671,73 @@ export default function GameScreen({ navigation }) {
             </View>
           </View>
         </View>
+      )}
+
+      {/* Feedback modal */}
+      {feedbackOpen && (
+        <Pressable style={s.modalOverlay} onPress={() => { setTypeMenuOpen(false); }}>
+          <Pressable style={[s.modal, { alignItems: 'stretch', maxWidth: 380 }]} onPress={() => {}}>
+            <Text style={s.modalTitle}>Send Feedback</Text>
+
+            {/* Type dropdown */}
+            <View style={{ zIndex: 10 }}>
+              <Pressable style={s.fbDropdown} onPress={() => setTypeMenuOpen(o => !o)}>
+                <Text style={s.fbDropdownTxt}>
+                  {FEEDBACK_OPTIONS.find(o => o.value === feedbackType)?.label}
+                </Text>
+                <Text style={s.fbDropdownCaret}>{typeMenuOpen ? '▲' : '▼'}</Text>
+              </Pressable>
+              {typeMenuOpen && (
+                <View style={s.fbDropdownMenu}>
+                  {FEEDBACK_OPTIONS.map(opt => (
+                    <Pressable key={opt.value} style={s.fbDropdownItem}
+                      onPress={() => { setFeedbackType(opt.value); setTypeMenuOpen(false); }}>
+                      <Text style={[s.fbDropdownItemTxt,
+                        opt.value === feedbackType && { color: colors.gold, fontWeight: '800' }]}>
+                        {opt.label}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+              )}
+            </View>
+
+            {/* Details text box */}
+            <TextInput
+              style={s.fbInput}
+              placeholder="Describe it…"
+              placeholderTextColor="rgba(255,255,255,0.35)"
+              value={feedbackText}
+              onChangeText={setFeedbackText}
+              onFocus={() => setTypeMenuOpen(false)}
+              multiline
+              textAlignVertical="top"
+              maxLength={5000}
+            />
+
+            {feedbackState === 'error' && (
+              <Text style={s.fbError}>Couldn't send — try again.</Text>
+            )}
+            {feedbackState === 'done' && (
+              <Text style={s.fbDone}>✓ Thanks! Sent.</Text>
+            )}
+
+            <View style={s.modalBtns}>
+              <Pressable style={[s.modalBtn, s.modalBtnNo]} onPress={() => setFeedbackOpen(false)}>
+                <Text style={s.modalBtnTxt}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                style={[s.modalBtn, s.modalBtnYes,
+                  (!feedbackText.trim() || feedbackState === 'sending') && { opacity: 0.5 }]}
+                disabled={!feedbackText.trim() || feedbackState === 'sending'}
+                onPress={submitFeedback}>
+                <Text style={s.modalBtnTxt}>
+                  {feedbackState === 'sending' ? 'Sending…' : 'Submit'}
+                </Text>
+              </Pressable>
+            </View>
+          </Pressable>
+        </Pressable>
       )}
 
       {/* Match over modal — root-level overlay, not scaled */}
@@ -833,4 +950,20 @@ const s = StyleSheet.create({
   modalBtnNo:  { backgroundColor: 'rgba(255,255,255,0.1)' },
   modalBtnYes: { backgroundColor: colors.gold, flex: 1.5 },
   modalBtnTxt: { color: colors.white, fontSize: 15, fontWeight: '800', textAlign: 'center' },
+
+  // Feedback button (below hamburger)
+  feedbackBtnRow: { flexDirection: 'row', justifyContent: 'flex-end', paddingHorizontal: 12, marginTop: 6 },
+  feedbackBtn:    { backgroundColor: 'rgba(0,0,0,0.5)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 },
+  feedbackBtnTxt: { color: colors.white, fontSize: 12, fontWeight: '600' },
+
+  // Feedback modal
+  fbDropdown:     { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: 'rgba(255,255,255,0.08)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12 },
+  fbDropdownTxt:  { color: colors.white, fontSize: 15, fontWeight: '600' },
+  fbDropdownCaret:{ color: 'rgba(255,255,255,0.6)', fontSize: 12 },
+  fbDropdownMenu: { position: 'absolute', top: '100%', left: 0, right: 0, marginTop: 4, backgroundColor: '#1b1b1b', borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)', borderRadius: 12, overflow: 'hidden', elevation: 8 },
+  fbDropdownItem: { paddingHorizontal: 14, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.07)' },
+  fbDropdownItemTxt: { color: 'rgba(255,255,255,0.9)', fontSize: 15 },
+  fbInput:        { backgroundColor: 'rgba(255,255,255,0.06)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)', borderRadius: 12, color: colors.white, fontSize: 15, paddingHorizontal: 14, paddingVertical: 12, minHeight: 110, maxHeight: 220 },
+  fbError:        { color: '#f87171', fontSize: 13, textAlign: 'center' },
+  fbDone:         { color: '#4ade80', fontSize: 14, fontWeight: '700', textAlign: 'center' },
 });
