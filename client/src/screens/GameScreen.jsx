@@ -13,7 +13,13 @@ import BettingControls from '../components/BettingControls';
 import { colors } from '../theme';
 import { VERSION_DISPLAY } from '../config';
 
-const INGAME_TABLE  = require('../../assets/game-table.png');
+// Table variants — switch by changing TABLE_VARIANT ('tall' | 'fat')
+const TABLE_VARIANTS = {
+  tall: require('../../assets/game-table.png'),
+  fat:  require('../../assets/game-table-fat.png'),
+};
+const TABLE_VARIANT = 'fat';
+const INGAME_TABLE  = TABLE_VARIANTS[TABLE_VARIANT];
 
 const TURN_DURATION_MS = 20000;
 const TOP_BAR_H    = 48;
