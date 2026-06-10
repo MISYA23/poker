@@ -1281,6 +1281,37 @@ app.get('/api/admin/players', async (_, res) => {
   }
 });
 
+// ── In-game feedback ──────────────────────────────────────────────────────────
+const FEEDBACK_TYPES = ['bug', 'game_issue', 'feedback'];
+
+app.post('/api/feedback', async (req, res) => {
+  try {
+    const { type, details, playerId, playerName } = req.body || {};
+    if (!FEEDBACK_TYPES.includes(type)) return res.status(400).json({ error: 'invalid type' });
+    const text = (details || '').trim();
+    if (!text) return res.status(400).json({ error: 'details required' });
+    await db.query(
+      `INSERT INTO feedback (type, details, player_id, player_name) VALUES ($1, $2, $3, $4)`,
+      [type, text.slice(0, 5000), playerId || null, playerName || null]
+    );
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get('/api/admin/feedback', async (_, res) => {
+  try {
+    const { rows } = await db.query(`
+      SELECT id, type, details, player_id, player_name, created_at
+      FROM feedback ORDER BY created_at DESC
+    `);
+    res.json(rows);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.get('/admin/players', (_, res) => {
   res.send(`<!DOCTYPE html>
 <html lang="en">
@@ -1433,6 +1464,169 @@ app.get('/admin/players', (_, res) => {
 </html>`);
 });
 
+app.get('/admin/feedback', (_, res) => {
+  res.send(`<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Poker Monkey — In-Game Feedback</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #0d1117; color: #e6edf3; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', monospace; min-height: 100vh; padding: 40px 16px; }
+    h1 { font-size: 1.4rem; color: #f0c040; margin-bottom: 8px; letter-spacing: 1px; }
+    #auth { background: #161b22; border: 1px solid #30363d; border-radius: 10px; padding: 32px; width: 100%; max-width: 340px; display: flex; flex-direction: column; gap: 16px; }
+    #auth label { font-size: 0.85rem; color: #8b949e; }
+    #auth input { background: #0d1117; border: 1px solid #30363d; border-radius: 6px; color: #e6edf3; font-size: 1rem; padding: 10px 14px; width: 100%; outline: none; }
+    #auth input:focus { border-color: #f0c040; }
+    #auth button { background: #f0c040; color: #0d1117; border: none; border-radius: 6px; font-weight: 700; font-size: 1rem; padding: 10px; cursor: pointer; }
+    #auth .err { color: #f85149; font-size: 0.85rem; display: none; }
+    #main { display: none; }
+    .nav { margin-bottom: 16px; }
+    .nav a { color: #8b949e; font-size: 0.85rem; text-decoration: none; }
+    .nav a:hover { color: #e6edf3; }
+    .toolbar { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
+    .toolbar select, .toolbar input { background: #161b22; border: 1px solid #30363d; border-radius: 6px; color: #e6edf3; font-size: 0.9rem; padding: 7px 12px; outline: none; }
+    .toolbar input { width: 260px; }
+    .toolbar select:focus, .toolbar input:focus { border-color: #f0c040; }
+    .count { color: #8b949e; font-size: 0.85rem; }
+    .wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; background: #161b22; border: 1px solid #30363d; border-radius: 10px; overflow: hidden; font-size: 0.85rem; }
+    th { background: #1c2128; color: #8b949e; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; padding: 10px 14px; text-align: left; white-space: nowrap; cursor: pointer; user-select: none; }
+    th:hover { color: #e6edf3; }
+    th.asc::after  { content: ' ↑'; color: #f0c040; }
+    th.desc::after { content: ' ↓'; color: #f0c040; }
+    td { padding: 9px 14px; border-top: 1px solid #21262d; vertical-align: top; }
+    td.date { color: #8b949e; font-size: 0.8rem; white-space: nowrap; }
+    td.name { color: #e6edf3; white-space: nowrap; }
+    td.details { color: #e6edf3; white-space: pre-wrap; min-width: 320px; max-width: 640px; }
+    .badge { display: inline-block; padding: 3px 9px; border-radius: 999px; font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; white-space: nowrap; }
+    .badge.bug        { background: #3d1518; color: #ff7b72; }
+    .badge.game_issue { background: #3d2e15; color: #f0c040; }
+    .badge.feedback   { background: #16321f; color: #56d364; }
+    tr:hover td { background: #1c2128; }
+  </style>
+</head>
+<body>
+  <h1>💬 In-Game Feedback</h1>
+
+  <div id="auth">
+    <label>Password</label>
+    <input type="password" id="pw" placeholder="Enter password" />
+    <div class="err" id="err">Wrong password</div>
+    <button onclick="login()">Enter</button>
+  </div>
+
+  <div id="main">
+    <div class="nav"><a href="/admin">← Admin home</a></div>
+    <div class="toolbar">
+      <select id="typeFilter" onchange="render()">
+        <option value="">All types</option>
+        <option value="bug">Bug</option>
+        <option value="game_issue">Game issue</option>
+        <option value="feedback">Feedback</option>
+      </select>
+      <input type="text" id="search" placeholder="Search details or player…" oninput="render()" />
+      <span class="count" id="count"></span>
+    </div>
+    <div class="wrap"><table>
+      <thead><tr id="thead"></tr></thead>
+      <tbody id="tbody"></tbody>
+    </table></div>
+  </div>
+
+  <script>
+    const PASSWORD = '1111';
+    const TYPE_LABELS = { bug: 'Bug', game_issue: 'Game issue', feedback: 'Feedback' };
+    const COLS = [
+      { key: 'type',        label: 'Type' },
+      { key: 'details',     label: 'Details',  cls: 'details' },
+      { key: 'player_name', label: 'Player',   cls: 'name', fmt: v => v ?? '—' },
+      { key: 'created_at',  label: 'Received', cls: 'date', fmt: v => v ? new Date(v).toLocaleString() : '—' },
+    ];
+
+    let allRows = [], sortCol = 'created_at', sortDir = 'desc';
+
+    document.getElementById('pw').addEventListener('keydown', e => { if (e.key === 'Enter') login(); });
+
+    function login() {
+      if (document.getElementById('pw').value === PASSWORD) {
+        document.getElementById('auth').style.display = 'none';
+        document.getElementById('main').style.display = 'block';
+        load();
+      } else {
+        document.getElementById('err').style.display = 'block';
+      }
+    }
+
+    function buildHeader() {
+      const tr = document.getElementById('thead');
+      tr.innerHTML = '';
+      COLS.forEach(col => {
+        const th = document.createElement('th');
+        th.textContent = col.label;
+        if (col.key === sortCol) th.className = sortDir;
+        th.onclick = () => {
+          if (sortCol === col.key) sortDir = sortDir === 'asc' ? 'desc' : 'asc';
+          else { sortCol = col.key; sortDir = 'asc'; }
+          buildHeader();
+          render();
+        };
+        tr.appendChild(th);
+      });
+    }
+
+    function sortVal(row, key) {
+      const v = row[key];
+      if (v === null || v === undefined) return '';
+      if (key === 'created_at') return new Date(v).getTime();
+      return ('' + v).toLowerCase();
+    }
+
+    function render() {
+      const q = document.getElementById('search').value.toLowerCase();
+      const typeF = document.getElementById('typeFilter').value;
+      let rows = allRows.filter(r =>
+        (!typeF || r.type === typeF) &&
+        (!q || (r.details ?? '').toLowerCase().includes(q) || (r.player_name ?? '').toLowerCase().includes(q))
+      );
+      rows.sort((a, b) => {
+        const av = sortVal(a, sortCol), bv = sortVal(b, sortCol);
+        const cmp = av < bv ? -1 : av > bv ? 1 : 0;
+        return sortDir === 'asc' ? cmp : -cmp;
+      });
+      document.getElementById('count').textContent = rows.length + ' report' + (rows.length === 1 ? '' : 's');
+      const tbody = document.getElementById('tbody');
+      tbody.innerHTML = '';
+      rows.forEach(row => {
+        const tr = document.createElement('tr');
+        COLS.forEach(col => {
+          const td = document.createElement('td');
+          if (col.cls) td.className = col.cls;
+          if (col.key === 'type') {
+            const span = document.createElement('span');
+            span.className = 'badge ' + row.type;
+            span.textContent = TYPE_LABELS[row.type] || row.type;
+            td.appendChild(span);
+          } else {
+            td.textContent = col.fmt ? col.fmt(row[col.key]) : (row[col.key] ?? '');
+          }
+          tr.appendChild(td);
+        });
+        tbody.appendChild(tr);
+      });
+    }
+
+    async function load() {
+      allRows = await fetch('/api/admin/feedback').then(r => r.json());
+      buildHeader();
+      render();
+    }
+  </script>
+</body>
+</html>`);
+});
+
 const ADMIN_SHELL = (title, bodyHtml, scriptHtml = '') => `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -1516,6 +1710,10 @@ app.get('/admin', (_, res) => res.send(ADMIN_SHELL('Admin', `
       <a href="/admin/players" style="display:block;background:#161b22;border:1px solid #30363d;border-radius:10px;padding:20px 24px;text-decoration:none;color:#e6edf3">
         <div style="font-size:1rem;font-weight:700;margin-bottom:4px">👥 Players</div>
         <div style="font-size:0.82rem;color:#8b949e">All registered and guest players, ELO, match history</div>
+      </a>
+      <a href="/admin/feedback" style="display:block;background:#161b22;border:1px solid #30363d;border-radius:10px;padding:20px 24px;text-decoration:none;color:#e6edf3">
+        <div style="font-size:1rem;font-weight:700;margin-bottom:4px">💬 In-Game Feedback</div>
+        <div style="font-size:0.82rem;color:#8b949e">Player-submitted bug reports, game issues, and feedback</div>
       </a>
     </div>
   </div>`, `function onLogin() {}`)));
@@ -1979,8 +2177,27 @@ async function initBots() {
   console.log('[bots] online:', Object.values(BOTS).map(b => `${b.name} (${b.profile.name})`).join(', '));
 }
 
+async function ensureFeedbackTable() {
+  try {
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS feedback (
+        id          SERIAL PRIMARY KEY,
+        type        TEXT NOT NULL,
+        details     TEXT NOT NULL,
+        player_id   TEXT,
+        player_name TEXT,
+        created_at  TIMESTAMPTZ DEFAULT now()
+      )
+    `);
+    console.log('[feedback] table ready');
+  } catch (e) {
+    console.error('[feedback] table init failed:', e.message);
+  }
+}
+
 async function start() {
   await redis.connect().catch(e => console.error('[redis] connect failed:', e.message));
+  await ensureFeedbackTable();
   cfg = await loadGameConfig();
   fmt = await loadMatchFormat();
   uiCfg = await loadUiConfig();
