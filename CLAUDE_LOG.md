@@ -18,3 +18,6 @@ and log [START] / [DONE] entries for every task. See global CLAUDE.md for protoc
 [18:26 UTC] [START] Rename Recent tab → Players tab with online/in-match status dots
 [20:03 UTC] [DONE] v5.99 (b1.46): Facebook login for web — changed: client/web/index.html (new), client/src/screens/LoginScreen.jsx, server/index.js, client/src/config.js
 [20:11 UTC] [DONE] v5.100: add /terms page — changed: server/index.js, client/src/config.js
+[03:14 UTC] [START] Monte Carlo bot brain — equity sim + tunable personality profiles, branch feature/bot-brain
+[03:17 UTC] [START] stress-testing feature/play-bot in worktree — scripted bug hunt
+[03:20 UTC] [DONE] v5.103: Monte Carlo bot brain + profiles + harness on feature/bot-brain — changed: server/bot/monteCarlo.js (new), server/bot/profiles.js (new), server/bot/botBrain.js (new), server/scripts/botBrainTest.js (new), client/src/config.js
