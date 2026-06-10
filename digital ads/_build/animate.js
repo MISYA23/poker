@@ -42,11 +42,28 @@ const HTML = `<!doctype html><html><head><meta charset="utf8"><style>
   #s3 .strip { top:120px; font-size:40px; font-weight:900; letter-spacing:.1em; color:#f0c040;
                background:rgba(10,19,34,.92); padding:26px 54px; border-radius:otational 999px; border-radius:999px;
                border:2px solid rgba(240,192,64,.5); white-space:nowrap; }
-  #phoneWrap { top:300px; left:50%; width:760px; }
-  #phone { width:760px; border-radius:54px; overflow:hidden; background:#0a1322;
-           border:4px solid rgba(240,192,64,.6);
-           box-shadow:0 60px 140px rgba(0,0,0,.7), 0 0 0 14px rgba(255,255,255,.04); }
+  #phoneWrap { top:280px; left:50%; width:780px; }
+  /* full phone body: titanium frame, bezel, camera island, side buttons */
+  #phone { position:relative; width:780px; border-radius:84px; padding:24px;
+           background:linear-gradient(145deg,#3a3f47 0%,#16181c 30%,#0c0d10 70%,#23262c 100%);
+           box-shadow:0 70px 150px rgba(0,0,0,.75), inset 0 2px 3px rgba(255,255,255,.25),
+                      inset 0 -2px 3px rgba(0,0,0,.8), 0 0 0 2px rgba(0,0,0,.55); }
+  #phone .screen { position:relative; border-radius:62px; overflow:hidden; background:#000;
+                   box-shadow:inset 0 0 0 3px #000; }
   #phone video { width:100%; display:block; }
+  #phone .island { position:absolute; top:20px; left:50%; transform:translateX(-50%);
+                   width:190px; height:44px; background:#000; border-radius:24px; z-index:3;
+                   box-shadow:inset 0 0 4px rgba(255,255,255,.12); }
+  #phone .island::after { content:''; position:absolute; right:16px; top:50%; transform:translateY(-50%);
+                   width:18px; height:18px; border-radius:50%;
+                   background:radial-gradient(circle at 35% 35%, #2a3a55 0%, #0a0f18 60%); }
+  #phone .btn { position:absolute; width:7px; background:linear-gradient(90deg,#2c3036,#101113);
+                border-radius:4px; }
+  #phone .pwr { right:-7px; top:340px; height:150px; }
+  #phone .volu { left:-7px; top:280px; height:95px; }
+  #phone .vold { left:-7px; top:395px; height:95px; }
+  #phone .shine { position:absolute; inset:0; border-radius:84px; z-index:4; pointer-events:none;
+                  background:linear-gradient(115deg, rgba(255,255,255,.09) 0%, rgba(255,255,255,0) 28%); }
   /* S4 — end card */
   #s4 { inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:44px; }
   #s4 img { width:330px; height:330px; border-radius:50%; box-shadow:0 16px 70px rgba(240,192,64,.5); }
@@ -65,7 +82,11 @@ const HTML = `<!doctype html><html><head><meta charset="utf8"><style>
   </div>
   <div class="abs" id="s3">
     <div class="abs center strip" id="strip">REAL GAMEPLAY · 100% FREE</div>
-    <div class="abs center" id="phoneWrap"><div id="phone"><video src="${CLIP}" muted preload="auto"></video></div></div>
+    <div class="abs center" id="phoneWrap"><div id="phone">
+      <div class="btn pwr"></div><div class="btn volu"></div><div class="btn vold"></div>
+      <div class="screen"><video src="${CLIP}" muted preload="auto"></video><div class="island"></div></div>
+      <div class="shine"></div>
+    </div></div>
   </div>
   <div class="abs" id="s4">
     <img src="${LOGO}">

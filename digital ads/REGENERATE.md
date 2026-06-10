@@ -91,6 +91,7 @@ banner is a PNG overlay, don't try drawtext again).
   Without the timeout the frame loop hangs on missed events.
 - For 1:1 / 16:9 motion versions: change W/H consts and re-flow the CSS (font sizes
   and the phone width are absolute px tuned for 1080x1920).
+- The phone is a full CSS phone body (titanium frame, bezel, camera island, side buttons, glass shine) — island intentionally covers the gameplay header strip.
 - Rebrand inputs: same as render.js — LOGO const, colors in the <style> block,
   headline/CTA copy in the HTML body.
 

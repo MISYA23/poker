@@ -62,3 +62,11 @@ and log [START] / [DONE] entries for every task. See global CLAUDE.md for protoc
 [21:45 UTC] [DONE] digital ads REGENERATE.md playbook saved + memory pointer — pipeline reusable for post-redesign rerun
 [22:09 UTC] [START] animated motion-graphics ad prototype (9:16) — WAAPI/HTML rig + frame-stepped capture in digital ads/_build/animate.js — this session owns digital ads/ until DONE
 [22:15 UTC] [DONE] animated motion-graphics ad prototype — digital ads/video/poker_monkey_15s_9x16_motion.mp4 (15s, 4 scenes, frame-stepped WAAPI rig) — changed: digital ads/_build/animate.js (new), REGENERATE.md, README.md — digital ads/ released
+[22:17 UTC] [START] hand-history MP4 video — pick river hand from prod, build replay renderer + capture in server/scripts/handvideo/ (not touching digital ads/)
+[22:20 UTC] [START] motion ad: full phone body (bezel/island/buttons) in animate.js — digital ads/ claimed
+[22:24 UTC] [DONE] motion ad full phone body — re-rendered poker_monkey_15s_9x16_motion.mp4 — changed: digital ads/_build/animate.js, REGENERATE.md, video — digital ads/ released
+[22:30 UTC] [DONE] hand-history MP4 — hand 850 (AA cracked by rivered flush, pot 2000) rendered to server/scripts/handvideo/aces-cracked-hand850.mp4 (1080x1920, 31.8s, 1.5MB); reusable pipeline — new: server/scripts/handvideo/{fetchHand.js,replay.html,render.js,README.md,hand.json}; uncommitted, digital ads/ untouched
+[22:39 UTC] [START] run misya23/wip locally for review — worktree .claude/worktrees/misya-wip + expo web (not touching main checkout)
+[22:44 UTC] [START] Ad Studio — local web UI (digital ads/_build/studio.js) exposing ad copy/colors/segments + Produce button driving animate.js — digital ads/ claimed
+[22:46 UTC] [START] handvideo fast mode — compact <15s timeline + realtime capture (record.js) in server/scripts/handvideo/
+[22:47 UTC] [DONE] Ad Studio deferred by Brian before build started — no code written; design notes saved to Claude memory (project_poker_ad_studio_plan) — digital ads/ released
