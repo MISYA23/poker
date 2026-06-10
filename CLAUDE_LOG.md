@@ -44,3 +44,5 @@ and log [START] / [DONE] entries for every task. See global CLAUDE.md for protoc
 [04:43 UTC] [DONE] v5.111 deployed + verified on prod — 16/16 bot challenge tests against live server
 [04:43 UTC] [START] match lifecycle redesign — lobby XOR table invariant, no disconnect grace, single close path, remove defensive hacks — branch feature/match-lifecycle
 [04:53 UTC] [DONE] v5.112: match lifecycle redesign — liveMatchOf single source of truth, no disconnect grace (instant forfeit), enter-lobby forfeits live match (lobby XOR table), removed pendingDisconnects/clearStaleMatch/DisconnectBanner, refresh-profile event; 43/43 tests (3 suites) — changed: server/index.js, client/App.js, client/src/screens/GameScreen.jsx, client/src/screens/LobbyScreen.jsx, server/scripts/matchLifecycleTest.js (new), client/src/config.js
+[04:58 UTC] [DONE] v5.112 deployed + verified on prod — 43/43 across matchLifecycleTest/challengeTest/botChallengeTest
+[04:58 UTC] [RUNNING] EAS Android production build versionCode 7 — https://expo.dev/accounts/coinburst/projects/poker-monkey/builds/15ee274c-1a2c-4962-a0bb-717194562b66
