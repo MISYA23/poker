@@ -171,13 +171,22 @@ export default function LobbyScreen({ navigation }) {
   const { onFindMatch, onPlayBot, onCancelMatch, onObserve, onLogout,
           error, matchList, onlinePlayers, inQueue, myElo, playerInfo, navigationRef,
           myRecentMatches, incomingChallenges, outgoingChallenges,
-          onChallenge, onAcceptChallenge, onWithdrawChallenge } = useContext(GameContext);
+          onChallenge, onAcceptChallenge, onWithdrawChallenge, emit } = useContext(GameContext);
 
   useEffect(() => {
     if (Platform.OS === 'web' && !playerInfo) {
       navigation.reset({ index: 0, routes: [{ name: 'Login' }] });
     }
   }, []);
+
+  // Lobby and table are mutually exclusive: announce lobby presence on every
+  // focus so the server can close out any match this player walked away from.
+  useEffect(() => {
+    const unsub = navigation.addListener('focus', () => {
+      if (playerInfo?.playerId) emit('enter-lobby', { playerId: playerInfo.playerId });
+    });
+    return unsub;
+  }, [navigation, playerInfo?.playerId, emit]);
 
   const [menuOpen, setMenuOpen] = useState(false);
   const [activeTab, setActiveTab] = useState(0);

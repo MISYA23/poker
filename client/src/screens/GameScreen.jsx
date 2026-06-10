@@ -179,16 +179,6 @@ function HoleCards({ player, isMe, deckStyle }) {
 }
 
 // ─── Hooks ────────────────────────────────────────────────────────────────────
-function useCountdown(deadline) {
-  const [t, setT] = useState(null);
-  useEffect(() => {
-    if (!deadline) { setT(null); return; }
-    const up = () => setT(Math.max(0, Math.ceil((deadline - Date.now()) / 1000)));
-    up(); const id = setInterval(up, 200); return () => clearInterval(id);
-  }, [deadline]);
-  return t;
-}
-
 function useActionFlash(player, lastAction) {
   const [label, setLabel] = useState(null);
   const seen = useRef(null);
@@ -208,18 +198,6 @@ function useActionFlash(player, lastAction) {
     return () => clearTimeout(id);
   }, [t]);
   return label;
-}
-
-// ─── DisconnectBanner ─────────────────────────────────────────────────────────
-function DisconnectBanner({ deadline }) {
-  const secsLeft = useCountdown(deadline);
-  return (
-    <View style={s.disconnectBanner}>
-      <Text style={s.disconnectTxt}>
-        Opponent disconnected — {secsLeft !== null ? `${secsLeft}s to reconnect` : 'waiting…'}
-      </Text>
-    </View>
-  );
 }
 
 // ─── PlayerPod — avatar + nameplate only (hole cards are now separate) ────────
@@ -282,7 +260,7 @@ function PlayerPod({ player, isMe, turnDeadline, lastAction, win, displayChips, 
 export default function GameScreen({ navigation }) {
   const {
     gameState, myId, onAction, onLeave, onRematch, onLogout,
-    matchOver, navigationRef, deckStyle, opponentDisconnected, playerInfo,
+    matchOver, navigationRef, deckStyle, playerInfo,
   } = useContext(GameContext);
 
   useEffect(() => {
@@ -541,13 +519,6 @@ export default function GameScreen({ navigation }) {
           </Pressable>
         </View>
 
-        {/* Disconnect banner — top of chrome, below the status bar */}
-        {opponentDisconnected && (
-          <View pointerEvents="none">
-            <DisconnectBanner deadline={opponentDisconnected} />
-          </View>
-        )}
-
         {/* Spacer pushes betting controls to the bottom */}
         <View style={{ flex: 1 }} pointerEvents="none" />
 
@@ -789,8 +760,6 @@ const s = StyleSheet.create({
   bottomChrome: { paddingHorizontal: 12, paddingBottom: 10, paddingTop: 6, alignItems: 'center' },
 
   // Disconnect banner
-  disconnectBanner: { marginHorizontal: 12, marginTop: 4, backgroundColor: 'rgba(251,146,60,0.18)', borderWidth: 1, borderColor: 'rgba(251,146,60,0.5)', borderRadius: 8, paddingVertical: 6, paddingHorizontal: 12 },
-  disconnectTxt:    { color: '#fb923c', fontSize: 12, fontWeight: '700', textAlign: 'center' },
 
   // Menu scrim + panel
   menuScrim: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.6)', zIndex: 50 },
