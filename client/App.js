@@ -1,5 +1,5 @@
 import 'react-native-gesture-handler';
-import React, { useState, useCallback, useRef, useEffect } from 'react';
+import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { Platform, View, Text, Pressable, StyleSheet } from 'react-native';
 import { NavigationContainer, useNavigationContainerRef } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
@@ -8,6 +8,7 @@ import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-cont
 import { StatusBar } from 'expo-status-bar';
 
 import { GameContext } from './src/context/GameContext';
+import { LobbyContext } from './src/context/LobbyContext';
 import { useSocket } from './src/hooks/useSocket';
 import { clearUser } from './src/utils/user';
 import { SERVER_URL } from './src/config';
@@ -352,15 +353,30 @@ export default function App() {
     }
   }, [emit]);
 
+  // Game/session context — game state, identity, and stable actions. Memoized so
+  // lobby broadcasts (match-list, challenges) don't re-render mid-game screens.
+  const gameValue = useMemo(() => ({
+    gameState, myId, matchOver, opponentDisconnected,
+    playerInfo, deckStyle, setDeckStyle, uiConfig,
+    emit, onLogin, onLogout, onUpdateProfile,
+    onAction, onLeave, onRematch, navigationRef,
+  }), [gameState, myId, matchOver, opponentDisconnected, playerInfo, deckStyle, uiConfig,
+       emit, onLogin, onLogout, onUpdateProfile, onAction, onLeave, onRematch]);
+
+  // Lobby context — fast-churning lobby data + lobby-only actions
+  const lobbyValue = useMemo(() => ({
+    error, inQueue, matchList, onlinePlayers, myElo, myRecentMatches,
+    incomingChallenges, outgoingChallenges, pendingFriendRequests, setPendingFriendRequests,
+    onChallenge, onAcceptChallenge, onDeclineChallenge, onWithdrawChallenge,
+    onFindMatch, onPlayBot, onCancelMatch, onObserve,
+  }), [error, inQueue, matchList, onlinePlayers, myElo, myRecentMatches,
+       incomingChallenges, outgoingChallenges, pendingFriendRequests,
+       onChallenge, onAcceptChallenge, onDeclineChallenge, onWithdrawChallenge,
+       onFindMatch, onPlayBot, onCancelMatch, onObserve]);
+
   return (
-    <GameContext.Provider value={{
-      gameState, myId, error, inQueue, matchList, onlinePlayers, myElo, matchOver,
-      playerInfo, myRecentMatches, deckStyle, setDeckStyle, opponentDisconnected,
-      incomingChallenges, outgoingChallenges, onChallenge, onAcceptChallenge, onDeclineChallenge, onWithdrawChallenge,
-      pendingFriendRequests, setPendingFriendRequests,
-      uiConfig, emit, onLogin, onLogout, onUpdateProfile, onFindMatch, onPlayBot, onCancelMatch,
-      onObserve, onAction, onLeave, onRematch, navigationRef,
-    }}>
+    <GameContext.Provider value={gameValue}>
+    <LobbyContext.Provider value={lobbyValue}>
       <GestureHandlerRootView style={{ flex: 1 }}>
         <SafeAreaProvider>
           <StatusBar style="light" />
@@ -379,6 +395,7 @@ export default function App() {
           <MuteButton route={route} />
         </SafeAreaProvider>
       </GestureHandlerRootView>
+    </LobbyContext.Provider>
     </GameContext.Provider>
   );
 }
