@@ -10,6 +10,8 @@ import Card from '../components/Card';
 import Avatar from '../components/Avatar';
 import { ChipStack } from '../components/PokerChip';
 import BettingControls from '../components/BettingControls';
+import PreviousHandDialog from '../components/PreviousHandDialog';
+import SoundButton from '../components/SoundButton';
 import { colors } from '../theme';
 import { VERSION_DISPLAY, SERVER_URL } from '../config';
 import { playSfx } from '../audio/sfx';
@@ -392,6 +394,7 @@ export default function GameScreen({ navigation }) {
   const [menuOpen,      setMenuOpen]      = useState(false);
   const [debugUI,       setDebugUI]       = useState(false);
   const [leaveWarning,  setLeaveWarning]  = useState(false);
+  const [replayOpen,    setReplayOpen]    = useState(false);
 
   // Real blind schedule from the server (so the "blinds go up" notice is accurate)
   const [blindFmt, setBlindFmt] = useState(BLIND_SCHEDULE);
@@ -729,7 +732,12 @@ export default function GameScreen({ navigation }) {
 
         {/* Top bar */}
         <View style={[s.topBar, debugUI && { borderWidth: 2, borderColor: 'red' }]} pointerEvents="box-none">
-          <Text style={s.version}>{VERSION_DISPLAY}</Text>
+          <View style={s.topBarLeft}>
+            <Pressable style={s.menuBtn} onPress={() => setReplayOpen(true)}>
+              <Text style={s.menuBtnTxt}>↺</Text>
+            </Pressable>
+            <Text style={s.version}>{VERSION_DISPLAY}</Text>
+          </View>
           {gameState?.handNumber > 0 && (() => {
             const next = blindsForHand(gameState.handNumber + 1, blindFmt);
             const goingUp = gameState.phase === 'showdown' && next.bb > gameState.bigBlind;
@@ -743,9 +751,12 @@ export default function GameScreen({ navigation }) {
               </View>
             );
           })()}
-          <Pressable style={s.menuBtn} onPress={() => setMenuOpen(o => !o)}>
-            <Text style={s.menuBtnTxt}>☰</Text>
-          </Pressable>
+          <View style={s.topBarRight}>
+            <SoundButton style={s.menuBtn} />
+            <Pressable style={s.menuBtn} onPress={() => setMenuOpen(o => !o)}>
+              <Text style={s.menuBtnTxt}>☰</Text>
+            </Pressable>
+          </View>
         </View>
 
         {/* Feedback button — sits just below the hamburger, top-right */}
@@ -899,6 +910,14 @@ export default function GameScreen({ navigation }) {
           </Pressable>
         </Pressable>
       )}
+
+      {/* Previous-hand replay dialog — half-screen bottom sheet */}
+      <PreviousHandDialog
+        visible={replayOpen}
+        matchId={gameState?.matchId}
+        currentHandNumber={gameState?.handNumber}
+        deckStyle={deckStyle}
+        onClose={() => setReplayOpen(false)} />
 
       {/* Match over modal — root-level overlay, not scaled */}
       {matchOver && (
@@ -1101,6 +1120,8 @@ const s = StyleSheet.create({
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
     paddingHorizontal: 16,
   },
+  topBarLeft:  { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  topBarRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   version:    { color: 'rgba(255,255,255,0.2)', fontSize: 11 },
   blindsPill: {
     position: 'absolute', left: 0, right: 0, top: 0, height: TOP_BAR_H,
