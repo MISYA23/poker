@@ -70,3 +70,14 @@ and log [START] / [DONE] entries for every task. See global CLAUDE.md for protoc
 [22:44 UTC] [START] Ad Studio — local web UI (digital ads/_build/studio.js) exposing ad copy/colors/segments + Produce button driving animate.js — digital ads/ claimed
 [22:46 UTC] [START] handvideo fast mode — compact <15s timeline + realtime capture (record.js) in server/scripts/handvideo/
 [22:47 UTC] [DONE] Ad Studio deferred by Brian before build started — no code written; design notes saved to Claude memory (project_poker_ad_studio_plan) — digital ads/ released
+[22:51 UTC] [DONE] handvideo fast mode — 14.2s clip in 16s wall (realtime recordVideo): server/scripts/handvideo/aces-hand850-fast.mp4; changed: replay.html (FAST pacing consts, PLAY() rAF loop, hide hook/stamp), record.js (new), README.md; uncommitted
+[23:23 UTC] [START] pull latest + EAS Android build + submit to Play closed testing (alpha) track
+[23:42 UTC] [DONE] EAS Android build versionCode 12 (commit 3e22172) + submitted to Play alpha track (submission d42cb75e FINISHED); playstore-key.json restored from fresh GCP key, backup at ~/.claude/keys/poker-playstore-key.json — changed: client/playstore-key.json (gitignored, new), global CLAUDE.md (key docs)
+[14:18 UTC] [START] asset slimming — compress lemur/captain PNGs + re-encode music mp3s @96kbps — branch chore/asset-slim
+[14:20 UTC] [DONE] v5.132: asset slimming — captain/lemur PNGs 512px+pngquant (4.4MB→286KB), 4 music mp3s 96kbps (8.3MB→4.6MB) — changed: client/assets/captain.png, client/assets/lemur.png, client/assets/music/*.mp3, client/src/config.js — merged chore/asset-slim → main, pushed (Railway deploy)
+[14:36 UTC] [START] compress all build-shipped image assets (avatars/chip/tables/login-bgs/bananas) — branch chore/asset-slim-2
+[14:40 UTC] [DONE] v5.133: compressed all build-shipped images — cigar/queen/chip/bananas resized+pngquant, 3 table PNGs pngquant, 4 login-bgs PNG→JPEG q85 + require paths updated — changed: client/assets/* (10 images, 4 renamed .png→.jpg), client/src/components/ScreenBackground.jsx, client/src/config.js — merged chore/asset-slim-2 → main, pushed (Railway deploy); web export verified pre-push
+[15:43 UTC] [START] EAS Android production build + submit to Play alpha track (post asset-slim v5.133)
+[15:58 UTC] [DONE] EAS Android build versionCode 13 (commit c2d8cae, v5.133 asset-slim) + submitted to Play alpha track (submission d566ded4 SUBMITTED) — no code changes
+[21:04 UTC] [START] move opponent turn-timer bar above his nameplate (player timer untouched) — branch fix/opp-timer-above
+[21:05 UTC] [DONE] v5.153: opponent turn-timer bar moved above his nameplate (timerClipOpp top/justify flipped; my timer untouched) — changed: client/src/screens/GameScreen.jsx, client/src/config.js, CLAUDE_LOG.md
