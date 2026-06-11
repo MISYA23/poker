@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { View, Image, StyleSheet } from 'react-native';
 import Svg, { Circle, Text as SvgText } from 'react-native-svg';
 
@@ -125,8 +125,10 @@ export function ChipStack({ amount, size = 28 }) {
   const step = h * STEP;
   const maxH = h * 1.85;   // tallest a single pile may grow → stays on the felt
 
-  // Deterministic per amount → stable across re-renders, but differs between bets.
-  const mixed = Math.round(amount / 5) % 2 === 1;
+  // Random per bet — useMemo keeps it stable across re-renders within the
+  // same ChipStack mount; a new bet remounts the component (roundBet 0→N),
+  // re-rolling the coin.
+  const mixed = useMemo(() => Math.random() < 0.5, []);
 
   if (mixed) {
     // one stack: highest value at the bottom, lowest on top
