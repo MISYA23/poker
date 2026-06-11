@@ -113,9 +113,8 @@ function Pile({ imgs, w, h, step, maxH }) {
   );
 }
 
-// Greedy chip piles. Two looks, varied by amount so the table doesn't always read
-// the same: either separate colored stacks side-by-side (high value → low), or one
-// mixed pile with the largest-value chips at the bottom and smaller ones on top.
+// Greedy chip pile: one mixed stack with the largest-value chips at the bottom
+// and smaller ones on top.
 export function ChipStack({ amount, size = 28 }) {
   if (!amount || amount <= 0) return null;
   const groups = decompose(amount);
@@ -125,24 +124,9 @@ export function ChipStack({ amount, size = 28 }) {
   const step = h * STEP;
   const maxH = h * 1.85;   // tallest a single pile may grow → stays on the felt
 
-  // Deterministic per amount → stable across re-renders, but differs between bets.
-  const mixed = Math.round(amount / 5) % 2 === 1;
-
-  if (mixed) {
-    // one stack: highest value at the bottom, lowest on top
-    const imgs = [];
-    for (const { d, count } of groups) for (let i = 0; i < count; i++) imgs.push(d.img);
-    return <View style={s.row}><Pile imgs={imgs} w={w} h={h} step={step} maxH={maxH} /></View>;
-  }
-
-  // separate colored stacks, side by side
-  return (
-    <View style={s.row}>
-      {groups.map(({ d, count }) => (
-        <Pile key={d.v} imgs={Array(count).fill(d.img)} w={w} h={h} step={step} maxH={maxH} />
-      ))}
-    </View>
-  );
+  const imgs = [];
+  for (const { d, count } of groups) for (let i = 0; i < count; i++) imgs.push(d.img);
+  return <View style={s.row}><Pile imgs={imgs} w={w} h={h} step={step} maxH={maxH} /></View>;
 }
 
 const s = StyleSheet.create({
