@@ -19,6 +19,24 @@ const FEEDBACK_OPTIONS = [
   { value: 'feedback',   label: '💬 Feedback' },
 ];
 
+// Mirror of the server's default blind schedule (server/matchFormat.js) so we can
+// tell, at the end of a hand, when blinds are about to escalate for the next one.
+const BLIND_SCHEDULE = {
+  handsPerLevel: 5,
+  levels: [
+    { sb: 10,  bb: 20 },
+    { sb: 15,  bb: 30 },
+    { sb: 25,  bb: 50 },
+    { sb: 50,  bb: 100 },
+    { sb: 100, bb: 200 },
+  ],
+};
+function blindsForHand(handNumber, fmt = BLIND_SCHEDULE) {
+  const per = Math.max(1, fmt.handsPerLevel);
+  const idx = Math.min(Math.floor((Math.max(1, handNumber) - 1) / per), fmt.levels.length - 1);
+  return fmt.levels[idx];
+}
+
 // Table variants — switch by changing TABLE_VARIANT ('tall' | 'fat').
 // Each variant carries its own native aspect so the table box always matches it.
 const TABLE_VARIANTS = {
@@ -336,19 +354,20 @@ function PlayerPod({ player, isMe, observing, turnDeadline, lastAction, win, dis
       !present && s.nameplateWaiting,
     ]}>
       <View style={s.nameRow}>
-        <Text style={s.podName} numberOfLines={1}>{displayName}</Text>
+        <Text style={[s.podName, present && player.folded && s.podTextFolded]} numberOfLines={1}>{displayName}</Text>
         {present && player.isSmallBlind && <Text style={[s.badge, s.badgeSB]}>SB</Text>}
         {present && player.isBigBlind   && <Text style={[s.badge, s.badgeBB]}>BB</Text>}
       </View>
       <View style={s.chipsRow}>
-        <Text style={[s.podChips, win && s.podChipsWin, !!actionLbl && s.podChipsAction]}
+        <Text style={[s.podChips, win && s.podChipsWin, !!actionLbl && s.podChipsAction,
+          present && player.folded && s.podTextFolded]}
           numberOfLines={1}>{chipLabel}</Text>
       </View>
     </View>
   );
 
   return (
-    <View style={[s.pod, present && player.folded && { opacity: 0.8 }]}>
+    <View style={s.pod}>
       {nameplate}
       <TimerBar deadline={turnDeadline} isMe={isMe} />
       {avatar}
@@ -372,6 +391,15 @@ export default function GameScreen({ navigation }) {
   const [menuOpen,      setMenuOpen]      = useState(false);
   const [debugUI,       setDebugUI]       = useState(false);
   const [leaveWarning,  setLeaveWarning]  = useState(false);
+
+  // Real blind schedule from the server (so the "blinds go up" notice is accurate)
+  const [blindFmt, setBlindFmt] = useState(BLIND_SCHEDULE);
+  useEffect(() => {
+    fetch(`${SERVER_URL}/api/admin/match-format`)
+      .then(r => r.json())
+      .then(d => { if (d?.levels?.length && d?.handsPerLevel) setBlindFmt({ handsPerLevel: d.handsPerLevel, levels: d.levels }); })
+      .catch(() => {});
+  }, []);
 
   // In-game feedback
   const [feedbackOpen,   setFeedbackOpen]   = useState(false);
@@ -654,11 +682,19 @@ export default function GameScreen({ navigation }) {
         {/* Top bar */}
         <View style={[s.topBar, debugUI && { borderWidth: 2, borderColor: 'red' }]} pointerEvents="box-none">
           <Text style={s.version}>{VERSION_DISPLAY}</Text>
-          {gameState?.handNumber > 0 && (
-            <View style={s.blindsPill} pointerEvents="none">
-              <Text style={s.blindsTxt}>Hand {gameState.handNumber} · Blinds {gameState.smallBlind}/{gameState.bigBlind}</Text>
-            </View>
-          )}
+          {gameState?.handNumber > 0 && (() => {
+            const next = blindsForHand(gameState.handNumber + 1, blindFmt);
+            const goingUp = gameState.phase === 'showdown' && next.bb > gameState.bigBlind;
+            return (
+              <View style={s.blindsPill} pointerEvents="none">
+                {goingUp ? (
+                  <Text style={s.blindsUpTxt}>Blinds going up · <Text style={s.blindsUpLevel}>{next.sb}/{next.bb}</Text></Text>
+                ) : (
+                  <Text style={s.blindsTxt}>Hand {gameState.handNumber} · Blinds {gameState.smallBlind}/{gameState.bigBlind}</Text>
+                )}
+              </View>
+            );
+          })()}
           <Pressable style={s.menuBtn} onPress={() => setMenuOpen(o => !o)}>
             <Text style={s.menuBtnTxt}>☰</Text>
           </Pressable>
@@ -948,7 +984,8 @@ const s = StyleSheet.create({
   },
   nameplateActive:  { borderColor: colors.gold, shadowColor: colors.gold, shadowOpacity: 0.4, shadowRadius: 10, elevation: 6 },
   nameplateAllIn:   { borderColor: '#ef4444', shadowColor: '#ef4444', shadowOpacity: 0.8, shadowRadius: 14, shadowOffset: { width: 0, height: 0 }, elevation: 8 },
-  nameplateFolded:  {},
+  nameplateFolded:  { backgroundColor: '#191920', borderColor: 'rgba(255,255,255,0.08)' },  // greyed but fully opaque
+  podTextFolded:    { color: 'rgba(255,255,255,0.42)' },
   nameplateWaiting: {},
 
   // Turn-timer gauge — a clip box that mirrors the nameplate's shape exactly
@@ -1022,6 +1059,8 @@ const s = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
   },
   blindsTxt:  { color: 'rgba(255,255,255,0.45)', fontSize: 12, fontWeight: '600' },
+  blindsUpTxt:   { color: colors.gold, fontSize: 13, fontWeight: '700', letterSpacing: 0.6, textShadowColor: 'rgba(0,0,0,0.5)', textShadowRadius: 3 },
+  blindsUpLevel: { color: colors.goldLight, fontSize: 13, fontWeight: '700', letterSpacing: 0.6 },
   menuBtn:    { width: 36, height: 36, borderRadius: 8, backgroundColor: 'rgba(0,0,0,0.5)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)', alignItems: 'center', justifyContent: 'center' },
   menuBtnTxt: { color: colors.white, fontSize: 16 },
   observingBanner: { alignSelf: 'center', marginTop: 4, backgroundColor: 'rgba(0,0,0,0.5)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)', borderRadius: 8, paddingVertical: 4, paddingHorizontal: 12 },
