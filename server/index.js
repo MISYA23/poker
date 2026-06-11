@@ -47,6 +47,19 @@ const eloCache = {};
 // `${fromId}:${toId}` → { timer } — pending direct challenges
 const challenges = new Map();
 
+// Quick Match funnel: how long a searcher waits before dropping into a bot game
+const QUICK_MATCH_WAIT_MS = 5000;
+
+// playerId → setTimeout — the search window between find-match and bot fallback
+const fallbackTimers = new Map();
+
+// playerId → { playerId, since, declined:Set } — active broadcast sessions.
+// Quick Match with nobody to pair = "challenge everyone": every eligible human
+// gets an ordinary challenge from this player (broadcast:true on the entry).
+// The session lives while the player searches / kills time in the fallback bot
+// game; it ends (voiding all copies) on match start, cancel, lobby, disconnect.
+const broadcasts = new Map();
+
 // ip → 2-letter country code (or null) — avoids re-hitting the geo API
 const ipCountryCache = new Map();
 
@@ -89,6 +102,12 @@ const BOTS = {
 
 function botInMatch(botId) {
   return [...matches.values()].some(m => !m.ended && m.botId === botId);
+}
+
+function pickFreeBot() {
+  const free = Object.keys(BOTS).filter(id => !botInMatch(id));
+  const pool = free.length ? free : Object.keys(BOTS);
+  return pool[Math.floor(Math.random() * pool.length)];
 }
 
 // ── Match helpers ─────────────────────────────────────────────────────────────
@@ -234,6 +253,7 @@ function broadcastMatchList() {
     player2Elo: eloCache[m.p2?.playerId] || 1200,
     phase:      m.game.phase,
     handCount:  m.handCount || 0,
+    isBotMatch: !!m.isBotMatch,
   }));
 
   // Deduplicated list of all connected players
@@ -242,7 +262,13 @@ function broadcastMatchList() {
   for (const sp of socketPlayers.values()) {
     if (sp.playerName && !seen.has(sp.playerId)) {
       seen.add(sp.playerId);
-      online.push({ id: sp.playerId, name: sp.playerName, avatarId: sp.avatarId, inMatch: !!liveMatchOf(sp), elo: eloCache[sp.playerId] || 1200, country: sp.country || null });
+      const live = liveMatchOf(sp);
+      online.push({
+        id: sp.playerId, name: sp.playerName, avatarId: sp.avatarId,
+        inMatch: !!live, inBotMatch: !!(live && live.isBotMatch),
+        botRefused: !!(live && live.isBotMatch && live.humanRefused),
+        elo: eloCache[sp.playerId] || 1200, country: sp.country || null,
+      });
     }
   }
 
@@ -272,9 +298,12 @@ function liveMatchOf(sp) {
 // notify both parties so their UIs drop pending/incoming entries. Called when
 // a player enters any match, disconnects, or logs out — you can't accept a
 // challenge from (or keep one pending with) someone who is already playing.
-function voidChallengesFor(playerId) {
+// keepOwnBroadcast: entering a fallback bot game is part of an ongoing search,
+// so the player's own broadcast asks survive it.
+function voidChallengesFor(playerId, { keepOwnBroadcast = false } = {}) {
   for (const [key, ch] of [...challenges.entries()]) {
     if (ch.fromId !== playerId && ch.toId !== playerId) continue;
+    if (keepOwnBroadcast && ch.broadcast && ch.fromId === playerId) continue;
     clearTimeout(ch.timer);
     challenges.delete(key);
     io.to(ch.fromSocketId).emit('challenge-voided', { otherId: ch.toId });
@@ -341,6 +370,183 @@ function scheduleNextHand(m, delay = 5000) {
   }, delay);
 }
 
+// ── Quick Match funnel ────────────────────────────────────────────────────────
+
+// Stop searching: kill the bot-fallback timer and the broadcast session
+function clearSearchFor(playerId) {
+  const t = fallbackTimers.get(playerId);
+  if (t) { clearTimeout(t); fallbackTimers.delete(playerId); }
+  endBroadcast(playerId);
+}
+
+function socketIdOf(playerId) {
+  for (const [sid, sp] of socketPlayers.entries()) {
+    if (sp.playerId === playerId) return sid;
+  }
+  return null;
+}
+
+function spOf(playerId) {
+  const sid = socketIdOf(playerId);
+  return sid ? socketPlayers.get(sid) : null;
+}
+
+// End a match with NO rating effect — used when a player swaps out of a bot
+// game (human arrived / challenge accepted). The voided match disappears; the
+// caller is responsible for putting both players somewhere sensible next.
+// TODO(Brian): later, pause the bot match and make it recoverable instead.
+function voidMatch(m) {
+  if (m.ended) return;
+  m.ended = true;
+  clearTimeout(m.autoStartTimer); clearTimeout(m.nextHandTimer);
+  clearTimeout(m.turnTimer);      clearTimeout(m.botTimer);
+  clearTimeout(m.graceTimer);     clearTimeout(m.cleanupTimer);
+  m.autoStartTimer = m.nextHandTimer = m.turnTimer = m.botTimer = m.graceTimer = null;
+  m.timerPlayerId = null;
+  m.turnDeadline  = null;
+  matches.delete(m.id);
+  for (const p of matchPlayers(m)) {
+    clearSearchFor(p.playerId);
+    for (const sp of socketPlayers.values()) {
+      if (sp.playerId === p.playerId && sp.matchId === m.id) sp.matchId = null;
+    }
+  }
+  for (const sid of m.observers) io.to(sid).emit('reset');
+  // A matches row only exists if a hand was already flushed — mark it void
+  db.query(`UPDATE matches SET status='void', ended_at=NOW() WHERE uuid=$1`, [m.id]).catch(() => {});
+  console.log(`[match] voided ${m.id.slice(0, 8)} (no rating effect)`);
+}
+
+// Shared by queue pairing, challenge accepts, and human-arrived swaps.
+// p1/p2: { playerId, playerName, avatarId, socketId }
+function startHumanMatch(p1, p2) {
+  clearSearchFor(p1.playerId);
+  clearSearchFor(p2.playerId);
+  voidChallengesFor(p1.playerId);
+  voidChallengesFor(p2.playerId);
+
+  const m = createMatch(p1, p2);
+  const sp1 = socketPlayers.get(p1.socketId);
+  const sp2 = socketPlayers.get(p2.socketId);
+  if (sp1) sp1.matchId = m.id;
+  if (sp2) sp2.matchId = m.id;
+
+  m.game.addPlayer(p1.playerId, p1.playerName, p1.avatarId);
+  m.game.addPlayer(p2.playerId, p2.playerName, p2.avatarId);
+
+  io.to(p1.socketId).emit('match-found', { matchId: m.id, opponent: opponentInfo(p2) });
+  io.to(p2.socketId).emit('match-found', { matchId: m.id, opponent: opponentInfo(p1) });
+
+  broadcastMatchState(m);
+  broadcastMatchList();
+  tryAutoStart(m);
+  return m;
+}
+
+function opponentInfo(p) {
+  return {
+    name: p.playerName, avatarId: p.avatarId,
+    elo: eloCache[p.playerId] || 1200,
+    country: socketPlayers.get(p.socketId)?.country || null,
+  };
+}
+
+// ── Broadcast sessions ────────────────────────────────────────────────────────
+
+// Who can receive a broadcast copy: humans who aren't the broadcaster, aren't
+// in a human match, haven't refused a human during their current bot game, and
+// haven't already declined this session.
+function eligibleForBroadcast(toSp, session) {
+  if (!toSp.playerName) return false;
+  if (toSp.playerId === session.playerId) return false;
+  if (session.declined.has(toSp.playerId)) return false;
+  const m = liveMatchOf(toSp);
+  if (m && !m.isBotMatch) return false;
+  if (m && m.humanRefused) return false;
+  return true;
+}
+
+// One challenge entry, shared by manual VS and broadcast asks. The caller has
+// already verified the target is reachable (not in a human match).
+function createChallenge(fromSp, fromSocketId, toSp, toSocketId, { broadcast = false } = {}) {
+  const targetMatch = liveMatchOf(toSp);
+  const expiresMs = targetMatch ? 15000 : 300000; // in-game: 15s · lobby: 5 min
+
+  const key = `${fromSp.playerId}:${toSp.playerId}`;
+  if (challenges.has(key)) { clearTimeout(challenges.get(key).timer); challenges.delete(key); }
+
+  const timer = setTimeout(() => {
+    challenges.delete(key);
+    if (broadcast) {
+      // Letting a broadcast copy lapse = declined for this session, silently
+      broadcasts.get(fromSp.playerId)?.declined.add(toSp.playerId);
+    } else {
+      io.to(fromSocketId).emit('challenge-expired', { toId: toSp.playerId });
+    }
+    io.to(toSocketId).emit('challenge-voided', { otherId: fromSp.playerId });
+    // Lapsing the 15s in-game prompt counts as refusing a human
+    const cur = spOf(toSp.playerId);
+    if (cur) markHumanRefused(cur);
+  }, expiresMs);
+  challenges.set(key, { timer, fromId: fromSp.playerId, toId: toSp.playerId, fromSocketId, toSocketId, broadcast });
+
+  io.to(toSocketId).emit('challenge-received', {
+    fromId: fromSp.playerId, fromName: fromSp.playerName, fromAvatarId: fromSp.avatarId,
+    fromElo: eloCache[fromSp.playerId] || 1200, fromCountry: fromSp.country || null,
+    expiresIn: expiresMs / 1000,
+  });
+  // Broadcast copies don't clutter the sender's outgoing-challenge UI
+  if (!broadcast) io.to(fromSocketId).emit('challenge-sent', { toId: toSp.playerId, toName: toSp.playerName });
+}
+
+function startBroadcast(sp, socketId) {
+  broadcasts.set(sp.playerId, { playerId: sp.playerId, since: Date.now(), declined: new Set() });
+  issueBroadcastAsks(sp, socketId);
+}
+
+function issueBroadcastAsks(fromSp, fromSocketId) {
+  const session = broadcasts.get(fromSp.playerId);
+  if (!session) return;
+  const seen = new Set();
+  for (const [sid, toSp] of socketPlayers.entries()) {
+    if (!toSp.playerId || seen.has(toSp.playerId)) continue;
+    seen.add(toSp.playerId);
+    if (!eligibleForBroadcast(toSp, session)) continue;
+    if (challenges.has(`${fromSp.playerId}:${toSp.playerId}`)) continue;
+    createChallenge(fromSp, fromSocketId, toSp, sid, { broadcast: true });
+  }
+}
+
+// Newly-eligible players (fresh login, bot match over) get the outstanding asks
+function refreshBroadcasts() {
+  for (const session of broadcasts.values()) {
+    const sid = socketIdOf(session.playerId);
+    const sp  = sid ? socketPlayers.get(sid) : null;
+    if (sp) issueBroadcastAsks(sp, sid);
+  }
+}
+
+function endBroadcast(playerId) {
+  if (!broadcasts.delete(playerId)) return;
+  for (const [key, ch] of [...challenges.entries()]) {
+    if (ch.fromId !== playerId || !ch.broadcast) continue;
+    clearTimeout(ch.timer);
+    challenges.delete(key);
+    io.to(ch.toSocketId).emit('challenge-voided', { otherId: ch.fromId });
+  }
+}
+
+// Refusing (or ignoring) a challenge during a bot game flips the lobby status
+// from "Looking to play" to "Playing a bot" — still challengeable, just not
+// advertised as available. Resets naturally when the bot match ends.
+function markHumanRefused(sp) {
+  const m = liveMatchOf(sp);
+  if (m && m.isBotMatch && !m.humanRefused) {
+    m.humanRefused = true;
+    broadcastMatchList();
+  }
+}
+
 // ── Match end + ELO ───────────────────────────────────────────────────────────
 
 async function endMatch(m, winnerId) {
@@ -356,6 +562,9 @@ async function endMatch(m, winnerId) {
   m.timerPlayerId = null;
   m.turnDeadline  = null;
   m.game.gameOver = true; // every end path counts as game over, not just busts
+
+  // Any way a match ends, its players are done waiting for humans
+  for (const p of matchPlayers(m)) clearSearchFor(p.playerId);
 
   // If nobody rematches within 90s, reap the match and free both players
   m.cleanupTimer = setTimeout(() => {
@@ -408,6 +617,8 @@ async function endMatch(m, winnerId) {
   }
   console.log(`[match] ended — winner: ${winner.playerName}, elo: ${wElo}→${wNewElo}`);
   broadcastMatchList();
+  // Both players just became reachable again — outstanding searches ask them
+  refreshBroadcasts();
 
   // Persist to DB in the background — does not block player-facing events
   persistMatchResult(m, winner, loser, wElo, lElo, wNewElo, lNewElo, winnerId)
@@ -524,8 +735,13 @@ io.on('connection', (socket) => {
         endMatch(live, otherId ?? playerId);
       }
       sp.matchId = null;
+      // Arriving at the lobby always means "not searching anymore"
+      dequeue(playerId);
+      clearSearchFor(playerId);
     }
     broadcastMatchList();
+    // Anyone mid-search asks this fresh arrival too
+    refreshBroadcasts();
   });
 
   // Re-read display name / avatar after a profile edit. Deliberately separate
@@ -552,36 +768,38 @@ io.on('connection', (socket) => {
 
     const pair = tryPair();
     if (pair) {
-      voidChallengesFor(pair.p1.playerId);
-      voidChallengesFor(pair.p2.playerId);
-      const m = createMatch(pair.p1, pair.p2);
-
-      const sp1 = socketPlayers.get(pair.p1.socketId);
-      const sp2 = socketPlayers.get(pair.p2.socketId);
-      if (sp1) sp1.matchId = m.id;
-      if (sp2) sp2.matchId = m.id;
-
-      m.game.addPlayer(pair.p1.playerId, pair.p1.playerName, pair.p1.avatarId);
-      m.game.addPlayer(pair.p2.playerId, pair.p2.playerName, pair.p2.avatarId);
-
-      io.to(pair.p1.socketId).emit('match-found', { matchId: m.id, opponent: { name: pair.p2.playerName } });
-      io.to(pair.p2.socketId).emit('match-found', { matchId: m.id, opponent: { name: pair.p1.playerName } });
-
-      broadcastMatchState(m);
-      broadcastMatchList();
-      tryAutoStart(m);
+      startHumanMatch(pair.p1, pair.p2);
     } else {
       socket.emit('in-queue', {});
+      scheduleFallback(sp.playerId);
+      // Quick Match = challenge everyone: every eligible human gets the ask
+      startBroadcast(sp, socket.id);
     }
   });
 
+  // After QUICK_MATCH_WAIT_MS with no human, drop the searcher into a bot game.
+  // They stay registered as waiting — the queue keeps running underneath.
+  function scheduleFallback(playerId) {
+    clearTimeout(fallbackTimers.get(playerId));
+    fallbackTimers.set(playerId, setTimeout(() => {
+      fallbackTimers.delete(playerId);
+      const cur = socketPlayers.get(socket.id);
+      if (!cur || cur.playerId !== playerId) return; // socket gone or re-identified
+      if (liveMatchOf(cur)) return;                  // already playing something
+      if (!dequeue(playerId)) return;                // paired or cancelled meanwhile
+      startBotMatch(cur, pickFreeBot(), { fallback: true });
+    }, QUICK_MATCH_WAIT_MS));
+  }
+
   // Start a bot match for this player vs a specific bot. Shared by the
-  // PLAY BOT button (random bot) and direct bot challenges from the lobby.
-  function startBotMatch(sp, botId) {
+  // Quick Match fallback and direct bot challenges.
+  function startBotMatch(sp, botId, { fallback = false } = {}) {
     const bot = BOTS[botId];
 
     dequeue(sp.playerId); // in case they were sitting in the matchmaking queue
-    voidChallengesFor(sp.playerId);
+    // A fallback bot game is part of an ongoing search — the player's own
+    // broadcast asks must survive it. Everything else voids as usual.
+    voidChallengesFor(sp.playerId, { keepOwnBroadcast: fallback });
 
     const p1 = { playerId: sp.playerId, playerName: sp.playerName, avatarId: sp.avatarId, socketId: socket.id };
     // Bot gets a fake socketId — io.to() on an empty room is a harmless no-op
@@ -593,12 +811,19 @@ io.on('connection', (socket) => {
     console.log(`[bot] new bot match vs ${sp.playerName} — ${bot.name} (${bot.profile.name})`);
     sp.matchId = m.id;
 
+    if (fallback) {
+      m.isFallback = true;
+      console.log(`[funnel] ${sp.playerName} dropped into fallback bot game — broadcast keeps running`);
+    }
+
     m.game.addPlayer(p1.playerId, p1.playerName, p1.avatarId);
     m.game.addPlayer(p2.playerId, p2.playerName, p2.avatarId);
 
-    socket.emit('match-found', { matchId: m.id, opponent: { name: bot.name } });
+    socket.emit('match-found', { matchId: m.id, opponent: { name: bot.name }, fallback });
     broadcastMatchState(m);
     broadcastMatchList();
+    // Other searchers re-ask this player in their new in-game (15s) context
+    refreshBroadcasts();
     tryAutoStart(m);
   }
 
@@ -609,17 +834,13 @@ io.on('connection', (socket) => {
     if (!sp?.playerName) { socket.emit('error', { message: 'Not in lobby.' }); return; }
     if (liveMatchOf(sp)) { socket.emit('error', { message: 'Finish your current match first.' }); return; }
 
-    // Prefer a bot that isn't already seated; fall back to any of them
-    const free = Object.keys(BOTS).filter(id => !botInMatch(id));
-    const pool = free.length ? free : Object.keys(BOTS);
-    const botId = pool[Math.floor(Math.random() * pool.length)];
-    startBotMatch(sp, botId);
+    startBotMatch(sp, pickFreeBot());
   });
 
   socket.on('cancel-match', () => {
     // Queue-only concern — never touches match state
     const sp = socketPlayers.get(socket.id);
-    if (sp) dequeue(sp.playerId);
+    if (sp) { dequeue(sp.playerId); clearSearchFor(sp.playerId); }
     socket.emit('queue-cancelled', {});
   });
 
@@ -749,6 +970,7 @@ io.on('connection', (socket) => {
     if (!sp) return;
     socketPlayers.delete(socket.id);
     dequeue(sp.playerId);
+    clearSearchFor(sp.playerId);
     voidChallengesFor(sp.playerId);
     console.log('[server] disconnected:', sp.playerName || socket.id);
 
@@ -785,6 +1007,7 @@ io.on('connection', (socket) => {
     const sp = socketPlayers.get(socket.id);
     if (sp) {
       dequeue(sp.playerId);
+      clearSearchFor(sp.playerId);
       voidChallengesFor(sp.playerId);
       // Logging out is deliberate — no grace, any live match is forfeited
       const m = liveMatchOf(sp);
@@ -816,29 +1039,22 @@ io.on('connection', (socket) => {
     const toSocket = [...socketPlayers.entries()].find(([, s]) => s.playerId === toId);
     if (!toSocket) { socket.emit('error', { message: 'Player is not online.' }); return; }
     const [toSocketId, toSp] = toSocket;
-    if (liveMatchOf(toSp)) { socket.emit('error', { message: 'That player is in a match.' }); return; }
 
-    const key = `${sp.playerId}:${toId}`;
-    // Clear any existing challenge
-    if (challenges.has(key)) { clearTimeout(challenges.get(key).timer); challenges.delete(key); }
+    // Humans mid-match: bot games can be interrupted (15s to answer, then
+    // auto-decline); human-vs-human games refuse instantly.
+    const targetMatch = liveMatchOf(toSp);
+    if (targetMatch && !targetMatch.isBotMatch) { socket.emit('error', { message: 'That player is in a match.' }); return; }
 
-    const timer = setTimeout(() => {
-      challenges.delete(key);
-      socket.emit('challenge-expired', { toId });
-      io.to(toSocketId).emit('challenge-voided', { otherId: sp.playerId });
-    }, 300000); // 5 min — challenges also void on match start / disconnect
-    challenges.set(key, { timer, fromId: sp.playerId, toId, fromSocketId: socket.id, toSocketId });
-
-    io.to(toSocketId).emit('challenge-received', {
-      fromId: sp.playerId, fromName: sp.playerName, fromAvatarId: sp.avatarId,
-    });
-    socket.emit('challenge-sent', { toId, toName: toSp.playerName });
+    createChallenge(sp, socket.id, toSp, toSocketId);
   });
 
   socket.on('challenge-accept', ({ fromId }) => {
     const sp = socketPlayers.get(socket.id);
     if (!sp) return;
-    if (liveMatchOf(sp)) { socket.emit('error', { message: 'Finish your current match first.' }); return; }
+    // Accepting from inside a bot game is allowed — the bot game ends, unrated.
+    // A human match still blocks.
+    const myMatch = liveMatchOf(sp);
+    if (myMatch && !myMatch.isBotMatch) { socket.emit('error', { message: 'Finish your current match first.' }); return; }
     const key = `${fromId}:${sp.playerId}`;
     const ch  = challenges.get(key);
     if (!ch) { socket.emit('error', { message: 'Challenge expired.' }); return; }
@@ -848,28 +1064,21 @@ io.on('connection', (socket) => {
 
     const fromSp = socketPlayers.get(ch.fromSocketId);
     if (!fromSp) { socket.emit('error', { message: 'Challenger disconnected.' }); return; }
-    if (liveMatchOf(fromSp)) { socket.emit('error', { message: 'Challenger is already in a match.' }); return; }
+    // The challenger may be killing time in a fallback bot game (broadcast
+    // ask) — that game voids, unrated. A human match still blocks.
+    const fromMatch = liveMatchOf(fromSp);
+    if (fromMatch && !fromMatch.isBotMatch) { socket.emit('error', { message: 'Challenger is already in a match.' }); return; }
 
-    // Starting a match voids every other challenge either player has going
     dequeue(sp.playerId);
     dequeue(fromSp.playerId);
-    voidChallengesFor(sp.playerId);
-    voidChallengesFor(fromSp.playerId);
+    if (myMatch) voidMatch(myMatch);
+    if (fromMatch) voidMatch(fromMatch);
 
-    // Create direct match
-    const p1 = { playerId: fromSp.playerId, playerName: fromSp.playerName, avatarId: fromSp.avatarId, socketId: ch.fromSocketId };
-    const p2 = { playerId: sp.playerId, playerName: sp.playerName, avatarId: sp.avatarId, socketId: socket.id };
-    const m  = createMatch(p1, p2);
-    fromSp.matchId = m.id;
-    sp.matchId     = m.id;
-    m.game.addPlayer(p1.playerId, p1.playerName, p1.avatarId);
-    m.game.addPlayer(p2.playerId, p2.playerName, p2.avatarId);
-
-    io.to(ch.fromSocketId).emit('match-found', { matchId: m.id, opponent: { name: sp.playerName } });
-    io.to(socket.id).emit('match-found', { matchId: m.id, opponent: { name: fromSp.playerName } });
-    broadcastMatchState(m);
-    broadcastMatchList();
-    tryAutoStart(m);
+    // startHumanMatch voids every other challenge either player has going
+    startHumanMatch(
+      { playerId: fromSp.playerId, playerName: fromSp.playerName, avatarId: fromSp.avatarId, socketId: ch.fromSocketId },
+      { playerId: sp.playerId,     playerName: sp.playerName,     avatarId: sp.avatarId,     socketId: socket.id },
+    );
   });
 
   // Challenger withdraws their own pending challenge
@@ -889,8 +1098,16 @@ io.on('connection', (socket) => {
     const sp  = socketPlayers.get(socket.id);
     const key = `${fromId}:${sp?.playerId}`;
     const ch  = challenges.get(key);
-    if (ch) { clearTimeout(ch.timer); challenges.delete(key); }
-    if (ch) io.to(ch.fromSocketId).emit('challenge-declined', { byId: sp?.playerId, byName: sp?.playerName });
+    if (!ch) return;
+    clearTimeout(ch.timer);
+    challenges.delete(key);
+    if (ch.broadcast) {
+      // Silent for the searcher; just don't ask this person again this session
+      broadcasts.get(fromId)?.declined.add(sp.playerId);
+    } else {
+      io.to(ch.fromSocketId).emit('challenge-declined', { byId: sp?.playerId, byName: sp?.playerName });
+    }
+    if (sp) markHumanRefused(sp);
   });
 });
 

@@ -89,6 +89,7 @@ const muteStyles = StyleSheet.create({
   boxOn: { backgroundColor: '#f0c040', borderColor: '#f0c040' },
   label: { fontSize: 13, color: '#fff', fontWeight: '600' },
 });
+import MatchFlowOverlays from './src/components/MatchFlowOverlays';
 import LoginScreen   from './src/screens/LoginScreen';
 import LobbyScreen   from './src/screens/LobbyScreen';
 import GameScreen    from './src/screens/GameScreen';
@@ -130,9 +131,19 @@ export default function App() {
   const [pendingFriendRequests, setPendingFriendRequests] = useState(0);
   const [uiConfig, setUiConfig] = useState({});
 
+  // Quick Match funnel overlays (see MatchFlowOverlays)
+  const [searchOverlay, setSearchOverlay] = useState(null); // null | {status:'searching'} | {status:'found', opponent}
+  const [meantime, setMeantime]           = useState(false); // "play a bot while we keep searching" dialog
+
   const navigationRef = useNavigationContainerRef();
   const matchIdRef    = useRef(null);
+  // Socket handlers are bound once at mount (useSocket) — they must read these
+  // refs, never the overlay state above.
+  const searchRef     = useRef(null);
+  const foundDelayRef = useRef(false); // mid "Human found!" beat — hold navigation
   const [route, setRoute] = useState('Login');   // current screen (for the sound button placement)
+
+  const setSearch = useCallback((v) => { searchRef.current = v; setSearchOverlay(v); }, []);
 
   useEffect(() => {
     loadMusicConfig();   // pull per-interface track config from the server (falls back to defaults)
@@ -160,8 +171,8 @@ export default function App() {
 
   const emit = useSocket({
     'in-queue':        ()            => { setInQueue(true); setError(null); },
-    'queue-cancelled': ()            => setInQueue(false),
-    'match-found':     ({ matchId }) => {
+    'queue-cancelled': ()            => { setInQueue(false); setSearch(null); },
+    'match-found':     ({ matchId, opponent, fallback }) => {
       if (isObserverRef.current) {
         emit('unobserve', { matchId: matchIdRef.current });
         isObserverRef.current = false;
@@ -175,14 +186,32 @@ export default function App() {
       setIncomingChallenges([]);
       setOutgoingChallenges([]);
       track('StartMatch');
-      navigationRef.navigate('Game');
+      if (fallback) {
+        // No human within the window — bot game with the meantime dialog over it
+        setSearch(null);
+        setMeantime(true);
+        navigationRef.navigate('Game');
+      } else if (searchRef.current) {
+        // Real human found mid-search: show the "Human found!" beat, then drop in
+        setMeantime(false);
+        setSearch({ status: 'found', opponent });
+        foundDelayRef.current = true;
+        setTimeout(() => {
+          foundDelayRef.current = false;
+          setSearch(null);
+          navigationRef.navigate('Game');
+        }, 1200);
+      } else {
+        setMeantime(false);
+        navigationRef.navigate('Game');
+      }
     },
     'match-list':  ({ matches, onlinePlayers: op }) => { setMatchList(matches || []); setOnlinePlayers(op || []); },
     'game-state':  (state)           => {
       setGameState(state);
       if (state.atTable && !state.gameOver) setMatchOver(null);
       const belongsToUs = state.matchId === matchIdRef.current;
-      if (belongsToUs && state.atTable) {
+      if (belongsToUs && state.atTable && !foundDelayRef.current) {
         navigationRef.navigate('Game');
       } else if (belongsToUs && state.observing && isObserverRef.current && pendingObserveRef.current) {
         pendingObserveRef.current = false;
@@ -200,6 +229,7 @@ export default function App() {
     'match-over':  (data)            => {
       setMatchOver({ ...data, myVote: null, opponentWantsRematch: null });
       setOpponentDisconnected(null);
+      setMeantime(false);
       if (data.newElo != null) setMyElo(data.newElo);
       track('FinishMatch');
     },
@@ -218,12 +248,13 @@ export default function App() {
     },
     'friend-request':         ()             => setPendingFriendRequests(n => n + 1),
     'friend-accepted':        ()             => {},
-    error:         ({ message })     => setError(message),
+    error:         ({ message })     => { setError(message); setSearch(null); },
     reset:         ()                => {
       if (isObserverRef.current) emit('unobserve', { matchId: matchIdRef.current });
       setGameState(null);
       setInQueue(false); setMatchOver(null);
       setOpponentDisconnected(null);
+      setSearch(null); setMeantime(false);
       matchIdRef.current = null;
       isObserverRef.current = false;
       pendingObserveRef.current = false;
@@ -283,8 +314,9 @@ export default function App() {
     pendingObserveRef.current = false;
     setError(null);
     track('PlayMatch', { mode: 'queue' });
+    setSearch({ status: 'searching' });
     emit('find-match', { playerId });
-  }, [emit]);
+  }, [emit, setSearch]);
 
   const onPlayBot = useCallback((playerId) => {
     if (isObserverRef.current) {
@@ -301,7 +333,10 @@ export default function App() {
   const onCancelMatch = useCallback(() => {
     emit('cancel-match', {});
     setInQueue(false);
-  }, [emit]);
+    setSearch(null);
+  }, [emit, setSearch]);
+
+  const onDismissMeantime = useCallback(() => setMeantime(false), []);
 
   const onChallenge = useCallback((toId) => {
     setError(null);
@@ -401,6 +436,15 @@ export default function App() {
             </Stack.Navigator>
           </NavigationContainer>
           <MuteButton route={route} />
+          <MatchFlowOverlays
+            searchOverlay={searchOverlay}
+            meantime={meantime}
+            incomingChallenges={incomingChallenges}
+            onCancelSearch={onCancelMatch}
+            onDismissMeantime={onDismissMeantime}
+            onAcceptChallenge={onAcceptChallenge}
+            onDeclineChallenge={onDeclineChallenge}
+          />
         </SafeAreaProvider>
       </GestureHandlerRootView>
     </LobbyContext.Provider>
