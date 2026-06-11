@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Image, StyleSheet } from 'react-native';
 import Svg, { Circle, Text as SvgText } from 'react-native-svg';
 
 const CHIP_CONFIG = {
@@ -69,35 +69,82 @@ export function Chip({ value, size = 40 }) {
 // Alias kept for internal ChipStack usage
 export const PokerChip = Chip;
 
-function chipsFor(amount) {
+// ── Four colored chips — red 5 · green 25 · black 100 · purple 500 ──
+// Same chip shape; chips pile tight so a stack reads as thickness (taller = more)
+// without counting individual chips.
+const CHIP_AR = 256 / 255;   // chip art is ~square (width / height)
+const STEP    = 0.15;        // fraction of chip height each stacked chip reveals
+const DENOMS = [
+  { v: 500, img: require('../../assets/chip-purple.png') },
+  { v: 100, img: require('../../assets/chip-black.png')  },
+  { v: 25,  img: require('../../assets/chip-green.png')  },
+  { v: 5,   img: require('../../assets/chip-red.png')    },
+];
+
+function decompose(amount) {
   const res = [];
-  let rem = Math.max(0, Math.floor(amount));
-  for (const d of [500, 100, 50, 25, 10]) {
-    const n = Math.floor(rem / d);
-    if (n > 0) res.push({ denom: d, count: n });
-    rem -= n * d;
+  let rem = Math.round(Math.max(0, amount) / 5) * 5;   // snap to nearest 5 (smallest chip)
+  for (const d of DENOMS) {
+    const n = Math.floor(rem / d.v);
+    if (n > 0) res.push({ d, count: n });
+    rem -= n * d.v;
   }
   return res;
 }
 
+// Renders a list of chip images as one vertical pile (index 0 at the bottom).
+// Height is capped: past `maxH` the chips just overlap tighter instead of growing
+// taller, so a pile can never sprawl off the felt no matter how large the bet.
+function Pile({ imgs, w, h, step, maxH }) {
+  const n   = imgs.length;
+  const cap = (n > 1 && h + (n - 1) * step > maxH) ? (maxH - h) / (n - 1) : step;
+  const colH = h + (n - 1) * cap;
+  return (
+    <View style={{ width: w, height: colH }}>
+      {imgs.map((img, i) => (
+        <Image
+          key={i}
+          source={img}
+          resizeMode="contain"
+          style={{ position: 'absolute', bottom: i * cap, left: 0, width: w, height: h }}
+        />
+      ))}
+    </View>
+  );
+}
+
+// Greedy chip piles. Two looks, varied by amount so the table doesn't always read
+// the same: either separate colored stacks side-by-side (high value → low), or one
+// mixed pile with the largest-value chips at the bottom and smaller ones on top.
 export function ChipStack({ amount, size = 28 }) {
   if (!amount || amount <= 0) return null;
-  const chips = chipsFor(amount);
-  if (!chips.length) return null;
+  const groups = decompose(amount);
+  if (!groups.length) return null;
+  const w    = size;
+  const h    = w / CHIP_AR;
+  const step = h * STEP;
+  const maxH = h * 1.85;   // tallest a single pile may grow → stays on the felt
+
+  // Deterministic per amount → stable across re-renders, but differs between bets.
+  const mixed = Math.round(amount / 5) % 2 === 1;
+
+  if (mixed) {
+    // one stack: highest value at the bottom, lowest on top
+    const imgs = [];
+    for (const { d, count } of groups) for (let i = 0; i < count; i++) imgs.push(d.img);
+    return <View style={s.row}><Pile imgs={imgs} w={w} h={h} step={step} maxH={maxH} /></View>;
+  }
+
+  // separate colored stacks, side by side
   return (
-    <View style={s.stack}>
-      {chips.map(({ denom, count }) => (
-        <View key={denom} style={s.group}>
-          <Chip value={denom} size={size} />
-          {count > 1 && <Text style={s.count}>×{count}</Text>}
-        </View>
+    <View style={s.row}>
+      {groups.map(({ d, count }) => (
+        <Pile key={d.v} imgs={Array(count).fill(d.img)} w={w} h={h} step={step} maxH={maxH} />
       ))}
     </View>
   );
 }
 
 const s = StyleSheet.create({
-  stack: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  group: { flexDirection: 'row', alignItems: 'center', gap: 2 },
-  count: { color: '#fafafa', fontSize: 11, fontWeight: '700' },
+  row: { flexDirection: 'row', alignItems: 'flex-end', gap: 3 },
 });
