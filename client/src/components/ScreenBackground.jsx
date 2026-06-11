@@ -4,10 +4,10 @@ import { Image, View, StyleSheet, useWindowDimensions } from 'react-native';
 // Jungle backgrounds at several aspect ratios — at runtime we pick whichever is
 // closest to the viewport so `cover` trims as little as possible on any device.
 const BGS = [
-  { ar: 21 / 9, src: require('../../assets/login-bg-21-9.png') },
-  { ar: 16 / 9, src: require('../../assets/login-bg-16-9.png') },
-  { ar: 4 / 3,  src: require('../../assets/login-bg-4-3.png') },
-  { ar: 9 / 16, src: require('../../assets/login-bg-9-16.png') },
+  { ar: 21 / 9, src: require('../../assets/login-bg-21-9.jpg') },
+  { ar: 16 / 9, src: require('../../assets/login-bg-16-9.jpg') },
+  { ar: 4 / 3,  src: require('../../assets/login-bg-4-3.jpg') },
+  { ar: 9 / 16, src: require('../../assets/login-bg-9-16.jpg') },
 ];
 
 // Drop in as the FIRST child of a screen's root <View> (which should be flex:1).
