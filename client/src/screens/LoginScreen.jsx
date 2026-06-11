@@ -138,10 +138,6 @@ export default function LoginScreen() {
       <SafeAreaView style={s.safe}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={s.kav}>
         <View style={s.center}>
-          <View style={s.heading}>
-            <Text style={s.title}>♠ Poker Monkey ♣</Text>
-            <Text style={s.version}>{VERSION_DISPLAY}</Text>
-          </View>
           <View style={s.card}>
             <Pressable
               style={[s.googleBtn, (googleLoading || !request) && s.dim]}
@@ -180,6 +176,7 @@ export default function LoginScreen() {
               <Text style={s.joinTxt}>Play as Guest</Text>
             </Pressable>
           </View>
+          <Text style={s.versionSmall}>{VERSION_DISPLAY}</Text>
         </View>
       </KeyboardAvoidingView>
       </SafeAreaView>
@@ -192,9 +189,7 @@ const s = StyleSheet.create({
   safe:    { flex: 1 },
   kav:     { flex: 1 },
   center:  { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
-  heading: { alignItems: 'center', gap: 4, marginBottom: 45 },
-  title:   { fontSize: 26, fontWeight: '900', color: colors.goldLight, letterSpacing: 1, textAlign: 'center' },
-  version: { fontSize: 17, fontWeight: '800', color: colors.goldLight, textAlign: 'center', opacity: 0.95 },
+  versionSmall: { fontSize: 11, color: 'rgba(255,255,255,0.55)', textAlign: 'center', marginTop: 12 },
   card: {
     backgroundColor: '#12121e',
     borderWidth: 1.5, borderColor: 'rgba(255,220,160,0.22)',
