@@ -229,11 +229,13 @@ const s = StyleSheet.create({
   },
   card: {
     backgroundColor: '#12121e',
-    borderWidth: 1.5, borderColor: 'rgba(255,220,160,0.22)',
+    // Antique-gold stroke to match the flag trim, with a warm glow so it
+    // reads against both the busy monkey art and the dark desktop scenery.
+    borderWidth: 3, borderColor: 'rgba(222,184,110,0.9)',
     borderRadius: 18,
     width: '100%', maxWidth: 400, padding: 22, gap: 16,
-    shadowColor: '#000', shadowOpacity: 0.6, shadowRadius: 18,
-    shadowOffset: { width: 0, height: 8 }, elevation: 10,
+    shadowColor: colors.goldLight, shadowOpacity: 0.45, shadowRadius: 18,
+    shadowOffset: { width: 0, height: 0 }, elevation: 10,
   },
   googleBtn:   { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#fff', borderRadius: 50, paddingVertical: 13, gap: 10 },
   dim:         { opacity: 0.45 },
