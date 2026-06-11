@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useContext } from 'react';
 import {
-  View, Text, TextInput, Pressable,
+  View, Text, TextInput, Pressable, Image,
   StyleSheet, KeyboardAvoidingView, Platform, ActivityIndicator,
+  useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as WebBrowser from 'expo-web-browser';
@@ -22,8 +23,14 @@ const GOOGLE_DISCOVERY = {
   tokenEndpoint: 'https://oauth2.googleapis.com/token',
 };
 
+// The island/monkey/flag art is phone-aspect (9:19.5) — above this width it
+// crops into mush, so wider viewports get the generic scenery background only.
+const MOBILE_MAX_WIDTH = 768;
+
 export default function LoginScreen() {
   const { onLogin } = useContext(GameContext);
+  const { width: windowWidth } = useWindowDimensions();
+  const isMobileLayout = windowWidth <= MOBILE_MAX_WIDTH;
 
   const [name, setName]               = useState('');
   const [googleLoading, setGoogleLoading] = useState(false);
@@ -133,7 +140,17 @@ export default function LoginScreen() {
 
   return (
     <View style={s.root}>
-      <ScreenBackground />
+      {isMobileLayout ? (
+        <>
+          <Image source={require('../../assets/login-island.jpg')} style={s.bg} resizeMode="cover" />
+          <Image source={require('../../assets/login-monkey.png')} style={s.bg} resizeMode="cover" />
+          <View style={s.logoWrap} pointerEvents="none">
+            <Image source={require('../../assets/flag-logo.png')} style={s.logo} resizeMode="contain" />
+          </View>
+        </>
+      ) : (
+        <ScreenBackground />
+      )}
 
       <SafeAreaView style={s.safe}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={s.kav}>
@@ -190,6 +207,14 @@ const s = StyleSheet.create({
   // 100vh minHeight overrides the dvh height and pushes bottom-anchored content
   // under the toolbar). Older-browser fallback is 100% of the document.
   root:    { flex: 1, backgroundColor: '#0a1628', ...Platform.select({ web: { minHeight: '100%', height: '100dvh', width: '100%' } }) },
+  bg:      { ...StyleSheet.absoluteFillObject, width: '100%', height: '100%' },
+  // Pinned to the top third of the screen (outside SafeAreaView/KAV so the
+  // keyboard and mobile-browser toolbars never move it).
+  logoWrap: {
+    position: 'absolute', top: 0, left: 0, right: 0, height: '33%',
+    alignItems: 'center', justifyContent: 'center', paddingHorizontal: 24,
+  },
+  logo:    { width: '100%', maxWidth: 420, height: '100%' },
   safe:    { flex: 1 },
   kav:     { flex: 1 },
   center:  {
