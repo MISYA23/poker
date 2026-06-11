@@ -12,6 +12,8 @@ import { getUser, setUser } from '../utils/user';
 const AVATAR_IMAGES = {
   cigar: require('../../assets/cigar.png'),
   queen: require('../../assets/queen.png'),
+  lemur: require('../../assets/lemur.png'),
+  captain: require('../../assets/captain.png'),
 };
 
 export default function ProfileScreen({ navigation }) {

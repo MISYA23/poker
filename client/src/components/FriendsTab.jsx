@@ -9,6 +9,8 @@ import { SERVER_URL } from '../config';
 const AVATAR_IMAGES = {
   cigar: require('../../assets/cigar.png'),
   queen: require('../../assets/queen.png'),
+  lemur: require('../../assets/lemur.png'),
+  captain: require('../../assets/captain.png'),
 };
 
 function PlayerRow({ player, action, actionLabel, actionColor, secondAction, secondLabel }) {

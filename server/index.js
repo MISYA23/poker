@@ -2149,6 +2149,8 @@ async function initAvatars() {
   const seeds = [
     ['cigar', 'Cigar Monkey', 'cigar'],
     ['queen', 'Queen',        'queen'],
+    ['lemur', 'Lemur',        'lemur'],
+    ['captain', 'Captain',    'captain'],
   ];
   for (const [id, name, key] of seeds) {
     await db.query(

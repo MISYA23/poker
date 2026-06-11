@@ -5,6 +5,8 @@ import { colors } from '../theme';
 const AVATAR_IMAGES = {
   cigar: require('../../assets/cigar.png'),
   queen: require('../../assets/queen.png'),
+  lemur: require('../../assets/lemur.png'),
+  captain: require('../../assets/captain.png'),
 };
 
 export default function Avatar({ size = 52, avatarId }) {

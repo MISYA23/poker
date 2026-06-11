@@ -12,6 +12,8 @@ import { flagEmoji } from '../utils/flag';
 const AVATAR_IMAGES = {
   cigar: require('../../assets/cigar.png'),
   queen: require('../../assets/queen.png'),
+  lemur: require('../../assets/lemur.png'),
+  captain: require('../../assets/captain.png'),
 };
 
 const TAB_NAMES = ['Online', 'Leaderboard'];
