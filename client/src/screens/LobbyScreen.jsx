@@ -8,7 +8,6 @@ import { GameContext } from '../context/GameContext';
 import { colors } from '../theme';
 import { VERSION_DISPLAY, SERVER_URL } from '../config';
 import { flagEmoji } from '../utils/flag';
-import FeedbackButton from '../components/FeedbackButton';
 
 const AVATAR_IMAGES = {
   cigar: require('../../assets/cigar.png'),
@@ -203,12 +202,6 @@ export default function LobbyScreen({ navigation }) {
             </Pressable>
           </View>
 
-          {/* Feedback button — below the hamburger, spanning from the sound button's
-              left edge to the hamburger's right edge (elegant alignment, like in-game) */}
-          <View style={s.feedbackRow}>
-            <FeedbackButton buttonStyle={s.lobbyFeedbackBtn} textStyle={s.lobbyFeedbackTxt} />
-          </View>
-
           {/* Hamburger menu */}
           {menuOpen && (
             <Pressable style={s.menuOverlay} onPress={() => setMenuOpen(false)}>
@@ -301,9 +294,6 @@ const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#0a1628' },
   safe: { flex: 1 },
   topBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 12, paddingBottom: 8 },
-  feedbackRow: { flexDirection: 'row', justifyContent: 'flex-end', paddingHorizontal: 20, marginTop: -4 },
-  lobbyFeedbackBtn: { width: 84, alignItems: 'center', paddingVertical: 9 },   // right edge → hamburger, left edge → sound
-  lobbyFeedbackTxt: { fontSize: 13 },
   logo: { fontSize: 20, fontWeight: '900', color: colors.goldLight, letterSpacing: 1 },
   logoVersion: { fontSize: 14, fontWeight: '900', color: colors.goldLight },
   hamburger: { width: 40, height: 40, borderRadius: 10, backgroundColor: 'rgba(0,0,0,0.45)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center' },

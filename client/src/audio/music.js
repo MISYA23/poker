@@ -53,9 +53,10 @@ function buildPlayer(c) {
         c.idx = (c.idx + 1) % c.tracks.length;
         const vol = p.volume;                      // preserve current fade level
         try {
-          p.replace(c.tracks[c.idx]);              // NB: replace() auto-plays the new source
+          p.replace(c.tracks[c.idx]);
           p.muted = S.muted;
           p.volume = vol;
+          p.play();                                // explicit — replace() only auto-plays if it was playing at end
         } catch (_) {}
       }
     });
@@ -129,6 +130,7 @@ export function setMusicContext(target) {
   S.active = target;
   if (prev) fade(prev, 0, FADE_MS, () => { try { prev.pause(); } catch (_) {} });
   if (S.muted) { try { next.pause(); } catch (_) {} return; }  // deactivated → don't start the next context
+  try { next.muted = S.muted; } catch (_) {}                  // re-assert: target may be stuck muted from an earlier toggle
   try { next.play(); } catch (_) {}
   fade(next, MAX_VOL);
 }
@@ -136,15 +138,19 @@ export function setMusicContext(target) {
 export function isMusicMuted() { return S.muted; }
 export function setMusicMuted(value) {
   S.muted = !!value;
+  // Always sync the native muted flag on BOTH players — otherwise the inactive
+  // context (e.g. the menu track while you're in-game) stays stuck muted and is
+  // silent when you switch back to it.
+  [S.ctx.menu.player, S.ctx.game.player].forEach(p => {
+    if (p) { try { p.muted = S.muted; } catch (_) {} }
+  });
   if (S.muted) {
-    // Truly stop every player — a paused player can't rotate or leak audio,
-    // regardless of how reliable the native `muted` flag is.
+    // Truly stop every player — a paused player can't rotate or leak audio.
     [S.ctx.menu.player, S.ctx.game.player].forEach(p => {
-      if (p) { try { p.muted = true; } catch (_) {} try { p.pause(); } catch (_) {} }
+      if (p) { try { p.pause(); } catch (_) {} }
     });
   } else if (S.started && S.active && S.ctx[S.active] && S.ctx[S.active].player) {
     const p = S.ctx[S.active].player;
-    try { p.muted = false; } catch (_) {}
     try { p.play(); } catch (_) {}
     fade(p, MAX_VOL);
   }

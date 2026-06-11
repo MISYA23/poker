@@ -30,9 +30,10 @@ function MuteButton({ route }) {
   const size   = route === 'Lobby' ? 40 : 36;
   const radius = route === 'Lobby' ? 10 : 8;
   const pos =
-    route === 'Game'  ? { right: 56, top: insets.top + 7 }  :
-    route === 'Lobby' ? { right: 64, top: insets.top + 12 } :
-                        { right: 12, top: insets.top + 8 };
+    route === 'Game'        ? { right: 56, top: insets.top + 7 }  :
+    route === 'Lobby'       ? { right: 64, top: insets.top + 12 } :
+    route === 'Leaderboard' ? { right: 44, top: insets.top + 5 }  :  // just left of the ↻ refresh
+                              { right: 12, top: insets.top + 8 };
 
   return (
     <>
