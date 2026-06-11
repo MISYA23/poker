@@ -1,10 +1,9 @@
 import 'react-native-gesture-handler';
 import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
-import { Platform, View, Text, Pressable, StyleSheet, useWindowDimensions } from 'react-native';
 import { NavigationContainer, useNavigationContainerRef } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 
 import { GameContext } from './src/context/GameContext';
@@ -13,88 +12,7 @@ import { useSocket } from './src/hooks/useSocket';
 import { clearUser } from './src/utils/user';
 import { track } from './src/utils/analytics';
 import { SERVER_URL } from './src/config';
-import { startMusic, setMusicContext, isMusicMuted, setMusicMuted, loadMusicConfig } from './src/audio/music';
-import { isSfxEnabled, setSfxEnabled } from './src/audio/sfx';
-
-// Global sound control — floats over every screen, positioned per-screen.
-// Tapping the icon opens a small menu: Music on/off + Game sounds on/off.
-// Icon shows active (🔊) if either is on, muted (🔇) if both are off.
-function MuteButton({ route }) {
-  const insets = useSafeAreaInsets();
-  const { width: winW } = useWindowDimensions();
-  const [open, setOpen]       = useState(false);
-  const [musicOn, setMusicOn] = useState(!isMusicMuted());
-  const [sfxOn, setSfxOn]     = useState(isSfxEnabled());
-  const anyOn = musicOn || sfxOn;
-
-  if (route === 'Login') return null;
-
-  const toggleMusic = () => { const v = !musicOn; setMusicOn(v); setMusicMuted(!v); };
-  const toggleSfx   = () => { const v = !sfxOn;   setSfxOn(v);   setSfxEnabled(v); };
-
-  // Lobby: dock 8px left of the hamburger, which lives inside the lobby's
-  // centered maxWidth-460 column (padding 20, hamburger 42px) — anchor to the
-  // column edge, not the window edge, so wide screens don't strand the button.
-  const lobbyColEdge = Math.max(0, (winW - 460) / 2);
-  const size   = route === 'Lobby' ? 42 : 36;
-  const radius = route === 'Lobby' ? 13 : 8;
-  const pos =
-    route === 'Game'        ? { right: 56, top: insets.top + 7 }  :
-    route === 'Lobby'       ? { right: lobbyColEdge + 20 + 42 + 8, top: insets.top + 14 } :
-    route === 'Leaderboard' ? { right: 44, top: insets.top + 5 }  :  // just left of the ↻ refresh
-                              { right: 12, top: insets.top + 8 };
-
-  return (
-    <>
-      <Pressable
-        onPress={() => setOpen(o => !o)}
-        style={[muteStyles.btn, pos, { width: size, height: size, borderRadius: radius },
-          route === 'Lobby' && { backgroundColor: 'rgba(255,255,255,0.06)', borderColor: 'rgba(255,255,255,0.16)' }]}
-        hitSlop={8}
-      >
-        <Text style={muteStyles.txt}>{anyOn ? '🔊' : '🔇'}</Text>
-      </Pressable>
-      {open && (
-        <>
-          <Pressable style={muteStyles.scrim} onPress={() => setOpen(false)} />
-          <View style={[muteStyles.menu, { top: pos.top + size + 6, right: pos.right }]}>
-            <Pressable style={muteStyles.row} onPress={toggleMusic}>
-              <Text style={[muteStyles.box, musicOn && muteStyles.boxOn]}>{musicOn ? '✓' : ''}</Text>
-              <Text style={muteStyles.label}>Music</Text>
-            </Pressable>
-            <Pressable style={muteStyles.row} onPress={toggleSfx}>
-              <Text style={[muteStyles.box, sfxOn && muteStyles.boxOn]}>{sfxOn ? '✓' : ''}</Text>
-              <Text style={muteStyles.label}>Game sounds</Text>
-            </Pressable>
-          </View>
-        </>
-      )}
-    </>
-  );
-}
-const muteStyles = StyleSheet.create({
-  btn: {
-    position: 'absolute', zIndex: 9999,
-    alignItems: 'center', justifyContent: 'center',
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)',
-  },
-  txt: { fontSize: 17, lineHeight: 21 },
-  scrim: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 9998 },
-  menu: {
-    position: 'absolute', zIndex: 10000, minWidth: 158,
-    backgroundColor: 'rgba(15,15,18,0.97)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)',
-    borderRadius: 10, paddingVertical: 4, overflow: 'hidden',
-  },
-  row: { flexDirection: 'row', alignItems: 'center', gap: 9, paddingVertical: 10, paddingHorizontal: 12 },
-  box: {
-    width: 18, height: 18, borderRadius: 4, textAlign: 'center', lineHeight: 18,
-    fontSize: 13, fontWeight: '900', color: '#0d1117',
-    borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.4)', backgroundColor: 'transparent',
-  },
-  boxOn: { backgroundColor: '#f0c040', borderColor: '#f0c040' },
-  label: { fontSize: 13, color: '#fff', fontWeight: '600' },
-});
+import { startMusic, setMusicContext, loadMusicConfig } from './src/audio/music';
 import MatchFlowOverlays from './src/components/MatchFlowOverlays';
 import LoginScreen   from './src/screens/LoginScreen';
 import LobbyScreen   from './src/screens/LobbyScreen';
@@ -147,7 +65,7 @@ export default function App() {
   // refs, never the overlay state above.
   const searchRef     = useRef(null);
   const foundDelayRef = useRef(false); // mid "Human found!" beat — hold navigation
-  const [route, setRoute] = useState('Login');   // current screen (for the sound button placement)
+  const [route, setRoute] = useState('Login');   // current screen (gates music start)
 
   const setSearch = useCallback((v) => { searchRef.current = v; setSearchOverlay(v); }, []);
 
@@ -441,7 +359,6 @@ export default function App() {
               <Stack.Screen name="Leaderboard" component={LeaderboardScreen} />
             </Stack.Navigator>
           </NavigationContainer>
-          <MuteButton route={route} />
           <MatchFlowOverlays
             searchOverlay={searchOverlay}
             meantime={meantime}
