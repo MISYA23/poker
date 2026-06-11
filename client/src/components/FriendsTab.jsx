@@ -3,6 +3,7 @@ import {
   View, Text, TextInput, Pressable, Image, StyleSheet, ActivityIndicator, ScrollView,
 } from 'react-native';
 import { GameContext } from '../context/GameContext';
+import { LobbyContext } from '../context/LobbyContext';
 import { colors } from '../theme';
 import { SERVER_URL } from '../config';
 
@@ -37,7 +38,8 @@ function PlayerRow({ player, action, actionLabel, actionColor, secondAction, sec
 }
 
 export default function FriendsTab({ onlinePlayers }) {
-  const { playerInfo, emit, incomingChallenges = [], onAcceptChallenge, onDeclineChallenge, setPendingFriendRequests } = useContext(GameContext);
+  const { playerInfo, emit } = useContext(GameContext);
+  const { incomingChallenges = [], onAcceptChallenge, onDeclineChallenge, setPendingFriendRequests } = useContext(LobbyContext);
   const incomingChallenge = incomingChallenges[0] || null;
 
   const [friends, setFriends]             = useState(null);

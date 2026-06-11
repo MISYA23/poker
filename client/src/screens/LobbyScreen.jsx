@@ -5,6 +5,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { GameContext } from '../context/GameContext';
+import { LobbyContext } from '../context/LobbyContext';
 import { colors } from '../theme';
 import { VERSION_DISPLAY, SERVER_URL } from '../config';
 import { flagEmoji } from '../utils/flag';
@@ -166,10 +167,11 @@ function FeaturedMatch({ matchList, onObserve }) {
 }
 
 export default function LobbyScreen({ navigation }) {
-  const { onFindMatch, onPlayBot, onCancelMatch, onObserve, onLogout,
-          error, matchList, onlinePlayers, inQueue, myElo, playerInfo, navigationRef,
-          myRecentMatches, incomingChallenges, outgoingChallenges,
-          onChallenge, onAcceptChallenge, onWithdrawChallenge, emit } = useContext(GameContext);
+  const { onLogout, playerInfo, navigationRef, emit } = useContext(GameContext);
+  const { onFindMatch, onPlayBot, onCancelMatch, onObserve,
+          error, matchList, onlinePlayers, inQueue, myElo,
+          incomingChallenges, outgoingChallenges,
+          onChallenge, onAcceptChallenge, onWithdrawChallenge } = useContext(LobbyContext);
 
   useEffect(() => {
     if (Platform.OS === 'web' && !playerInfo) {
