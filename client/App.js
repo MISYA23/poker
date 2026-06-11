@@ -11,6 +11,7 @@ import { GameContext } from './src/context/GameContext';
 import { LobbyContext } from './src/context/LobbyContext';
 import { useSocket } from './src/hooks/useSocket';
 import { clearUser } from './src/utils/user';
+import { track } from './src/utils/analytics';
 import { SERVER_URL } from './src/config';
 import { startMusic, setMusicContext, isMusicMuted, setMusicMuted, loadMusicConfig } from './src/audio/music';
 import { isSfxEnabled, setSfxEnabled } from './src/audio/sfx';
@@ -171,6 +172,7 @@ export default function App() {
       // Starting any match voids all challenges (server does the same)
       setIncomingChallenges([]);
       setOutgoingChallenges([]);
+      track('StartMatch');
       navigationRef.navigate('Game');
     },
     'match-list':  ({ matches, onlinePlayers: op }) => { setMatchList(matches || []); setOnlinePlayers(op || []); },
@@ -197,6 +199,7 @@ export default function App() {
       setMatchOver({ ...data, myVote: null, opponentWantsRematch: null });
       setOpponentDisconnected(null);
       if (data.newElo != null) setMyElo(data.newElo);
+      track('FinishMatch');
     },
     'rematch-pending': ({ from })    => {
       setMatchOver(prev => prev ? { ...prev, opponentWantsRematch: from } : prev);
@@ -277,6 +280,7 @@ export default function App() {
     }
     pendingObserveRef.current = false;
     setError(null);
+    track('PlayMatch', { mode: 'queue' });
     emit('find-match', { playerId });
   }, [emit]);
 
@@ -288,6 +292,7 @@ export default function App() {
     }
     pendingObserveRef.current = false;
     setError(null);
+    track('PlayMatch', { mode: 'bot' });
     emit('play-bot', { playerId });
   }, [emit]);
 
@@ -298,6 +303,7 @@ export default function App() {
 
   const onChallenge = useCallback((toId) => {
     setError(null);
+    track('IssueChallenge', { source: 'lobby' });
     emit('challenge-send', { toId });
   }, [emit]);
 

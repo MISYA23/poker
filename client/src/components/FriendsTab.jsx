@@ -6,6 +6,7 @@ import { GameContext } from '../context/GameContext';
 import { LobbyContext } from '../context/LobbyContext';
 import { colors } from '../theme';
 import { SERVER_URL } from '../config';
+import { track } from '../utils/analytics';
 
 const AVATAR_IMAGES = {
   cigar: require('../../assets/cigar.png'),
@@ -115,6 +116,7 @@ export default function FriendsTab({ onlinePlayers }) {
   };
 
   const challenge = (friendId) => {
+    track('IssueChallenge', { source: 'friends' });
     emit('challenge-send', { toId: friendId });
   };
 
