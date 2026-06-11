@@ -7,6 +7,7 @@ import { colors } from '../theme';
 import { VERSION_DISPLAY } from '../config';
 import { track } from '../utils/analytics';
 import { AvatarBadge } from '../components/MatchFlowOverlays';
+import SoundButton from '../components/SoundButton';
 
 // Always share the public URL — anyone who taps it can play in the browser
 // immediately. ?via= is inert for now; reserved for attribution / a future
@@ -18,16 +19,17 @@ const INVITE_URL = 'https://pokermonkey.app';
 //   issued   — I challenged them         → green, Cancel
 //   normal   — challengeable human       → gold VS button
 // Players in a bot game are still listed (they're waiting for humans too).
-function PlayerRow({ p, incoming, issued, onChallenge, onCancelChallenge, onAccept }) {
+function PlayerRow({ p, incoming, issued, onChallenge, onCancelChallenge, onAccept, debug }) {
   // Bot-game players still read "Looking to play" — they only flip to
   // "Playing a bot" once they've refused (or ignored) a challenge there
   const status =
     incoming     ? 'Wants to play you!' :
     issued       ? 'Challenge issued'   :
+    p.isBot      ? 'Always ready 🤖'    :
     p.botRefused ? 'Playing a bot 🤖'   : 'Looking to play';
   const green = incoming || issued;
   return (
-    <View style={[s.row, green && s.rowGreen]}>
+    <View style={[s.row, green && s.rowGreen, debug && { borderWidth: 2, borderColor: 'orange' }]}>
       <AvatarBadge avatarId={p.avatarId} country={p.country} size={46} />
       <View style={s.rowWho}>
         <Text style={s.rowName} numberOfLines={1}>{p.name}</Text>
@@ -76,6 +78,7 @@ export default function LobbyScreen({ navigation }) {
   }, [navigation, playerInfo?.playerId, emit]);
 
   const [menuOpen, setMenuOpen] = useState(false);
+  const [debugUI, setDebugUI] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
   const copiedTimer = useRef(null);
 
@@ -111,6 +114,10 @@ export default function LobbyScreen({ navigation }) {
     .filter(p => p.id !== myPlayerId && (!p.inMatch || p.inBotMatch))
     .sort((a, b) => (b.elo || 1200) - (a.elo || 1200));
 
+  // House bot — always listed so there's a game one tap away even in a dead
+  // lobby. Challenging a bot id starts the match instantly server-side.
+  const freeBot = (onlinePlayers || []).find(p => p.isBot && !p.inMatch) || null;
+
   // Live now: human-vs-human matches only. If there are none, show just the
   // match of the highest-ELO player currently playing (presumably vs a bot).
   const maxElo = (m) => Math.max(m.player1Elo || 1200, m.player2Elo || 1200);
@@ -127,17 +134,20 @@ export default function LobbyScreen({ navigation }) {
       <SafeAreaView style={s.safe}>
 
         {/* Header */}
-        <View style={s.topbar}>
-          <View>
-            <Text style={s.hi} numberOfLines={1}>Hi {playerInfo?.name || ''}!</Text>
+        <View style={[s.topbar, debugUI && { borderWidth: 2, borderColor: 'red' }]}>
+          <View style={[s.who, debugUI && { borderWidth: 2, borderColor: 'cyan' }]}>
+            <Text style={s.hi} numberOfLines={1}>{(playerInfo?.name || '').slice(0, 10)}</Text>
             <View style={s.eloPill}>
               <Text style={s.eloLbl}>ELO </Text>
               <Text style={s.eloVal}>{myElo ?? 1200}</Text>
             </View>
           </View>
-          <Pressable style={s.ham} onPress={() => setMenuOpen(o => !o)}>
-            <Text style={s.hamTxt}>☰</Text>
-          </Pressable>
+          <View style={s.topbarBtns}>
+            <SoundButton style={[s.ham, debugUI && { borderWidth: 2, borderColor: 'magenta' }]} />
+            <Pressable style={[s.ham, debugUI && { borderWidth: 2, borderColor: 'magenta' }]} onPress={() => setMenuOpen(o => !o)}>
+              <Text style={s.hamTxt}>☰</Text>
+            </Pressable>
+          </View>
         </View>
 
         {/* Hamburger menu */}
@@ -147,6 +157,9 @@ export default function LobbyScreen({ navigation }) {
               <Pressable style={s.menuItem} onPress={() => { setMenuOpen(false); navigationRef.navigate('Profile'); }}>
                 <Text style={s.menuItemTxt}>👤 Profile</Text>
               </Pressable>
+              <Pressable style={s.menuItem} onPress={() => { setDebugUI(v => !v); setMenuOpen(false); }}>
+                <Text style={s.menuItemTxt}>{debugUI ? '🟢' : '⚫'} UI Debug</Text>
+              </Pressable>
               <Pressable style={[s.menuItem, { borderBottomWidth: 0 }]} onPress={() => { setMenuOpen(false); onLogout(); }}>
                 <Text style={s.menuItemTxt}>🚪 Log Out</Text>
               </Pressable>
@@ -155,7 +168,7 @@ export default function LobbyScreen({ navigation }) {
         )}
 
         <ScrollView contentContainerStyle={s.scroll} keyboardShouldPersistTaps="handled">
-          <View style={s.col}>
+          <View style={[s.col, debugUI && { borderWidth: 2, borderColor: 'blue' }]}>
 
             {/* Presence chip — only when MORE THAN 3 humans online */}
             {humans.length > 3 && (
@@ -171,7 +184,7 @@ export default function LobbyScreen({ navigation }) {
             {error && <Text style={s.error}>{error}</Text>}
 
             {/* QUICK MATCH */}
-            <Pressable style={({ pressed }) => [s.hero, pressed && { transform: [{ scale: 0.985 }] }]}
+            <Pressable style={({ pressed }) => [s.hero, pressed && { transform: [{ scale: 0.985 }] }, debugUI && { borderWidth: 2, borderColor: 'yellow' }]}
               onPress={() => onFindMatch(myPlayerId)}>
               <View style={s.heroBolt}><Text style={s.heroBoltTxt}>⚡</Text></View>
               <Text style={s.heroTxt}>QUICK MATCH</Text>
@@ -179,21 +192,25 @@ export default function LobbyScreen({ navigation }) {
             </Pressable>
 
             {/* Looking to play */}
-            <View style={s.sec}>
+            <View style={[s.sec, debugUI && { borderWidth: 2, borderColor: 'green' }]}>
               <Text style={s.secIcGold}>⚡</Text>
               <Text style={[s.secTitle, s.secTitleGold]}>Looking to play</Text>
-              <View style={s.count}><Text style={s.countTxt}>{looking.length}</Text></View>
+              <View style={s.count}><Text style={s.countTxt}>{looking.length + (freeBot ? 1 : 0)}</Text></View>
             </View>
-            {looking.length ? (
+            {(looking.length || freeBot) ? (
               <>
                 {looking.map(p => (
                   <PlayerRow key={p.id} p={p}
                     incoming={isIncoming(p.id)} issued={isIssued(p.id)}
                     onChallenge={onChallenge} onCancelChallenge={onWithdrawChallenge}
-                    onAccept={onAcceptChallenge} />
+                    onAccept={onAcceptChallenge} debug={debugUI} />
                 ))}
+                {freeBot && (
+                  <PlayerRow key={freeBot.id} p={freeBot}
+                    onChallenge={onChallenge} debug={debugUI} />
+                )}
                 {/* Invite friends — action row, final slot of the list */}
-                <View style={s.inviteRow}>
+                <View style={[s.inviteRow, debugUI && { borderWidth: 2, borderColor: 'orange' }]}>
                   <View style={s.inviteTile}><Text style={s.inviteTileTxt}>＋</Text></View>
                   <View style={s.rowWho}>
                     <Text style={s.rowName}>Invite friends</Text>
@@ -219,13 +236,13 @@ export default function LobbyScreen({ navigation }) {
             {/* Live now */}
             {liveRows.length > 0 && (
               <>
-                <View style={s.sec}>
+                <View style={[s.sec, debugUI && { borderWidth: 2, borderColor: 'green' }]}>
                   <View style={s.liveDotHead} />
                   <Text style={s.secTitle}>Live now</Text>
                   <View style={s.count}><Text style={s.countTxt}>{liveRows.length}</Text></View>
                 </View>
                 {liveRows.map(m => (
-                  <Pressable key={m.id} style={s.liveRow} onPress={() => onObserve(m.id)}>
+                  <Pressable key={m.id} style={[s.liveRow, debugUI && { borderWidth: 2, borderColor: 'purple' }]} onPress={() => onObserve(m.id)}>
                     <View style={s.liveRec}>
                       <View style={s.liveDot} />
                       <Text style={s.liveRecTxt}>LIVE</Text>
@@ -256,14 +273,16 @@ const s = StyleSheet.create({
     paddingHorizontal: 20, paddingTop: 14, paddingBottom: 4,
     width: '100%', maxWidth: 460, alignSelf: 'center',
   },
-  hi: { fontSize: 25, fontWeight: '900', color: colors.white, letterSpacing: -0.2, maxWidth: 290 },
+  who: { flexDirection: 'row', alignItems: 'center', gap: 10, flexShrink: 1, minWidth: 0 },
+  hi: { fontSize: 25, fontWeight: '900', color: colors.white, letterSpacing: -0.2, flexShrink: 1 },
   eloPill: {
-    flexDirection: 'row', alignSelf: 'flex-start', alignItems: 'center', marginTop: 7,
+    flexDirection: 'row', alignItems: 'center',
     backgroundColor: 'rgba(240,192,64,0.12)', borderWidth: 1, borderColor: 'rgba(240,192,64,0.3)',
     borderRadius: 999, paddingVertical: 3, paddingHorizontal: 9,
   },
   eloLbl: { color: '#8a98aa', fontSize: 12, fontWeight: '700' },
   eloVal: { color: colors.goldLight, fontSize: 12, fontWeight: '800' },
+  topbarBtns: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   ham: {
     width: 42, height: 42, borderRadius: 13, backgroundColor: 'rgba(255,255,255,0.06)',
     borderWidth: 1, borderColor: 'rgba(255,255,255,0.16)', alignItems: 'center', justifyContent: 'center',

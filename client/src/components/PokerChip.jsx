@@ -113,9 +113,8 @@ function Pile({ imgs, w, h, step, maxH }) {
   );
 }
 
-// Greedy chip piles. Two looks, varied by amount so the table doesn't always read
-// the same: either separate colored stacks side-by-side (high value → low), or one
-// mixed pile with the largest-value chips at the bottom and smaller ones on top.
+// Greedy chip pile: one mixed stack with the largest-value chips at the bottom
+// and smaller ones on top.
 export function ChipStack({ amount, size = 28 }) {
   if (!amount || amount <= 0) return null;
   const groups = decompose(amount);
