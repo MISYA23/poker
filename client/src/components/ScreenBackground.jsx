@@ -1,5 +1,5 @@
-import React, { useMemo } from 'react';
-import { Image, View, StyleSheet, useWindowDimensions } from 'react-native';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Dimensions, Image, View, StyleSheet } from 'react-native';
 
 // Backgrounds at several aspect ratios — at runtime we pick whichever is
 // closest to the viewport so `cover` trims as little as possible on any device.
@@ -13,14 +13,23 @@ const BGS = [
 
 // Drop in as the FIRST child of a screen's root <View> (which should be flex:1).
 // Renders the closest-aspect image + a subtle scrim behind the screen content.
+//
+// Art selection is keyed to the SCREEN (device) dimensions, not the window:
+// the window shrinks when the soft keyboard or mobile-browser toolbars appear,
+// which would swap the artwork mid-interaction. The screen only changes on
+// rotation — exactly when a re-pick is wanted.
 export default function ScreenBackground({ scrim = 0.3 }) {
-  const { width, height } = useWindowDimensions();
+  const [screen, setScreen] = useState(() => Dimensions.get('screen'));
+  useEffect(() => {
+    const sub = Dimensions.addEventListener('change', (dims) => setScreen(dims.screen));
+    return () => sub.remove();
+  }, []);
   const bg = useMemo(() => {
-    const vAR = width / Math.max(1, height);
+    const vAR = screen.width / Math.max(1, screen.height);
     return BGS.reduce((best, cur) =>
       Math.abs(Math.log(cur.ar / vAR)) < Math.abs(Math.log(best.ar / vAR)) ? cur : best
     ).src;
-  }, [width, height]);
+  }, [screen.width, screen.height]);
   return (
     <>
       <Image source={bg} style={styles.bg} resizeMode="cover" />
