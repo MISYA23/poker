@@ -1,175 +1,54 @@
-import React, { useContext, useState, useEffect } from 'react';
-import {
-  View, Text, Pressable, ScrollView, StyleSheet,
-  Image, ActivityIndicator, Platform,
-} from 'react-native';
+import React, { useContext, useEffect, useState } from 'react';
+import { View, Text, Pressable, ScrollView, StyleSheet, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { GameContext } from '../context/GameContext';
 import { LobbyContext } from '../context/LobbyContext';
 import { colors } from '../theme';
-import { VERSION_DISPLAY, SERVER_URL } from '../config';
-import { flagEmoji } from '../utils/flag';
+import { VERSION_DISPLAY } from '../config';
+import { AvatarBadge } from '../components/MatchFlowOverlays';
 
-const AVATAR_IMAGES = {
-  cigar: require('../../assets/cigar.png'),
-  queen: require('../../assets/queen.png'),
-  lemur: require('../../assets/lemur.png'),
-  captain: require('../../assets/captain.png'),
-};
-
-const TAB_NAMES = ['Online', 'Leaderboard'];
-
-function PlayersTab({ onlinePlayers, myPlayerId, outgoingChallenges, onPressPlayer }) {
-  if (!onlinePlayers?.length) return <Text style={s.tabEmpty}>No players online</Text>;
-
-  // Bots are challengeable too — they auto-accept
-  const isChallengeable = (p) => p.id !== myPlayerId && !p.inMatch;
-  // Challengeable players first, then everyone else; ELO descending within each group
-  const sorted = [...onlinePlayers].sort((a, b) =>
-    (isChallengeable(b) - isChallengeable(a)) || ((b.elo || 1200) - (a.elo || 1200)));
-
+// One "Looking to play" row. States, in priority order:
+//   incoming — they challenged me        → green, Accept
+//   issued   — I challenged them         → green, Cancel
+//   normal   — challengeable human       → gold VS button
+// Players in a bot game are still listed (they're waiting for humans too).
+function PlayerRow({ p, incoming, issued, onChallenge, onCancelChallenge, onAccept }) {
+  const status =
+    incoming     ? 'Wants to play you!' :
+    issued       ? 'Challenge issued'   :
+    p.inBotMatch ? 'Playing a bot 🤖'   : 'Looking to play';
+  const green = incoming || issued;
   return (
-    <View style={s.tabContent}>
-      {sorted.map((p) => {
-        const isMe = p.id === myPlayerId;
-        // Mid-match players (and yourself) can't be challenged — row isn't tappable
-        const tappable = !isMe && !p.inMatch;
-        const pending = outgoingChallenges.some(c => c.toId === p.id);
-        return (
-          <Pressable key={p.id} disabled={!tappable} onPress={() => onPressPlayer(p)}
-            style={({ pressed }) => [s.playerBtn, !tappable && s.playerBtnDisabled, pressed && s.playerBtnPressed]}>
-            <Text style={s.playerFlag}>{p.isBot ? '🤖' : flagEmoji(p.country)}</Text>
-            <Text style={s.onlineName} numberOfLines={1}>{p.name}{isMe ? ' (you)' : ''}</Text>
-            <Text style={s.onlineElo}>{p.elo || 1200}</Text>
-            <View style={{ flex: 1 }} />
-            {pending && <Text style={s.pendingTag}>⚔️</Text>}
-            {p.inMatch && <Text style={s.inMatchTag}>in match</Text>}
-            {!p.inMatch && p.isBot && <Text style={s.botTag}>bot</Text>}
-            <View style={[s.statusDot, p.inMatch ? s.dotInMatch : s.dotOnline]} />
-          </Pressable>
-        );
-      })}
-    </View>
-  );
-}
-
-function ChallengeModal({ target, outgoingChallenges, onChallenge, onClose }) {
-  if (!target) return null;
-  const pending = outgoingChallenges.some(c => c.toId === target.id);
-  return (
-    <Pressable style={s.modalOverlay} onPress={onClose}>
-      <Pressable style={s.modalPanel} onPress={() => {}}>
-        <Text style={s.modalTitle}>Challenge {target.name}</Text>
-        <Text style={s.modalSub}>
-          {target.isBot ? '🤖 House bot — accepts instantly' : target.inMatch ? 'Currently in a match' : 'Online now'}
-        </Text>
-        {pending ? (
-          <View style={[s.modalChallengeBtn, s.modalPendingBtn]}>
-            <Text style={s.modalPendingTxt}>CHALLENGE TO {target.name.toUpperCase()} PENDING</Text>
-          </View>
-        ) : target.inMatch ? (
-          <View style={[s.modalChallengeBtn, s.modalPendingBtn]}>
-            <Text style={s.modalPendingTxt}>IN A MATCH — TRY LATER</Text>
-          </View>
-        ) : (
-          <Pressable style={s.modalChallengeBtn} onPress={() => { onChallenge(target.id); onClose(); }}>
-            <Text style={s.modalChallengeTxt}>{target.isBot ? '🤖' : '⚔️'} CHALLENGE {target.name.toUpperCase()}</Text>
-          </Pressable>
-        )}
-        <Pressable onPress={onClose}>
-          <Text style={s.modalClose}>Close</Text>
-        </Pressable>
-      </Pressable>
-    </Pressable>
-  );
-}
-
-function LeaderboardTab({ navigationRef }) {
-  const [data, setData]       = useState(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    fetch(`${SERVER_URL}/api/leaderboard`)
-      .then(r => r.json())
-      .then(d => setData(Array.isArray(d) ? d.slice(0, 5) : []))
-      .catch(() => setData([]))
-      .finally(() => setLoading(false));
-  }, []);
-
-  if (loading) return <ActivityIndicator color={colors.gold} style={{ marginTop: 8 }} />;
-  if (!data?.length) return <Text style={s.tabEmpty}>No players yet</Text>;
-
-  return (
-    <View style={s.tabContent}>
-      {data.map(p => (
-        <View key={p.playerId} style={s.lbRow}>
-          <Text style={[s.lbRank, p.rank <= 3 && { color: ['#FFD700','#C0C0C0','#CD7F32'][p.rank-1] }]}>
-            {p.rank <= 3 ? ['🥇','🥈','🥉'][p.rank-1] : p.rank}
-          </Text>
-          <Image source={AVATAR_IMAGES[p.avatarId] || AVATAR_IMAGES.cigar} style={s.lbAvatar} />
-          <Text style={s.lbFlag}>{p.isBot ? '🤖' : flagEmoji(p.country)}</Text>
-          <Text style={s.lbName} numberOfLines={1}>{p.displayName}</Text>
-          <Text style={s.lbElo}>{p.elo}</Text>
-        </View>
-      ))}
-      <Pressable onPress={() => navigationRef.navigate('Leaderboard')}>
-        <Text style={s.lbMore}>View full leaderboard →</Text>
-      </Pressable>
-    </View>
-  );
-}
-
-function FeaturedMatch({ matchList, onObserve }) {
-  if (!matchList?.length) {
-    return (
-      <View style={s.featuredSection}>
-        <Text style={s.featuredLabel}>Featured Match</Text>
-        <View style={s.featuredCard}>
-          <Text style={s.tabEmpty}>No games right now</Text>
+    <View style={[s.row, green && s.rowGreen]}>
+      <AvatarBadge avatarId={p.avatarId} country={p.country} size={46} />
+      <View style={s.rowWho}>
+        <Text style={s.rowName} numberOfLines={1}>{p.name}</Text>
+        <View style={s.rowMeta}>
+          <View style={[s.dot, green ? s.dotGreen : s.dotGold]} />
+          <Text style={[s.rowStatus, green && s.rowStatusGreen]} numberOfLines={1}>{status}</Text>
+          {!green && <Text style={s.rowElo}> · {p.elo || 1200}</Text>}
         </View>
       </View>
-    );
-  }
-  // Pick the match with the highest-ELO player
-  const featured = matchList.reduce((best, m) => {
-    const topElo = Math.max(m.player1Elo || 1200, m.player2Elo || 1200);
-    const bestElo = Math.max(best?.player1Elo || 0, best?.player2Elo || 0);
-    return topElo > bestElo ? m : best;
-  }, matchList[0]);
-
-  if (!featured) return null;
-
-  return (
-    <View style={s.featuredSection}>
-      <Text style={s.featuredLabel}>Featured Match</Text>
-      <Pressable style={s.featuredCard} onPress={() => onObserve(featured.id)}>
-        <View style={s.featuredPlayers}>
-          <View style={s.featuredPlayer}>
-            <Text style={s.featuredName} numberOfLines={1}>{featured.player1}</Text>
-            <Text style={s.featuredElo}>{featured.player1Elo}</Text>
-          </View>
-          <Text style={s.featuredVs}>VS</Text>
-          <View style={[s.featuredPlayer, { alignItems: 'flex-end' }]}>
-            <Text style={s.featuredName} numberOfLines={1}>{featured.player2}</Text>
-            <Text style={s.featuredElo}>{featured.player2Elo}</Text>
-          </View>
-        </View>
-        <View style={s.featuredFooter}>
-          <View style={[s.phaseDot, featured.phase === 'waiting' ? s.dotWaiting : s.dotActive]} />
-          <Text style={s.featuredPhase}>
-            {featured.phase === 'waiting' ? 'Starting…' : `Hand ${featured.handCount} · ${featured.phase}`}
-          </Text>
-          <Text style={s.watchTxt}>Watch →</Text>
-        </View>
-      </Pressable>
+      {incoming ? (
+        <Pressable style={[s.vsBtn, s.acceptBtn]} onPress={() => onAccept(p.id)}>
+          <Text style={s.acceptBtnTxt}>Accept</Text>
+        </Pressable>
+      ) : issued ? (
+        <Pressable style={s.cancelBtn} onPress={() => onCancelChallenge(p.id)}>
+          <Text style={s.cancelBtnTxt}>Cancel</Text>
+        </Pressable>
+      ) : (
+        <Pressable style={s.vsBtn} onPress={() => onChallenge(p.id)}>
+          <Text style={s.vsBtnTxt}>VS</Text>
+        </Pressable>
+      )}
     </View>
   );
 }
 
 export default function LobbyScreen({ navigation }) {
   const { onLogout, playerInfo, navigationRef, emit } = useContext(GameContext);
-  const { onFindMatch, onPlayBot, onCancelMatch, onObserve,
-          error, matchList, onlinePlayers, inQueue, myElo,
+  const { onFindMatch, onObserve, error, matchList, onlinePlayers, myElo,
           incomingChallenges, outgoingChallenges,
           onChallenge, onAcceptChallenge, onWithdrawChallenge } = useContext(LobbyContext);
 
@@ -189,215 +68,248 @@ export default function LobbyScreen({ navigation }) {
   }, [navigation, playerInfo?.playerId, emit]);
 
   const [menuOpen, setMenuOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState(0);
-  const [challengeTarget, setChallengeTarget] = useState(null);
+
+  const myPlayerId = playerInfo?.playerId;
+  const humans = (onlinePlayers || []).filter(p => !p.isBot);
+
+  // Everyone online is implicitly looking to play — challengeable unless in a
+  // human match. Bot-game players stay listed (15s to answer a challenge).
+  const looking = humans
+    .filter(p => p.id !== myPlayerId && (!p.inMatch || p.inBotMatch))
+    .sort((a, b) => (b.elo || 1200) - (a.elo || 1200));
+
+  // Live now: human-vs-human matches only. If there are none, show just the
+  // match of the highest-ELO player currently playing (presumably vs a bot).
+  const maxElo = (m) => Math.max(m.player1Elo || 1200, m.player2Elo || 1200);
+  let liveRows = (matchList || []).filter(m => !m.isBotMatch);
+  if (!liveRows.length && matchList?.length) {
+    liveRows = [matchList.reduce((best, m) => (maxElo(m) > maxElo(best) ? m : best), matchList[0])];
+  }
+
+  const isIncoming = (id) => (incomingChallenges || []).some(c => c.fromId === id);
+  const isIssued   = (id) => (outgoingChallenges || []).some(c => c.toId === id);
 
   return (
     <View style={s.root}>
-        <SafeAreaView style={s.safe}>
+      <SafeAreaView style={s.safe}>
 
-          {/* Top bar */}
-          <View style={s.topBar}>
-            <Text style={s.logo}>♠ Poker Monkey ♣ <Text style={s.logoVersion}>{VERSION_DISPLAY}</Text></Text>
-            <Pressable style={s.hamburger} onPress={() => setMenuOpen(o => !o)}>
-              <Text style={s.hamburgerTxt}>☰</Text>
-            </Pressable>
-          </View>
-
-          {/* Hamburger menu */}
-          {menuOpen && (
-            <Pressable style={s.menuOverlay} onPress={() => setMenuOpen(false)}>
-              <View style={s.menuPanel}>
-                <Pressable style={s.menuItem} onPress={() => { setMenuOpen(false); navigationRef.navigate('Profile'); }}>
-                  <Text style={s.menuItemTxt}>👤 Profile</Text>
-                </Pressable>
-                <Pressable style={[s.menuItem, { borderBottomWidth: 0 }]} onPress={() => { setMenuOpen(false); onLogout(); }}>
-                  <Text style={s.menuItemTxt}>🚪 Log Out</Text>
-                </Pressable>
-              </View>
-            </Pressable>
-          )}
-
-          <ScrollView contentContainerStyle={s.scroll} keyboardShouldPersistTaps="handled">
-
-            {/* Greeting */}
-            <View style={s.greeting}>
-              <Text style={s.hi}>Hi {playerInfo?.name || ''}!</Text>
-              {myElo != null && <Text style={s.elo}>ELO {myElo}</Text>}
+        {/* Header */}
+        <View style={s.topbar}>
+          <View>
+            <Text style={s.hi} numberOfLines={1}>Hi {playerInfo?.name || ''}!</Text>
+            <View style={s.eloPill}>
+              <Text style={s.eloLbl}>ELO </Text>
+              <Text style={s.eloVal}>{myElo ?? 1200}</Text>
             </View>
+          </View>
+          <Pressable style={s.ham} onPress={() => setMenuOpen(o => !o)}>
+            <Text style={s.hamTxt}>☰</Text>
+          </Pressable>
+        </View>
 
-            {error && <Text style={s.error}>{error}</Text>}
+        {/* Hamburger menu */}
+        {menuOpen && (
+          <Pressable style={s.menuOverlay} onPress={() => setMenuOpen(false)}>
+            <View style={s.menuPanel}>
+              <Pressable style={s.menuItem} onPress={() => { setMenuOpen(false); navigationRef.navigate('Profile'); }}>
+                <Text style={s.menuItemTxt}>👤 Profile</Text>
+              </Pressable>
+              <Pressable style={[s.menuItem, { borderBottomWidth: 0 }]} onPress={() => { setMenuOpen(false); onLogout(); }}>
+                <Text style={s.menuItemTxt}>🚪 Log Out</Text>
+              </Pressable>
+            </View>
+          </Pressable>
+        )}
 
-            {/* PLAY button */}
-            {inQueue ? (
-              <View style={s.queueBox}>
-                <Text style={s.queueTxt}>Finding opponent…</Text>
-                <Pressable style={s.cancelBtn} onPress={onCancelMatch}>
-                  <Text style={s.cancelTxt}>Cancel</Text>
-                </Pressable>
-              </View>
-            ) : (
-              <View style={s.playCol}>
-                <Pressable style={s.playBtn} onPress={() => onFindMatch(playerInfo.playerId)}>
-                  <Text style={s.playTxt}>PLAY!</Text>
-                </Pressable>
-                <Pressable style={s.playBotBtn} onPress={() => onPlayBot(playerInfo.playerId)}>
-                  <Text style={s.playBotTxt}>🤖 PLAY BOT</Text>
-                </Pressable>
-                {(incomingChallenges || []).map(c => (
-                  <Pressable key={c.fromId} style={s.acceptChallengeBtn} onPress={() => onAcceptChallenge(c.fromId)}>
-                    <Text style={s.acceptChallengeTxt}>⚔️ CHALLENGE ISSUED! PLAY {c.fromName.toUpperCase()}?</Text>
-                  </Pressable>
-                ))}
-                {(outgoingChallenges || []).map(c => (
-                  <Pressable key={c.toId} style={s.outgoingChallengeBtn} onPress={() => onWithdrawChallenge(c.toId)}>
-                    <Text style={s.outgoingChallengeTxt}>⏳ CHALLENGE TO {c.toName.toUpperCase()} PENDING</Text>
-                    <Text style={s.outgoingChallengeSub}>tap to withdraw</Text>
-                  </Pressable>
-                ))}
+        <ScrollView contentContainerStyle={s.scroll} keyboardShouldPersistTaps="handled">
+          <View style={s.col}>
+
+            {/* Presence chip — only when MORE THAN 3 humans online */}
+            {humans.length > 3 && (
+              <View style={s.presence}>
+                <View style={s.blob} />
+                <Text style={s.presenceTxt}>
+                  <Text style={s.presenceB}>{humans.length} humans</Text> online ·{' '}
+                  <Text style={s.presenceLook}>{looking.length} looking to play</Text>
+                </Text>
               </View>
             )}
 
-            {/* Dashboard tabs */}
-            <View style={s.tabsContainer}>
-              <View style={s.tabBar}>
-                {TAB_NAMES.map((tab, i) => (
-                  <Pressable key={i} style={[s.tabBtn, activeTab === i && s.tabBtnActive]}
-                    onPress={() => setActiveTab(i)}>
-                    <Text style={[s.tabLabel, activeTab === i && s.tabLabelActive]}>{tab}</Text>
+            {error && <Text style={s.error}>{error}</Text>}
+
+            {/* QUICK MATCH */}
+            <Pressable style={({ pressed }) => [s.hero, pressed && { transform: [{ scale: 0.985 }] }]}
+              onPress={() => onFindMatch(myPlayerId)}>
+              <View style={s.heroBolt}><Text style={s.heroBoltTxt}>⚡</Text></View>
+              <Text style={s.heroTxt}>QUICK MATCH</Text>
+              <Text style={s.heroChev}>›</Text>
+            </Pressable>
+
+            {/* Looking to play */}
+            <View style={s.sec}>
+              <Text style={s.secIcGold}>⚡</Text>
+              <Text style={[s.secTitle, s.secTitleGold]}>Looking to play</Text>
+              <View style={s.count}><Text style={s.countTxt}>{looking.length}</Text></View>
+            </View>
+            {looking.length ? looking.map(p => (
+              <PlayerRow key={p.id} p={p}
+                incoming={isIncoming(p.id)} issued={isIssued(p.id)}
+                onChallenge={onChallenge} onCancelChallenge={onWithdrawChallenge}
+                onAccept={onAcceptChallenge} />
+            )) : (
+              <View style={s.emptyPool}>
+                <Text style={s.epIc}>🙈</Text>
+                <Text style={s.epTitle}>Nobody's free right now</Text>
+                <Text style={s.epSub}>Tap <Text style={s.epGold}>Quick Match</Text> — play a bot until a human arrives.</Text>
+              </View>
+            )}
+
+            {/* Live now */}
+            {liveRows.length > 0 && (
+              <>
+                <View style={s.sec}>
+                  <View style={s.liveDotHead} />
+                  <Text style={s.secTitle}>Live now</Text>
+                  <View style={s.count}><Text style={s.countTxt}>{liveRows.length}</Text></View>
+                </View>
+                {liveRows.map(m => (
+                  <Pressable key={m.id} style={s.liveRow} onPress={() => onObserve(m.id)}>
+                    <View style={s.liveRec}>
+                      <View style={s.liveDot} />
+                      <Text style={s.liveRecTxt}>LIVE</Text>
+                    </View>
+                    <Text style={s.liveVs} numberOfLines={1}>
+                      {m.player1} <Text style={s.liveX}>vs</Text> {m.player2}
+                    </Text>
+                    <View style={s.watch}><Text style={s.watchTxt}>WATCH</Text></View>
                   </Pressable>
                 ))}
-              </View>
-              <View style={s.tabPanel}>
-                <ScrollView style={s.tabScroll} showsVerticalScrollIndicator={false}
-                  nestedScrollEnabled keyboardShouldPersistTaps="handled">
-                  {activeTab === 0 && (
-                    <PlayersTab onlinePlayers={onlinePlayers} myPlayerId={playerInfo?.playerId}
-                      outgoingChallenges={outgoingChallenges || []} onPressPlayer={setChallengeTarget} />
-                  )}
-                  {activeTab === 1 && <LeaderboardTab navigationRef={navigationRef} />}
-                </ScrollView>
-              </View>
-            </View>
+              </>
+            )}
 
-            {/* Featured match */}
-            <FeaturedMatch matchList={matchList} onObserve={onObserve} />
-
-          </ScrollView>
-
-          <ChallengeModal target={challengeTarget} outgoingChallenges={outgoingChallenges || []}
-            onChallenge={onChallenge} onClose={() => setChallengeTarget(null)} />
-        </SafeAreaView>
+            <Text style={s.version}>{VERSION_DISPLAY}</Text>
+          </View>
+        </ScrollView>
+      </SafeAreaView>
     </View>
   );
 }
 
 const s = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#0a1628' },
+  root: { flex: 1, backgroundColor: '#0b1420' },
   safe: { flex: 1 },
-  topBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 12, paddingBottom: 8 },
-  logo: { fontSize: 20, fontWeight: '900', color: colors.goldLight, letterSpacing: 1 },
-  logoVersion: { fontSize: 14, fontWeight: '900', color: colors.goldLight },
-  hamburger: { width: 40, height: 40, borderRadius: 10, backgroundColor: 'rgba(0,0,0,0.45)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center' },
-  hamburgerTxt: { color: colors.white, fontSize: 18 },
+
+  topbar: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 20, paddingTop: 14, paddingBottom: 4,
+    width: '100%', maxWidth: 460, alignSelf: 'center',
+  },
+  hi: { fontSize: 25, fontWeight: '900', color: colors.white, letterSpacing: -0.2, maxWidth: 290 },
+  eloPill: {
+    flexDirection: 'row', alignSelf: 'flex-start', alignItems: 'center', marginTop: 7,
+    backgroundColor: 'rgba(240,192,64,0.12)', borderWidth: 1, borderColor: 'rgba(240,192,64,0.3)',
+    borderRadius: 999, paddingVertical: 3, paddingHorizontal: 9,
+  },
+  eloLbl: { color: '#8a98aa', fontSize: 12, fontWeight: '700' },
+  eloVal: { color: colors.goldLight, fontSize: 12, fontWeight: '800' },
+  ham: {
+    width: 42, height: 42, borderRadius: 13, backgroundColor: 'rgba(255,255,255,0.06)',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.16)', alignItems: 'center', justifyContent: 'center',
+  },
+  hamTxt: { color: colors.white, fontSize: 18 },
   menuOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 50 },
-  menuPanel: { position: 'absolute', top: 60, right: 16, width: 180, backgroundColor: '#111', borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)', borderRadius: 14, overflow: 'hidden', elevation: 8 },
+  menuPanel: {
+    position: 'absolute', top: 64, right: 16, width: 180, backgroundColor: '#111',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)', borderRadius: 14, overflow: 'hidden', elevation: 8,
+  },
   menuItem: { paddingHorizontal: 16, paddingVertical: 14 },
   menuItemTxt: { color: 'rgba(255,255,255,0.9)', fontSize: 14 },
-  scroll: { flexGrow: 1, alignItems: 'center', padding: 24, gap: 24, paddingTop: 16 },
-  greeting: { alignItems: 'center', gap: 4 },
-  hi: { fontSize: 36, fontWeight: '900', color: colors.white, textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 8 },
-  elo: { fontSize: 14, color: colors.gray, fontWeight: '600' },
-  error: { color: '#f87171', fontSize: 13, textAlign: 'center' },
-  playCol: { width: '100%', maxWidth: 420, alignItems: 'stretch', gap: 14 },
-  playBtn: { backgroundColor: colors.gold, borderRadius: 20, height: 72, alignItems: 'center', justifyContent: 'center', shadowColor: colors.gold, shadowOpacity: 0.4, shadowRadius: 16, elevation: 6 },
-  playTxt: { color: '#000', fontSize: 28, fontWeight: '900', letterSpacing: 3 },
-  playBotBtn: { borderRadius: 20, height: 72, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: colors.gold },
-  playBotTxt: { color: colors.gold, fontSize: 16, fontWeight: '800', letterSpacing: 2 },
-  acceptChallengeBtn: { borderRadius: 16, paddingVertical: 12, paddingHorizontal: 28, alignItems: 'center', borderWidth: 2, borderColor: '#4ade80', backgroundColor: 'rgba(74,222,128,0.12)' },
-  acceptChallengeTxt: { color: '#4ade80', fontSize: 14, fontWeight: '800', letterSpacing: 1 },
-  outgoingChallengeBtn: { borderRadius: 16, paddingVertical: 10, paddingHorizontal: 28, alignItems: 'center', borderWidth: 2, borderColor: 'rgba(255,255,255,0.3)', borderStyle: 'dashed', gap: 1 },
-  outgoingChallengeTxt: { color: 'rgba(255,255,255,0.7)', fontSize: 13, fontWeight: '800', letterSpacing: 1 },
-  outgoingChallengeSub: { color: colors.gray, fontSize: 10, fontStyle: 'italic' },
-  queueBox: { alignItems: 'center', gap: 14 },
-  queueTxt: { color: colors.white, fontSize: 18, fontWeight: '600' },
-  cancelBtn: { paddingHorizontal: 24, paddingVertical: 10, borderRadius: 10, borderWidth: 1, borderColor: 'rgba(255,255,255,0.3)' },
-  cancelTxt: { color: colors.white, fontSize: 14 },
 
-  // Tabs
-  tabsContainer: { width: '100%', maxWidth: 420 },
-  tabBar: { flexDirection: 'row', backgroundColor: 'rgba(0,0,0,0.55)', borderRadius: 12, padding: 4, gap: 2, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' },
-  tabBtn: { flex: 1, paddingVertical: 9, borderRadius: 9, alignItems: 'center' },
-  tabBtnInner: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  badge: { backgroundColor: '#ef4444', borderRadius: 8, minWidth: 16, height: 16, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4 },
-  badgeTxt: { color: '#fff', fontSize: 10, fontWeight: '800' },
-  tabBtnActive: { backgroundColor: colors.gold },
-  tabLabel: { color: 'rgba(255,255,255,0.5)', fontSize: 13, fontWeight: '700' },
-  tabLabelActive: { color: '#000', fontWeight: '800' },
-  tabPanel: { backgroundColor: 'rgba(0,0,0,0.55)', borderBottomLeftRadius: 12, borderBottomRightRadius: 12, borderWidth: 1, borderTopWidth: 0, borderColor: 'rgba(255,255,255,0.1)', minHeight: 80, padding: 14 },
-  tabScroll: { maxHeight: 360 },
-  tabContent: { gap: 8 },
-  tabEmpty: { color: colors.gray, fontSize: 13, fontStyle: 'italic', textAlign: 'center', paddingVertical: 4 },
-  tabSubLabel: { color: colors.gray, fontSize: 10, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 1 },
+  scroll: { flexGrow: 1, paddingHorizontal: 18, paddingBottom: 40 },
+  col: { width: '100%', maxWidth: 460, alignSelf: 'center' },
 
-  // Recent tab
-  recentRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  resultDot: { width: 8, height: 8, borderRadius: 4, flexShrink: 0 },
-  dotWin: { backgroundColor: '#4ade80' },
-  dotLoss: { backgroundColor: '#f87171' },
-  recentOpp: { flex: 1, color: colors.white, fontSize: 13, fontWeight: '600' },
-  recentElo: { fontSize: 13, fontWeight: '700' },
-  replayArrow: { color: colors.gold, fontSize: 11 },
-  eloPos: { color: '#4ade80' },
-  eloNeg: { color: '#f87171' },
+  presence: {
+    flexDirection: 'row', alignItems: 'center', gap: 9,
+    backgroundColor: 'rgba(255,255,255,0.04)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)',
+    borderRadius: 13, paddingVertical: 10, paddingHorizontal: 13, marginTop: 14,
+  },
+  blob: { width: 9, height: 9, borderRadius: 5, backgroundColor: '#36d07f' },
+  presenceTxt: { fontSize: 13, color: '#8a98aa', fontWeight: '700' },
+  presenceB: { color: colors.white },
+  presenceLook: { color: colors.goldLight },
 
-  // Online tab — player rows styled as buttons
-  playerBtn: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 13, paddingHorizontal: 14, borderRadius: 12, borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.25)', backgroundColor: 'rgba(255,255,255,0.05)' },
-  playerBtnPressed: { backgroundColor: 'rgba(212,175,55,0.18)', borderColor: colors.gold },
-  playerBtnDisabled: { opacity: 0.55, borderColor: 'rgba(255,255,255,0.12)', backgroundColor: 'transparent' },
-  playerFlag: { fontSize: 18 },
-  statusDot: { width: 10, height: 10, borderRadius: 5, flexShrink: 0 },
-  dotOnline: { backgroundColor: '#4ade80' },
-  dotInMatch: { backgroundColor: '#facc15' },
-  onlineName: { color: colors.white, fontSize: 15, fontWeight: '700', flexShrink: 1 },
-  onlineElo: { color: colors.goldLight, fontSize: 14, fontWeight: '800' },
-  inMatchTag: { color: '#facc15', fontSize: 11, fontStyle: 'italic' },
-  botTag: { color: colors.gray, fontSize: 10, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 1 },
-  pendingTag: { color: colors.goldLight, fontSize: 13 },
+  error: { color: '#f87171', fontSize: 13, textAlign: 'center', marginTop: 10 },
 
-  // Challenge modal
-  modalOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.6)', alignItems: 'center', justifyContent: 'center', zIndex: 100 },
-  modalPanel: { width: '85%', maxWidth: 360, backgroundColor: '#111c2e', borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)', borderRadius: 18, padding: 24, alignItems: 'center', gap: 12, elevation: 10 },
-  modalTitle: { color: colors.white, fontSize: 20, fontWeight: '900', textAlign: 'center' },
-  modalSub: { color: colors.gray, fontSize: 12 },
-  modalChallengeBtn: { borderRadius: 14, paddingVertical: 14, paddingHorizontal: 24, alignItems: 'center', backgroundColor: colors.gold, alignSelf: 'stretch', marginTop: 6 },
-  modalChallengeTxt: { color: '#000', fontSize: 14, fontWeight: '900', letterSpacing: 1 },
-  modalPendingBtn: { backgroundColor: 'transparent', borderWidth: 2, borderColor: 'rgba(255,255,255,0.25)' },
-  modalPendingTxt: { color: 'rgba(255,255,255,0.5)', fontSize: 13, fontWeight: '800', letterSpacing: 1, textAlign: 'center' },
-  modalClose: { color: colors.gray, fontSize: 13, marginTop: 4, padding: 6 },
+  hero: {
+    flexDirection: 'row', alignItems: 'center', gap: 16, marginTop: 16, marginBottom: 8,
+    backgroundColor: colors.goldLight, borderRadius: 22, paddingVertical: 20, paddingHorizontal: 22,
+    shadowColor: colors.gold, shadowOpacity: 0.4, shadowRadius: 16, shadowOffset: { width: 0, height: 8 }, elevation: 8,
+  },
+  heroBolt: {
+    width: 46, height: 46, borderRadius: 14, backgroundColor: 'rgba(12,21,31,0.16)',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  heroBoltTxt: { fontSize: 24 },
+  heroTxt: { color: '#0c151f', fontSize: 23, fontWeight: '900', letterSpacing: 0.3 },
+  heroChev: { marginLeft: 'auto', color: 'rgba(12,21,31,0.5)', fontSize: 26, fontWeight: '900' },
 
-  // Leaderboard tab
-  lbRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  lbRank: { width: 28, textAlign: 'center', fontSize: 14, color: colors.gray, fontWeight: '700' },
-  lbAvatar: { width: 24, height: 24, borderRadius: 12 },
-  lbFlag: { fontSize: 14 },
-  lbName: { flex: 1, color: colors.white, fontSize: 13, fontWeight: '600' },
-  lbElo: { color: colors.goldLight, fontSize: 13, fontWeight: '800' },
-  lbMore: { color: colors.gold, fontSize: 12, textAlign: 'center', marginTop: 4 },
+  sec: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 22, marginBottom: 11, paddingHorizontal: 2 },
+  secIcGold: { fontSize: 14 },
+  secTitle: { color: colors.white, fontSize: 13, fontWeight: '800', letterSpacing: 0.3 },
+  secTitleGold: { color: colors.goldLight },
+  count: { marginLeft: 'auto', backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: 999, paddingVertical: 2, paddingHorizontal: 9 },
+  countTxt: { color: '#5b6a7d', fontSize: 12, fontWeight: '800' },
 
-  // Featured match
-  featuredSection: { width: '100%', maxWidth: 420, gap: 8 },
-  featuredLabel: { color: colors.white, fontSize: 16, fontWeight: '800' },
-  featuredCard: { backgroundColor: 'rgba(255,255,255,0.06)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)', borderRadius: 14, padding: 14, gap: 10 },
-  featuredPlayers: { flexDirection: 'row', alignItems: 'center' },
-  featuredPlayer: { flex: 1 },
-  featuredVs: { color: 'rgba(255,255,255,0.3)', fontSize: 12, fontWeight: '800', paddingHorizontal: 10 },
-  featuredName: { color: colors.white, fontSize: 15, fontWeight: '800' },
-  featuredElo: { color: colors.goldLight, fontSize: 12, fontWeight: '600', marginTop: 2 },
-  featuredFooter: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  phaseDot: { width: 7, height: 7, borderRadius: 4 },
-  dotWaiting: { backgroundColor: '#facc15' },
-  dotActive: { backgroundColor: '#4ade80' },
-  featuredPhase: { flex: 1, color: colors.gray, fontSize: 12 },
-  watchTxt: { color: colors.gold, fontSize: 12, fontWeight: '700' },
+  row: {
+    flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 9,
+    backgroundColor: 'rgba(240,192,64,0.07)', borderWidth: 1, borderColor: 'rgba(240,192,64,0.35)',
+    borderRadius: 17, paddingVertical: 12, paddingHorizontal: 13,
+  },
+  rowGreen: { backgroundColor: 'rgba(70,194,133,0.08)', borderColor: 'rgba(70,194,133,0.45)' },
+  rowWho: { flex: 1, minWidth: 0 },
+  rowName: { color: colors.white, fontSize: 16, fontWeight: '800' },
+  rowMeta: { flexDirection: 'row', alignItems: 'center', gap: 7, marginTop: 4 },
+  dot: { width: 10, height: 10, borderRadius: 5 },
+  dotGold: { backgroundColor: colors.goldLight },
+  dotGreen: { backgroundColor: '#36d07f' },
+  rowStatus: { color: colors.goldLight, fontSize: 12, fontWeight: '700', flexShrink: 1 },
+  rowStatusGreen: { color: '#36d07f', fontWeight: '800' },
+  rowElo: { color: '#8a98aa', fontSize: 12, fontWeight: '700' },
+  vsBtn: {
+    width: 52, height: 38, borderRadius: 11, backgroundColor: colors.goldLight,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  vsBtnTxt: { color: '#0c151f', fontSize: 15, fontWeight: '900' },
+  acceptBtn: { width: 76, backgroundColor: '#36d07f' },
+  acceptBtnTxt: { color: '#0c151f', fontSize: 13, fontWeight: '900' },
+  cancelBtn: {
+    height: 38, borderRadius: 11, paddingHorizontal: 14, alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.16)', backgroundColor: 'rgba(255,255,255,0.05)',
+  },
+  cancelBtnTxt: { color: '#8a98aa', fontSize: 12, fontWeight: '800' },
+
+  emptyPool: {
+    backgroundColor: 'rgba(255,255,255,0.03)', borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.16)',
+    borderStyle: 'dashed', borderRadius: 18, paddingVertical: 24, paddingHorizontal: 20, alignItems: 'center',
+  },
+  epIc: { fontSize: 38, marginBottom: 8 },
+  epTitle: { color: colors.white, fontSize: 16, fontWeight: '900', marginBottom: 7 },
+  epSub: { color: '#8a98aa', fontSize: 13, fontWeight: '700', lineHeight: 19, textAlign: 'center', maxWidth: 280 },
+  epGold: { color: colors.goldLight },
+
+  liveRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 11, marginBottom: 9,
+    backgroundColor: '#15212f', borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)',
+    borderRadius: 17, padding: 13,
+  },
+  liveRec: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  liveDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: '#ef5d52' },
+  liveDotHead: { width: 11, height: 11, borderRadius: 6, backgroundColor: '#ef5d52' },
+  liveRecTxt: { color: '#ef5d52', fontSize: 11, fontWeight: '900', letterSpacing: 1 },
+  liveVs: { flex: 1, textAlign: 'center', color: colors.white, fontSize: 13, fontWeight: '800' },
+  liveX: { color: '#5b6a7d', fontSize: 11 },
+  watch: { borderWidth: 1, borderColor: 'rgba(255,255,255,0.16)', borderRadius: 9, paddingVertical: 7, paddingHorizontal: 10 },
+  watchTxt: { color: '#8a98aa', fontSize: 11, fontWeight: '900' },
+
+  version: { color: 'rgba(255,255,255,0.25)', fontSize: 11, fontWeight: '600', textAlign: 'center', marginTop: 24 },
 });
