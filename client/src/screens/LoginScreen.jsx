@@ -176,9 +176,9 @@ export default function LoginScreen() {
               <Text style={s.joinTxt}>Play as Guest</Text>
             </Pressable>
           </View>
-          <Text style={s.versionSmall}>{VERSION_DISPLAY}</Text>
         </View>
       </KeyboardAvoidingView>
+      <Text style={s.versionSmall}>{VERSION_DISPLAY}</Text>
       </SafeAreaView>
     </View>
   );
@@ -189,7 +189,11 @@ const s = StyleSheet.create({
   safe:    { flex: 1 },
   kav:     { flex: 1 },
   center:  { flex: 1, alignItems: 'center', justifyContent: 'flex-end', padding: 24, paddingBottom: 16 },
-  versionSmall: { fontSize: 11, color: 'rgba(255,255,255,0.55)', textAlign: 'center', marginTop: 12 },
+  versionSmall: {
+    position: 'absolute', right: 12, bottom: 4,
+    fontSize: 11, color: 'rgba(255,255,255,0.9)',
+    textShadowColor: 'rgba(0,0,0,0.9)', textShadowRadius: 4, textShadowOffset: { width: 0, height: 1 },
+  },
   card: {
     backgroundColor: '#12121e',
     borderWidth: 1.5, borderColor: 'rgba(255,220,160,0.22)',
@@ -207,6 +211,6 @@ const s = StyleSheet.create({
   divTxt:      { color: 'rgba(255,255,255,0.4)', fontSize: 12 },
   sectionLabel:{ color: colors.gray, fontSize: 11, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 1 },
   input:       { backgroundColor: 'rgba(0,0,0,0.4)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)', borderRadius: 8, paddingHorizontal: 14, paddingVertical: 12, color: colors.white, fontSize: 16 },
-  joinBtn:     { backgroundColor: colors.gold, borderRadius: 12, paddingVertical: 14, alignItems: 'center' },
-  joinTxt:     { color: '#000', fontSize: 16, fontWeight: '800' },
+  joinBtn:     { backgroundColor: colors.goldLight, borderRadius: 12, paddingVertical: 14, alignItems: 'center', shadowColor: colors.goldLight, shadowOpacity: 0.4, shadowRadius: 12, elevation: 6 },
+  joinTxt:     { color: '#000', fontSize: 16, fontWeight: '900', letterSpacing: 1 },
 });
