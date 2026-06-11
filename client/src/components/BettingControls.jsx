@@ -1,5 +1,5 @@
-import React, { useMemo } from 'react';
-import { View, Text, Pressable, StyleSheet } from 'react-native';
+import React, { useMemo, useState, useEffect } from 'react';
+import { View, Text, Pressable, TextInput, StyleSheet } from 'react-native';
 
 export default function BettingControls({ gameState, myId, onAction, raiseAmount, onRaiseChange }) {
   const me = gameState?.players?.find(p => p.id === myId);
@@ -20,9 +20,32 @@ export default function BettingControls({ gameState, myId, onAction, raiseAmount
   const pot             = gameState?.pot || 0;
 
   const handleRaise = () => onAction(isAllin ? 'all-in' : 'raise', raiseAmount);
-  const nudge = dir => onRaiseChange(Math.max(effectiveMin, Math.min(maxRaise, raiseAmount + dir * bigBlind)));
-
   const snap = v => Math.max(effectiveMin, Math.min(maxRaise, Math.round(v / bigBlind) * bigBlind));
+  const clampBet = n => Math.max(effectiveMin, Math.min(maxRaise, n));
+
+  // Custom amount box — LIVE: typing updates the Bet/Raise button in real time
+  // (flips to All In at max). Too big → box capped at max; too small/empty → min on commit.
+  const [betText, setBetText] = useState(String(raiseAmount));
+  const [editing, setEditing] = useState(false);
+  // Re-sync the box from the amount when the user isn't editing (presets, +/−, new hand)
+  useEffect(() => { if (!editing) setBetText(String(raiseAmount)); }, [raiseAmount, editing]);
+
+  const setAmount = (v) => { const c = clampBet(v); onRaiseChange(c); setBetText(String(c)); };
+  const nudge = dir => setAmount(raiseAmount + dir * bigBlind);
+
+  const onBetTextChange = (txt) => {
+    const raw = txt.replace(/[^0-9]/g, '');
+    if (raw === '') { setBetText(''); return; }          // allow clearing the field
+    const n = parseInt(raw, 10);
+    onRaiseChange(clampBet(n));                           // button updates live (→ All In at max)
+    setBetText(n > maxRaise ? String(maxRaise) : raw);   // too big → cap box at max; else keep typed
+  };
+
+  const commitBet = () => {
+    setEditing(false);
+    const n = parseInt((betText || '').replace(/[^0-9]/g, ''), 10);
+    onRaiseChange(clampBet(Number.isNaN(n) ? raiseAmount : n));  // too small/empty → min via clamp; box re-syncs
+  };
 
   const presets = useMemo(() => {
     const candidates = [
@@ -42,33 +65,42 @@ export default function BettingControls({ gameState, myId, onAction, raiseAmount
   return (
     <View style={s.wrap}>
 
-      {/* Preset amounts — only shown when raise is available */}
+      {/* Presets + custom amount input — one row, only when raise is available */}
       {canRaise && (
         <View style={s.presetRow}>
           {presets.map(({ label, value }) => (
             <Pressable
               key={label}
               style={[s.preset, raiseAmount === value && s.presetActive]}
-              onPress={() => onRaiseChange(value)}
+              onPress={() => setAmount(value)}
             >
               <Text style={[s.presetTxt, raiseAmount === value && s.presetTxtActive]}>
                 {label}
               </Text>
             </Pressable>
           ))}
-        </View>
-      )}
-
-      {/* Nudge row */}
-      {canRaise && (
-        <View style={s.nudgeRow}>
-          <Pressable style={s.nudgeBtn} onPress={() => nudge(-1)}>
-            <Text style={s.nudgeTxt}>−</Text>
-          </Pressable>
-          <Text style={s.nudgeAmt}>{raiseAmount.toLocaleString()}</Text>
-          <Pressable style={s.nudgeBtn} onPress={() => nudge(1)}>
-            <Text style={s.nudgeTxt}>+</Text>
-          </Pressable>
+          <View style={s.betGroup}>
+            <Pressable style={s.nudgeBtn} onPress={() => nudge(-1)}>
+              <Text style={s.nudgeTxt}>−</Text>
+            </Pressable>
+            <TextInput
+              style={[s.preset, s.betInput]}
+              value={betText}
+              onChangeText={onBetTextChange}
+              onFocus={() => setEditing(true)}
+              onEndEditing={commitBet}
+              onSubmitEditing={commitBet}
+              onBlur={commitBet}
+              keyboardType="number-pad"
+              returnKeyType="done"
+              selectTextOnFocus
+              placeholder="Amount"
+              placeholderTextColor="rgba(255,255,255,0.4)"
+            />
+            <Pressable style={s.nudgeBtn} onPress={() => nudge(1)}>
+              <Text style={s.nudgeTxt}>+</Text>
+            </Pressable>
+          </View>
         </View>
       )}
 
@@ -105,14 +137,16 @@ export default function BettingControls({ gameState, myId, onAction, raiseAmount
 }
 
 const s = StyleSheet.create({
-  wrap: { width: '100%', maxWidth: 650, alignSelf: 'center', gap: 5 },
+  wrap: { width: '100%', maxWidth: 650, alignSelf: 'center', gap: 10 },
 
-  presetRow: { flexDirection: 'row', gap: 6 },
+  presetRow: { flexDirection: 'row', gap: 6, width: '100%' },
   preset: {
     flex: 1,
-    paddingVertical: 5,
+    minWidth: 0,            // allow shrinking so the row never exceeds its width
+    paddingVertical: 8,
     borderRadius: 7,
     alignItems: 'center',
+    justifyContent: 'center',
     backgroundColor: 'rgba(255,255,255,0.13)',
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.18)',
@@ -121,13 +155,26 @@ const s = StyleSheet.create({
   presetTxt:       { color: 'rgba(255,255,255,0.85)', fontSize: 13, fontWeight: '700' },
   presetTxtActive: { color: '#000' },
 
-  nudgeRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10 },
-  nudgeBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: 'rgba(255,255,255,0.15)', alignItems: 'center', justifyContent: 'center' },
-  nudgeTxt: { color: '#fff', fontSize: 20, fontWeight: '700', lineHeight: 26 },
-  nudgeAmt: { color: '#fff', fontSize: 15, fontWeight: '900', minWidth: 70, textAlign: 'center' },
+  // Custom amount cluster — [−] [input] [+] on the same row as the presets.
+  betGroup: { flex: 2.4, minWidth: 0, flexDirection: 'row', gap: 4, alignItems: 'stretch' },
+  nudgeBtn: {
+    width: 34, borderRadius: 7, alignItems: 'center', justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.13)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)',
+  },
+  nudgeTxt: { color: '#fff', fontSize: 22, fontWeight: '700', lineHeight: 26 },
+  betInput: {
+    flex: 1,
+    minWidth: 0,
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '900',
+    textAlign: 'center',
+    borderColor: 'rgba(245,158,11,0.7)',
+    backgroundColor: 'rgba(245,158,11,0.10)',
+  },
 
   btns:     { flexDirection: 'row', gap: 8 },
-  btn:      { flex: 1, paddingVertical: 14, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  btn:      { flex: 1, paddingVertical: 23, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
   btnTxt:   { color: '#fff', fontSize: 17, fontWeight: '800', textAlign: 'center' },
   btnFold:  { backgroundColor: '#7f1d1d' },
   btnCheck: { backgroundColor: '#14532d' },
