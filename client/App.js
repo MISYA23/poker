@@ -1,6 +1,6 @@
 import 'react-native-gesture-handler';
 import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
-import { Platform, View, Text, Pressable, StyleSheet } from 'react-native';
+import { Platform, View, Text, Pressable, StyleSheet, useWindowDimensions } from 'react-native';
 import { NavigationContainer, useNavigationContainerRef } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -21,6 +21,7 @@ import { isSfxEnabled, setSfxEnabled } from './src/audio/sfx';
 // Icon shows active (🔊) if either is on, muted (🔇) if both are off.
 function MuteButton({ route }) {
   const insets = useSafeAreaInsets();
+  const { width: winW } = useWindowDimensions();
   const [open, setOpen]       = useState(false);
   const [musicOn, setMusicOn] = useState(!isMusicMuted());
   const [sfxOn, setSfxOn]     = useState(isSfxEnabled());
@@ -31,11 +32,15 @@ function MuteButton({ route }) {
   const toggleMusic = () => { const v = !musicOn; setMusicOn(v); setMusicMuted(!v); };
   const toggleSfx   = () => { const v = !sfxOn;   setSfxOn(v);   setSfxEnabled(v); };
 
-  const size   = route === 'Lobby' ? 40 : 36;
-  const radius = route === 'Lobby' ? 10 : 8;
+  // Lobby: dock 8px left of the hamburger, which lives inside the lobby's
+  // centered maxWidth-460 column (padding 20, hamburger 42px) — anchor to the
+  // column edge, not the window edge, so wide screens don't strand the button.
+  const lobbyColEdge = Math.max(0, (winW - 460) / 2);
+  const size   = route === 'Lobby' ? 42 : 36;
+  const radius = route === 'Lobby' ? 13 : 8;
   const pos =
     route === 'Game'        ? { right: 56, top: insets.top + 7 }  :
-    route === 'Lobby'       ? { right: 64, top: insets.top + 12 } :
+    route === 'Lobby'       ? { right: lobbyColEdge + 20 + 42 + 8, top: insets.top + 14 } :
     route === 'Leaderboard' ? { right: 44, top: insets.top + 5 }  :  // just left of the ↻ refresh
                               { right: 12, top: insets.top + 8 };
 
@@ -43,7 +48,8 @@ function MuteButton({ route }) {
     <>
       <Pressable
         onPress={() => setOpen(o => !o)}
-        style={[muteStyles.btn, pos, { width: size, height: size, borderRadius: radius }]}
+        style={[muteStyles.btn, pos, { width: size, height: size, borderRadius: radius },
+          route === 'Lobby' && { backgroundColor: 'rgba(255,255,255,0.06)', borderColor: 'rgba(255,255,255,0.16)' }]}
         hitSlop={8}
       >
         <Text style={muteStyles.txt}>{anyOn ? '🔊' : '🔇'}</Text>
