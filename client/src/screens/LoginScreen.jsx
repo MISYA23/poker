@@ -138,10 +138,6 @@ export default function LoginScreen() {
       <SafeAreaView style={s.safe}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={s.kav}>
         <View style={s.center}>
-          <View style={s.heading}>
-            <Text style={s.title}>♠ Poker Monkey ♣</Text>
-            <Text style={s.version}>{VERSION_DISPLAY}</Text>
-          </View>
           <View style={s.card}>
             <Pressable
               style={[s.googleBtn, (googleLoading || !request) && s.dim]}
@@ -182,6 +178,7 @@ export default function LoginScreen() {
           </View>
         </View>
       </KeyboardAvoidingView>
+      <Text style={s.versionSmall}>{VERSION_DISPLAY}</Text>
       </SafeAreaView>
     </View>
   );
@@ -191,10 +188,12 @@ const s = StyleSheet.create({
   root:    { flex: 1, backgroundColor: '#0a1628', ...Platform.select({ web: { height: '100vh', width: '100%' } }) },
   safe:    { flex: 1 },
   kav:     { flex: 1 },
-  center:  { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
-  heading: { alignItems: 'center', gap: 4, marginBottom: 45 },
-  title:   { fontSize: 26, fontWeight: '900', color: colors.goldLight, letterSpacing: 1, textAlign: 'center' },
-  version: { fontSize: 17, fontWeight: '800', color: colors.goldLight, textAlign: 'center', opacity: 0.95 },
+  center:  { flex: 1, alignItems: 'center', justifyContent: 'flex-end', padding: 24, paddingBottom: 16 },
+  versionSmall: {
+    position: 'absolute', right: 12, bottom: 4,
+    fontSize: 11, color: 'rgba(255,255,255,0.9)',
+    textShadowColor: 'rgba(0,0,0,0.9)', textShadowRadius: 4, textShadowOffset: { width: 0, height: 1 },
+  },
   card: {
     backgroundColor: '#12121e',
     borderWidth: 1.5, borderColor: 'rgba(255,220,160,0.22)',
@@ -212,6 +211,6 @@ const s = StyleSheet.create({
   divTxt:      { color: 'rgba(255,255,255,0.4)', fontSize: 12 },
   sectionLabel:{ color: colors.gray, fontSize: 11, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 1 },
   input:       { backgroundColor: 'rgba(0,0,0,0.4)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)', borderRadius: 8, paddingHorizontal: 14, paddingVertical: 12, color: colors.white, fontSize: 16 },
-  joinBtn:     { backgroundColor: colors.gold, borderRadius: 12, paddingVertical: 14, alignItems: 'center' },
-  joinTxt:     { color: '#000', fontSize: 16, fontWeight: '800' },
+  joinBtn:     { backgroundColor: colors.goldLight, borderRadius: 12, paddingVertical: 14, alignItems: 'center', shadowColor: colors.goldLight, shadowOpacity: 0.4, shadowRadius: 12, elevation: 6 },
+  joinTxt:     { color: '#000', fontSize: 16, fontWeight: '900', letterSpacing: 1 },
 });

@@ -26,6 +26,8 @@ function MuteButton({ route }) {
   const [sfxOn, setSfxOn]     = useState(isSfxEnabled());
   const anyOn = musicOn || sfxOn;
 
+  if (route === 'Login') return null;
+
   const toggleMusic = () => { const v = !musicOn; setMusicOn(v); setMusicMuted(!v); };
   const toggleSfx   = () => { const v = !sfxOn;   setSfxOn(v);   setSfxEnabled(v); };
 
