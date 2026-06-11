@@ -134,16 +134,16 @@ export default function App() {
   const matchIdRef    = useRef(null);
   const [route, setRoute] = useState('Login');   // current screen (for the sound button placement)
 
-  // Background music — start on first user gesture (web autoplay policy), or
-  // immediately on native. Stays running across navigation; context switches below.
   useEffect(() => {
     loadMusicConfig();   // pull per-interface track config from the server (falls back to defaults)
-    if (Platform.OS !== 'web') { startMusic(); return; }
-    const onFirst = () => { startMusic(); document.removeEventListener('pointerdown', onFirst); document.removeEventListener('keydown', onFirst); };
-    document.addEventListener('pointerdown', onFirst);
-    document.addEventListener('keydown', onFirst);
-    return () => { document.removeEventListener('pointerdown', onFirst); document.removeEventListener('keydown', onFirst); };
   }, []);
+
+  // Background music — login screen stays silent; start on first navigation past
+  // Login. Navigating implies a user gesture, which also satisfies web autoplay
+  // policy. startMusic() is idempotent, so later route changes are no-ops here.
+  useEffect(() => {
+    if (route !== 'Login') startMusic();
+  }, [route]);
 
   const isObserverRef = useRef(false);
   // True between emitting 'observe' and receiving the first observed game-state.
