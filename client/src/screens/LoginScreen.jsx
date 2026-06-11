@@ -186,11 +186,17 @@ export default function LoginScreen() {
 
 const s = StyleSheet.create({
   // 100dvh tracks the *visible* viewport on mobile browsers (100vh extends behind
-  // the iOS Chrome/Safari toolbars); minHeight 100vh is the older-browser fallback.
-  root:    { flex: 1, backgroundColor: '#0a1628', ...Platform.select({ web: { minHeight: '100vh', height: '100dvh', width: '100%' } }) },
+  // the iOS Chrome/Safari toolbars — never use it here, even as a minHeight: a
+  // 100vh minHeight overrides the dvh height and pushes bottom-anchored content
+  // under the toolbar). Older-browser fallback is 100% of the document.
+  root:    { flex: 1, backgroundColor: '#0a1628', ...Platform.select({ web: { minHeight: '100%', height: '100dvh', width: '100%' } }) },
   safe:    { flex: 1 },
   kav:     { flex: 1 },
-  center:  { flex: 1, alignItems: 'center', justifyContent: 'flex-end', padding: 24, paddingBottom: 38 },
+  center:  {
+    flex: 1, alignItems: 'center', justifyContent: 'flex-end', padding: 24,
+    // Web: clear the home indicator / standalone-mode inset too
+    paddingBottom: Platform.OS === 'web' ? 'calc(38px + env(safe-area-inset-bottom))' : 38,
+  },
   versionSmall: {
     position: 'absolute', right: 12, bottom: 12,
     fontSize: 11, color: 'rgba(255,255,255,0.9)',
