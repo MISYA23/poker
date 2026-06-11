@@ -1726,6 +1726,10 @@ app.get('/admin', (_, res) => res.send(ADMIN_SHELL('Admin', `
         <div style="font-size:1rem;font-weight:700;margin-bottom:4px">🎨 UI Config</div>
         <div style="font-size:0.82rem;color:#8b949e">Animation timings, deal speed, reveal delays</div>
       </a>
+      <a href="/admin/music" style="display:block;background:#161b22;border:1px solid #30363d;border-radius:10px;padding:20px 24px;text-decoration:none;color:#e6edf3">
+        <div style="font-size:1rem;font-weight:700;margin-bottom:4px">♪ Music</div>
+        <div style="font-size:0.82rem;color:#8b949e">Enable/disable each track per interface — menu vs in-game</div>
+      </a>
       <a href="/admin/players" style="display:block;background:#161b22;border:1px solid #30363d;border-radius:10px;padding:20px 24px;text-decoration:none;color:#e6edf3">
         <div style="font-size:1rem;font-weight:700;margin-bottom:4px">👥 Players</div>
         <div style="font-size:0.82rem;color:#8b949e">All registered and guest players, ELO, match history</div>
@@ -2000,6 +2004,79 @@ app.get('/terms', (_, res) => res.send(`<!DOCTYPE html>
 <p>Questions? Email us at <a href="mailto:brian.danilo@gmail.com">brian.danilo@gmail.com</a>.</p>
 </body></html>`));
 
+// ── Music config routes (must be before catch-all) ───────────────────────────
+
+// Public — the client builds its menu/in-game playlists from this
+app.get('/api/music-config', async (_, res) => {
+  try {
+    const { rows } = await db.query('SELECT track_key, menu, game FROM music_tracks ORDER BY sort, track_key');
+    res.json({
+      menu: rows.filter(r => r.menu).map(r => r.track_key),
+      game: rows.filter(r => r.game).map(r => r.track_key),
+    });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Admin — full list with per-interface flags
+app.get('/api/admin/music', async (_, res) => {
+  try {
+    const { rows } = await db.query('SELECT track_key, label, menu, game FROM music_tracks ORDER BY sort, track_key');
+    res.json(rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Admin — save which tracks are active per interface
+app.post('/admin/music', async (req, res) => {
+  try {
+    const tracks = Array.isArray(req.body?.tracks) ? req.body.tracks : [];
+    for (const t of tracks) {
+      if (!t || typeof t.track_key !== 'string') continue;
+      await db.query('UPDATE music_tracks SET menu=$1, game=$2 WHERE track_key=$3',
+        [!!t.menu, !!t.game, t.track_key]);
+    }
+    res.json({ ok: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.get('/admin/music', (_, res) => res.send(ADMIN_SHELL('Music', `
+  <h1>♪ Music</h1>
+  <div class="nav"><a href="/admin">← Admin</a></div>
+  ${ADMIN_AUTH_BLOCK}
+  <div id="main" style="max-width:680px">
+    <p style="color:#8b949e;font-size:0.82rem;margin-bottom:16px">Check which tracks play in each interface. <strong>Menu</strong> = login &amp; lobby screens. <strong>In-game</strong> = at the table. Multiple in-game tracks rotate; a single track loops.</p>
+    <table><thead><tr><th>Track</th><th style="text-align:center">Menu</th><th style="text-align:center">In-game</th></tr></thead>
+    <tbody id="music-body"></tbody></table>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:16px">
+      <button id="save-btn" onclick="saveAll()" style="background:#238636;color:#fff;border:none;border-radius:6px;padding:8px 20px;font-size:0.9rem;font-weight:600;cursor:pointer">Save</button>
+      <button onclick="load()" style="background:none;border:1px solid #30363d;color:#8b949e;border-radius:6px;padding:8px 16px;font-size:0.8rem;cursor:pointer">↺ Reload</button>
+    </div>
+  </div>`, `
+  async function onLogin() { load(); }
+  async function load() {
+    const rows = await fetch('/api/admin/music').then(r => r.json());
+    const tbody = document.getElementById('music-body');
+    tbody.innerHTML = '';
+    for (const row of rows) {
+      const tr = document.createElement('tr');
+      tr.innerHTML = \`<td><div style="font-weight:600">\${row.label}</div><div class="desc" style="font-family:monospace">\${row.track_key}</div></td>\` +
+        \`<td style="text-align:center"><input type="checkbox" data-key="\${row.track_key}" data-col="menu" \${row.menu?'checked':''} style="width:18px;height:18px;cursor:pointer"></td>\` +
+        \`<td style="text-align:center"><input type="checkbox" data-key="\${row.track_key}" data-col="game" \${row.game?'checked':''} style="width:18px;height:18px;cursor:pointer"></td>\`;
+      tbody.appendChild(tr);
+    }
+  }
+  async function saveAll() {
+    const map = {};
+    document.querySelectorAll('#music-body input[type=checkbox]').forEach(cb => {
+      const k = cb.dataset.key;
+      if (!map[k]) map[k] = { track_key: k, menu: false, game: false };
+      map[k][cb.dataset.col] = cb.checked;
+    });
+    const btn = document.getElementById('save-btn');
+    const res = await fetch('/admin/music', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ tracks: Object.values(map) }) });
+    btn.textContent = res.ok ? '✓ Saved' : 'Error';
+    setTimeout(() => { btn.textContent = 'Save'; }, 2000);
+  }`)));
+
 // ── Web client (SPA) ──────────────────────────────────────────────────────────
 const distDir = path.join(__dirname, '..', 'client', 'dist');
 app.use(express.static(distDir));
@@ -2216,9 +2293,40 @@ async function ensureFeedbackTable() {
   }
 }
 
+async function initMusicTracks() {
+  try {
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS music_tracks (
+        track_key TEXT PRIMARY KEY,
+        label     TEXT NOT NULL,
+        menu      BOOLEAN NOT NULL DEFAULT false,
+        game      BOOLEAN NOT NULL DEFAULT false,
+        sort      INT NOT NULL DEFAULT 0
+      )
+    `);
+    const seeds = [
+      ['chill-tropics', 'Chill Tropics', true,  false, 1],
+      ['pirates',       'Pirates',       false, true,  2],
+      ['fun-caribbean', 'Fun Caribbean', false, true,  3],
+      ['epic-celtic',   'Epic Celtic',   false, true,  4],
+    ];
+    for (const [key, label, menu, game, sort] of seeds) {
+      await db.query(
+        `INSERT INTO music_tracks (track_key, label, menu, game, sort)
+         VALUES ($1,$2,$3,$4,$5) ON CONFLICT (track_key) DO NOTHING`,
+        [key, label, menu, game, sort]
+      );
+    }
+    console.log('[music] tracks ready');
+  } catch (e) {
+    console.error('[music] init failed:', e.message);
+  }
+}
+
 async function start() {
   await redis.connect().catch(e => console.error('[redis] connect failed:', e.message));
   await ensureFeedbackTable();
+  await initMusicTracks();
   cfg = await loadGameConfig();
   fmt = await loadMatchFormat();
   uiCfg = await loadUiConfig();

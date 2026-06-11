@@ -1,15 +1,89 @@
 import 'react-native-gesture-handler';
 import React, { useState, useCallback, useRef, useEffect } from 'react';
+import { Platform, View, Text, Pressable, StyleSheet } from 'react-native';
 import { NavigationContainer, useNavigationContainerRef } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 
 import { GameContext } from './src/context/GameContext';
 import { useSocket } from './src/hooks/useSocket';
 import { clearUser } from './src/utils/user';
 import { SERVER_URL } from './src/config';
+import { startMusic, setMusicContext, isMusicMuted, setMusicMuted, loadMusicConfig } from './src/audio/music';
+import { isSfxEnabled, setSfxEnabled } from './src/audio/sfx';
+
+// Global sound control — floats over every screen, positioned per-screen.
+// Tapping the icon opens a small menu: Music on/off + Game sounds on/off.
+// Icon shows active (🔊) if either is on, muted (🔇) if both are off.
+function MuteButton({ route }) {
+  const insets = useSafeAreaInsets();
+  const [open, setOpen]       = useState(false);
+  const [musicOn, setMusicOn] = useState(!isMusicMuted());
+  const [sfxOn, setSfxOn]     = useState(isSfxEnabled());
+  const anyOn = musicOn || sfxOn;
+
+  const toggleMusic = () => { const v = !musicOn; setMusicOn(v); setMusicMuted(!v); };
+  const toggleSfx   = () => { const v = !sfxOn;   setSfxOn(v);   setSfxEnabled(v); };
+
+  const size   = route === 'Lobby' ? 40 : 36;
+  const radius = route === 'Lobby' ? 10 : 8;
+  const pos =
+    route === 'Game'  ? { right: 56, top: insets.top + 7 }  :
+    route === 'Lobby' ? { right: 64, top: insets.top + 12 } :
+                        { right: 12, top: insets.top + 8 };
+
+  return (
+    <>
+      <Pressable
+        onPress={() => setOpen(o => !o)}
+        style={[muteStyles.btn, pos, { width: size, height: size, borderRadius: radius }]}
+        hitSlop={8}
+      >
+        <Text style={muteStyles.txt}>{anyOn ? '🔊' : '🔇'}</Text>
+      </Pressable>
+      {open && (
+        <>
+          <Pressable style={muteStyles.scrim} onPress={() => setOpen(false)} />
+          <View style={[muteStyles.menu, { top: pos.top + size + 6, right: pos.right }]}>
+            <Pressable style={muteStyles.row} onPress={toggleMusic}>
+              <Text style={[muteStyles.box, musicOn && muteStyles.boxOn]}>{musicOn ? '✓' : ''}</Text>
+              <Text style={muteStyles.label}>Music</Text>
+            </Pressable>
+            <Pressable style={muteStyles.row} onPress={toggleSfx}>
+              <Text style={[muteStyles.box, sfxOn && muteStyles.boxOn]}>{sfxOn ? '✓' : ''}</Text>
+              <Text style={muteStyles.label}>Game sounds</Text>
+            </Pressable>
+          </View>
+        </>
+      )}
+    </>
+  );
+}
+const muteStyles = StyleSheet.create({
+  btn: {
+    position: 'absolute', zIndex: 9999,
+    alignItems: 'center', justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)',
+  },
+  txt: { fontSize: 17, lineHeight: 21 },
+  scrim: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 9998 },
+  menu: {
+    position: 'absolute', zIndex: 10000, minWidth: 158,
+    backgroundColor: 'rgba(15,15,18,0.97)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)',
+    borderRadius: 10, paddingVertical: 4, overflow: 'hidden',
+  },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 9, paddingVertical: 10, paddingHorizontal: 12 },
+  box: {
+    width: 18, height: 18, borderRadius: 4, textAlign: 'center', lineHeight: 18,
+    fontSize: 13, fontWeight: '900', color: '#0d1117',
+    borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.4)', backgroundColor: 'transparent',
+  },
+  boxOn: { backgroundColor: '#f0c040', borderColor: '#f0c040' },
+  label: { fontSize: 13, color: '#fff', fontWeight: '600' },
+});
 import LoginScreen   from './src/screens/LoginScreen';
 import LobbyScreen   from './src/screens/LobbyScreen';
 import GameScreen    from './src/screens/GameScreen';
@@ -53,6 +127,19 @@ export default function App() {
 
   const navigationRef = useNavigationContainerRef();
   const matchIdRef    = useRef(null);
+  const [route, setRoute] = useState('Login');   // current screen (for the sound button placement)
+
+  // Background music — start on first user gesture (web autoplay policy), or
+  // immediately on native. Stays running across navigation; context switches below.
+  useEffect(() => {
+    loadMusicConfig();   // pull per-interface track config from the server (falls back to defaults)
+    if (Platform.OS !== 'web') { startMusic(); return; }
+    const onFirst = () => { startMusic(); document.removeEventListener('pointerdown', onFirst); document.removeEventListener('keydown', onFirst); };
+    document.addEventListener('pointerdown', onFirst);
+    document.addEventListener('keydown', onFirst);
+    return () => { document.removeEventListener('pointerdown', onFirst); document.removeEventListener('keydown', onFirst); };
+  }, []);
+
   const isObserverRef = useRef(false);
   // True between emitting 'observe' and receiving the first observed game-state.
   // Observers only navigate to Game on that first state — later broadcasts must
@@ -276,7 +363,9 @@ export default function App() {
       <GestureHandlerRootView style={{ flex: 1 }}>
         <SafeAreaProvider>
           <StatusBar style="light" />
-          <NavigationContainer ref={navigationRef} linking={linking}>
+          <NavigationContainer ref={navigationRef} linking={linking}
+            onReady={() => { const r = navigationRef.getCurrentRoute()?.name; setRoute(r || 'Login'); setMusicContext(r === 'Game' ? 'game' : 'menu'); }}
+            onStateChange={() => { const r = navigationRef.getCurrentRoute()?.name; setRoute(r || 'Login'); setMusicContext(r === 'Game' ? 'game' : 'menu'); }}>
             <Stack.Navigator screenOptions={{ headerShown: false, animation: 'fade' }}>
               <Stack.Screen name="Login" component={LoginScreen} />
               <Stack.Screen name="Lobby"   component={LobbyScreen} />
@@ -286,6 +375,7 @@ export default function App() {
               <Stack.Screen name="Leaderboard" component={LeaderboardScreen} />
             </Stack.Navigator>
           </NavigationContainer>
+          <MuteButton route={route} />
         </SafeAreaProvider>
       </GestureHandlerRootView>
     </GameContext.Provider>

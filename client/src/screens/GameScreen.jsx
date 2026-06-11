@@ -12,6 +12,7 @@ import { ChipStack } from '../components/PokerChip';
 import BettingControls from '../components/BettingControls';
 import { colors } from '../theme';
 import { VERSION_DISPLAY, SERVER_URL } from '../config';
+import { playSfx } from '../audio/sfx';
 
 const FEEDBACK_OPTIONS = [
   { value: 'bug',        label: '🐞 Bug' },
@@ -401,6 +402,13 @@ export default function GameScreen({ navigation }) {
       .catch(() => {});
   }, []);
 
+  // Action sound effects — play when the latest action changes (either player/bot)
+  const sfxSeen = useRef(gameState?.lastAction?.t);
+  useEffect(() => {
+    const a = gameState?.lastAction;
+    if (a?.t && a.t !== sfxSeen.current) { sfxSeen.current = a.t; playSfx(a.action); }
+  }, [gameState?.lastAction?.t]);
+
   // In-game feedback
   const [feedbackOpen,   setFeedbackOpen]   = useState(false);
   const [feedbackType,   setFeedbackType]   = useState('bug');
@@ -486,6 +494,47 @@ export default function GameScreen({ navigation }) {
   }, [revealedCC, targetCC, isShowdown]);
 
   const activeWinners = showWinners ? winnerMap : {};
+
+  // Deal sound — when a new hand begins (hand number advances)
+  const dealSeen = useRef(0);
+  useEffect(() => {
+    const h = gameState?.handNumber || 0;
+    if (h > dealSeen.current) playSfx('deal');
+    dealSeen.current = h;
+  }, [gameState?.handNumber]);
+
+  // Community card sound — once per board card as it's revealed (staggered above)
+  const ccSeen = useRef(0);
+  useEffect(() => {
+    if (revealedCC > ccSeen.current) playSfx('community');
+    ccSeen.current = revealedCC;
+  }, [revealedCC]);
+
+  // Pot sound — when the pot is awarded to the winner
+  const potSeen = useRef(false);
+  useEffect(() => {
+    if (showWinners && !potSeen.current) playSfx('pot');
+    potSeen.current = showWinners;
+  }, [showWinners]);
+
+  // Turn cue — very soft sound when it becomes the player's turn to act
+  const turnSeen = useRef(false);
+  useEffect(() => {
+    if (isMyTurn && !turnSeen.current) playSfx('turn');
+    turnSeen.current = isMyTurn;
+  }, [isMyTurn]);
+
+  // Turn-timer alarm — light beep when ~5 of the 20 bars remain (≤5s left to act)
+  useEffect(() => {
+    if (!myDeadline) return;
+    let fired = false;
+    const id = setInterval(() => {
+      const rem = myDeadline - Date.now();
+      if (rem <= 5000 && !fired) { fired = true; playSfx('alarm'); }
+      if (rem <= 0 || fired) clearInterval(id);
+    }, 100);
+    return () => clearInterval(id);
+  }, [myDeadline]);
 
   const [snap, setSnap]       = useState({ chips: {}, pot: 0 });
   const [winDone, setWinDone] = useState(false);
@@ -703,7 +752,7 @@ export default function GameScreen({ navigation }) {
         {/* Feedback button — sits just below the hamburger, top-right */}
         <View style={s.feedbackBtnRow} pointerEvents="box-none">
           <Pressable style={s.feedbackBtn} onPress={openFeedback}>
-            <Text style={s.feedbackBtnTxt}>💬 Feedback</Text>
+            <Text style={s.feedbackBtnTxt}>Feedback</Text>
           </Pressable>
         </View>
 
@@ -1098,7 +1147,7 @@ const s = StyleSheet.create({
   modalBtnTxt: { color: colors.white, fontSize: 15, fontWeight: '800', textAlign: 'center' },
 
   // Feedback button (below hamburger)
-  feedbackBtnRow: { flexDirection: 'row', justifyContent: 'flex-end', paddingHorizontal: 12, marginTop: 6 },
+  feedbackBtnRow: { flexDirection: 'row', justifyContent: 'flex-end', paddingHorizontal: 16, marginTop: -3 },
   feedbackBtn:    { backgroundColor: 'rgba(0,0,0,0.5)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 },
   feedbackBtnTxt: { color: colors.white, fontSize: 12, fontWeight: '600' },
 
