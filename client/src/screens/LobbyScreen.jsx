@@ -1,11 +1,17 @@
-import React, { useContext, useEffect, useState } from 'react';
-import { View, Text, Pressable, ScrollView, StyleSheet, Platform } from 'react-native';
+import React, { useContext, useEffect, useRef, useState } from 'react';
+import { View, Text, Pressable, ScrollView, StyleSheet, Platform, Share } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { GameContext } from '../context/GameContext';
 import { LobbyContext } from '../context/LobbyContext';
 import { colors } from '../theme';
 import { VERSION_DISPLAY } from '../config';
+import { track } from '../utils/analytics';
 import { AvatarBadge } from '../components/MatchFlowOverlays';
+
+// Always share the public URL — anyone who taps it can play in the browser
+// immediately. ?via= is inert for now; reserved for attribution / a future
+// auto-challenge on arrival.
+const INVITE_URL = 'https://pokermonkey.app';
 
 // One "Looking to play" row. States, in priority order:
 //   incoming — they challenged me        → green, Accept
@@ -68,8 +74,33 @@ export default function LobbyScreen({ navigation }) {
   }, [navigation, playerInfo?.playerId, emit]);
 
   const [menuOpen, setMenuOpen] = useState(false);
+  const [linkCopied, setLinkCopied] = useState(false);
+  const copiedTimer = useRef(null);
 
   const myPlayerId = playerInfo?.playerId;
+
+  // Native: OS share sheet. Web: browser share dialog where it exists (mobile
+  // browsers), otherwise copy the link and confirm inline.
+  const shareInvite = async () => {
+    track('InviteFriends');
+    const url = `${INVITE_URL}/?via=${encodeURIComponent(myPlayerId || '')}`;
+    const message = `Play me heads-up at Poker Monkey 🐵 ${url}`;
+    try {
+      if (Platform.OS === 'web') {
+        if (navigator.share) {
+          await navigator.share({ title: 'Poker Monkey', text: message, url });
+        } else {
+          await navigator.clipboard?.writeText(url);
+          setLinkCopied(true);
+          clearTimeout(copiedTimer.current);
+          copiedTimer.current = setTimeout(() => setLinkCopied(false), 2200);
+        }
+      } else {
+        await Share.share({ message });
+      }
+    } catch {} // dismissed share sheet — not an error
+  };
+  useEffect(() => () => clearTimeout(copiedTimer.current), []);
   const humans = (onlinePlayers || []).filter(p => !p.isBot);
 
   // Everyone online is implicitly looking to play — challengeable unless in a
@@ -151,18 +182,37 @@ export default function LobbyScreen({ navigation }) {
               <Text style={[s.secTitle, s.secTitleGold]}>Looking to play</Text>
               <View style={s.count}><Text style={s.countTxt}>{looking.length}</Text></View>
             </View>
-            {looking.length ? looking.map(p => (
-              <PlayerRow key={p.id} p={p}
-                incoming={isIncoming(p.id)} issued={isIssued(p.id)}
-                onChallenge={onChallenge} onCancelChallenge={onWithdrawChallenge}
-                onAccept={onAcceptChallenge} />
-            )) : (
+            {looking.length ? (
+              <>
+                {looking.map(p => (
+                  <PlayerRow key={p.id} p={p}
+                    incoming={isIncoming(p.id)} issued={isIssued(p.id)}
+                    onChallenge={onChallenge} onCancelChallenge={onWithdrawChallenge}
+                    onAccept={onAcceptChallenge} />
+                ))}
+                {/* Invite friends — action row, final slot of the list */}
+                <View style={s.inviteRow}>
+                  <View style={s.inviteTile}><Text style={s.inviteTileTxt}>＋</Text></View>
+                  <View style={s.rowWho}>
+                    <Text style={s.rowName}>Invite friends</Text>
+                    <Text style={s.inviteSub}>Bring a human to play</Text>
+                  </View>
+                  <Pressable style={s.inviteBtn} onPress={shareInvite}>
+                    <Text style={s.inviteBtnTxt}>Invite</Text>
+                  </Pressable>
+                </View>
+              </>
+            ) : (
               <View style={s.emptyPool}>
                 <Text style={s.epIc}>🙈</Text>
                 <Text style={s.epTitle}>Nobody's free right now</Text>
-                <Text style={s.epSub}>Tap <Text style={s.epGold}>Quick Match</Text> — play a bot until a human arrives.</Text>
+                <Text style={s.epSub}>Invite a friend to play — or tap <Text style={s.epGold}>Quick Match</Text> for a bot until a human arrives.</Text>
+                <Pressable style={s.epInviteBtn} onPress={shareInvite}>
+                  <Text style={s.epInviteTxt}>＋ Invite friends</Text>
+                </Pressable>
               </View>
             )}
+            {linkCopied && <Text style={s.copied}>🔗 Invite link copied</Text>}
 
             {/* Live now */}
             {liveRows.length > 0 && (
@@ -288,10 +338,33 @@ const s = StyleSheet.create({
   },
   cancelBtnTxt: { color: '#8a98aa', fontSize: 12, fontWeight: '800' },
 
+  inviteRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 9,
+    backgroundColor: 'rgba(255,255,255,0.02)', borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.16)',
+    borderStyle: 'dashed', borderRadius: 17, paddingVertical: 12, paddingHorizontal: 13,
+  },
+  inviteTile: {
+    width: 46, height: 46, borderRadius: 12, borderWidth: 1.5, borderColor: 'rgba(240,192,64,0.45)',
+    borderStyle: 'dashed', alignItems: 'center', justifyContent: 'center',
+  },
+  inviteTileTxt: { color: colors.goldLight, fontSize: 22, fontWeight: '800' },
+  inviteSub: { color: '#8a98aa', fontSize: 12, fontWeight: '700', marginTop: 4 },
+  inviteBtn: {
+    height: 38, borderRadius: 11, paddingHorizontal: 16, backgroundColor: colors.goldLight,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  inviteBtnTxt: { color: '#0c151f', fontSize: 13, fontWeight: '900' },
+
   emptyPool: {
     backgroundColor: 'rgba(255,255,255,0.03)', borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.16)',
     borderStyle: 'dashed', borderRadius: 18, paddingVertical: 24, paddingHorizontal: 20, alignItems: 'center',
   },
+  epInviteBtn: {
+    alignSelf: 'stretch', marginTop: 16, backgroundColor: colors.goldLight, borderRadius: 14,
+    paddingVertical: 14, alignItems: 'center',
+  },
+  epInviteTxt: { color: '#0c151f', fontSize: 15, fontWeight: '900' },
+  copied: { color: '#36d07f', fontSize: 12, fontWeight: '800', textAlign: 'center', marginTop: 2 },
   epIc: { fontSize: 38, marginBottom: 8 },
   epTitle: { color: colors.white, fontSize: 16, fontWeight: '900', marginBottom: 7 },
   epSub: { color: '#8a98aa', fontSize: 13, fontWeight: '700', lineHeight: 19, textAlign: 'center', maxWidth: 280 },
