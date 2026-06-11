@@ -103,8 +103,8 @@ const OPP_POD_T  = OPP_CARDS_TOP_GAP - (NP_TOP + 10 - 59);
 const ROW8_Y     = TABLE_T + 7 * (TABLE_H / 8);
 const MY_POD_L   = Math.round(DESIGN_W - FRAME_GAP - POD_W);              // avatar right edge ≈ right frame
 const MY_POD_T   = Math.round(ROW8_Y - AV_TOP - AVATAR_SZ / 2);
-const CC_T         = Math.round(0.455 * DESIGN_H - 25);                   // 363
-const POT_T        = Math.round(TABLE_T + 4 * (TABLE_H / 8) + 20);        // 20px past row 5 line
+const CC_T         = Math.round(0.455 * DESIGN_H - 31);                   // nudged up ~6px
+const POT_T        = Math.round(TABLE_T + 4 * (TABLE_H / 8) + 14);        // nudged up ~6px
 const OPP_BET_T    = Math.round(TABLE_T + 2 * (TABLE_H / 8));             // row 3 line
 const MY_BET_T     = Math.round(0.620 * DESIGN_H - 20 + TABLE_H / 16);   // down half row
 const MY_BET_L     = Math.round(TABLE_W / 4);                             // right half column (center +62px)
@@ -667,12 +667,11 @@ export default function GameScreen({ navigation }) {
             </View>
           </View>
 
-          {/* Pot — spec §5 pot: (0.50, 0.560) */}
+          {/* Pot — text only ("POT = X"); assets are reserved for bets + the award flight */}
           <View style={[s.potSlot, { top: POT_T }]} pointerEvents="none">
             {dispPot > 0 && (
-              <View style={s.potRow}>
-                <ChipStack amount={dispPot} size={33} />
-                <Text style={s.potAmt}>{dispPot.toLocaleString()}</Text>
+              <View style={s.potPill}>
+                <Text style={s.potAmt}>POT = {dispPot.toLocaleString()}</Text>
               </View>
             )}
           </View>
@@ -1079,11 +1078,11 @@ const s = StyleSheet.create({
   communityRow:  { flexDirection: 'row', gap: 4, alignItems: 'center' },
   ccPlaceholder: { width: 54, height: 64 },
   potSlot: { position: 'absolute', left: 0, right: 0, alignItems: 'center', zIndex: 2 },
-  potRow:  { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 4 },
-  potAmt:  { color: '#4a2a10', fontSize: 21, fontWeight: '900' },
+  potPill: { backgroundColor: 'rgba(0,0,0,0.45)', borderRadius: 11, paddingHorizontal: 16, paddingVertical: 5, borderWidth: 1, borderColor: 'rgba(240,192,64,0.45)' },
+  potAmt:  { color: '#f5d061', fontSize: 18, fontWeight: '900', letterSpacing: 0.5 },
   betSlot: { position: 'absolute', left: 0, right: 0, alignItems: 'center', height: 40, justifyContent: 'flex-start', zIndex: 20 },
   betPill: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  betAmt:  { color: '#4a2a10', fontSize: 18, fontWeight: '900' },
+  betAmt:  { color: '#f5d061', fontSize: 15, fontWeight: '900', letterSpacing: 0.3, backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 9, paddingHorizontal: 9, paddingVertical: 2, overflow: 'hidden', borderWidth: 1, borderColor: 'rgba(240,192,64,0.4)' },
   allInTag: { color: '#fff', backgroundColor: '#dc2626', fontSize: 13, fontWeight: '900', letterSpacing: 0.5, paddingHorizontal: 9, paddingVertical: 2, borderRadius: 8, overflow: 'hidden', borderWidth: 1, borderColor: '#fca5a5' },
 
   // Dealer button
