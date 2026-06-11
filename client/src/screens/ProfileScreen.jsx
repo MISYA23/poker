@@ -4,6 +4,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { GameContext } from '../context/GameContext';
+import { LobbyContext } from '../context/LobbyContext';
 import { colors } from '../theme';
 import { SERVER_URL } from '../config';
 import { getUser, setUser } from '../utils/user';
@@ -17,7 +18,8 @@ const AVATAR_IMAGES = {
 };
 
 export default function ProfileScreen({ navigation }) {
-  const { playerInfo, myElo, onUpdateProfile, deckStyle, setDeckStyle } = useContext(GameContext);
+  const { playerInfo, onUpdateProfile, deckStyle, setDeckStyle } = useContext(GameContext);
+  const { myElo } = useContext(LobbyContext);
 
   useEffect(() => {
     if (Platform.OS === 'web' && !playerInfo) {
