@@ -19,10 +19,12 @@ const INVITE_URL = 'https://pokermonkey.app';
 //   normal   — challengeable human       → gold VS button
 // Players in a bot game are still listed (they're waiting for humans too).
 function PlayerRow({ p, incoming, issued, onChallenge, onCancelChallenge, onAccept }) {
+  // Bot-game players still read "Looking to play" — they only flip to
+  // "Playing a bot" once they've refused (or ignored) a challenge there
   const status =
     incoming     ? 'Wants to play you!' :
     issued       ? 'Challenge issued'   :
-    p.inBotMatch ? 'Playing a bot 🤖'   : 'Looking to play';
+    p.botRefused ? 'Playing a bot 🤖'   : 'Looking to play';
   const green = incoming || issued;
   return (
     <View style={[s.row, green && s.rowGreen]}>

@@ -132,7 +132,6 @@ export default function App() {
   // Quick Match funnel overlays (see MatchFlowOverlays)
   const [searchOverlay, setSearchOverlay] = useState(null); // null | {status:'searching'} | {status:'found', opponent}
   const [meantime, setMeantime]           = useState(false); // "play a bot while we keep searching" dialog
-  const [humanArrived, setHumanArrived]   = useState(null);  // {playerId, name, avatarId, country, elo}
 
   const navigationRef = useNavigationContainerRef();
   const matchIdRef    = useRef(null);
@@ -184,7 +183,6 @@ export default function App() {
       // Starting any match voids all challenges (server does the same)
       setIncomingChallenges([]);
       setOutgoingChallenges([]);
-      setHumanArrived(null);
       track('StartMatch');
       if (fallback) {
         // No human within the window — bot game with the meantime dialog over it
@@ -230,11 +228,9 @@ export default function App() {
       setMatchOver({ ...data, myVote: null, opponentWantsRematch: null });
       setOpponentDisconnected(null);
       setMeantime(false);
-      setHumanArrived(null);
       if (data.newElo != null) setMyElo(data.newElo);
       track('FinishMatch');
     },
-    'human-arrived': (data)          => setHumanArrived(data),
     'rematch-pending': ({ from })    => {
       setMatchOver(prev => prev ? { ...prev, opponentWantsRematch: from } : prev);
     },
@@ -256,7 +252,7 @@ export default function App() {
       setGameState(null);
       setInQueue(false); setMatchOver(null);
       setOpponentDisconnected(null);
-      setSearch(null); setMeantime(false); setHumanArrived(null);
+      setSearch(null); setMeantime(false);
       matchIdRef.current = null;
       isObserverRef.current = false;
       pendingObserveRef.current = false;
@@ -338,15 +334,7 @@ export default function App() {
     setSearch(null);
   }, [emit, setSearch]);
 
-  // Swap out of the fallback bot game to play the human who arrived
-  const onAcceptHuman = useCallback((playerId) => {
-    setHumanArrived(null);
-    setMeantime(false);
-    emit('accept-human', { playerId });
-  }, [emit]);
-
-  const onDismissMeantime     = useCallback(() => setMeantime(false), []);
-  const onDismissHumanArrived = useCallback(() => setHumanArrived(null), []);
+  const onDismissMeantime = useCallback(() => setMeantime(false), []);
 
   const onChallenge = useCallback((toId) => {
     setError(null);
@@ -449,12 +437,9 @@ export default function App() {
           <MatchFlowOverlays
             searchOverlay={searchOverlay}
             meantime={meantime}
-            humanArrived={humanArrived}
             incomingChallenges={incomingChallenges}
             onCancelSearch={onCancelMatch}
             onDismissMeantime={onDismissMeantime}
-            onAcceptHuman={onAcceptHuman}
-            onDismissHumanArrived={onDismissHumanArrived}
             onAcceptChallenge={onAcceptChallenge}
             onDeclineChallenge={onDeclineChallenge}
           />

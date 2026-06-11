@@ -101,8 +101,8 @@ function Scrim({ onPress, children }) {
 // All Quick-Match-funnel + challenge dialogs, rendered above every screen.
 // Copy convention: opponents are "humans", bots are "🤖 bot" (never "human").
 export default function MatchFlowOverlays({
-  searchOverlay, meantime, humanArrived, incomingChallenges,
-  onCancelSearch, onDismissMeantime, onAcceptHuman, onDismissHumanArrived,
+  searchOverlay, meantime, incomingChallenges,
+  onCancelSearch, onDismissMeantime,
   onAcceptChallenge, onDeclineChallenge,
 }) {
   // Challenges the user tap-dismissed: hide the dialog, the challenge itself
@@ -122,7 +122,7 @@ export default function MatchFlowOverlays({
   // Short-fuse challenges (target is mid-bot-game) get the countdown ring
   const inGameChallenge = challenge && challenge.expiresIn != null && challenge.expiresIn <= 30;
 
-  if (!searchOverlay && !meantime && !humanArrived && !challenge) return null;
+  if (!searchOverlay && !meantime && !challenge) return null;
 
   return (
     <View style={ov.root} pointerEvents="box-none">
@@ -148,26 +148,14 @@ export default function MatchFlowOverlays({
         </Scrim>
       )}
 
-      {/* Bot game in the meantime (yields to the human-arrived dialog) */}
-      {!searchOverlay && meantime && !humanArrived && (
+      {/* Bot game in the meantime (yields to an incoming challenge) */}
+      {!searchOverlay && meantime && !challenge && (
         <Scrim onPress={onDismissMeantime}>
           <Radar />
           <Text style={ov.title}>Waiting for <Text style={ov.gold}>humans…</Text></Text>
           <Text style={ov.sub}>Play a <Text style={ov.bold}>🤖 bot</Text> while we keep searching.</Text>
           <Pressable style={ov.cta} onPress={onDismissMeantime}>
             <Text style={ov.ctaTxt}>Play a bot →</Text>
-          </Pressable>
-        </Scrim>
-      )}
-
-      {/* A human arrived during the bot game */}
-      {!searchOverlay && humanArrived && (
-        <Scrim onPress={onDismissHumanArrived}>
-          <View style={ov.badge}><Text style={ov.badgeTxt}>🐵 A HUMAN ARRIVED</Text></View>
-          <OpponentCard {...humanArrived} />
-          <Text style={ov.sub}>We'll pause your bot match.</Text>
-          <Pressable style={ov.cta} onPress={() => onAcceptHuman(humanArrived.playerId)}>
-            <Text style={ov.ctaTxt}>Play {humanArrived.name}</Text>
           </Pressable>
         </Scrim>
       )}
