@@ -185,12 +185,14 @@ export default function LoginScreen() {
 }
 
 const s = StyleSheet.create({
-  root:    { flex: 1, backgroundColor: '#0a1628', ...Platform.select({ web: { height: '100vh', width: '100%' } }) },
+  // 100dvh tracks the *visible* viewport on mobile browsers (100vh extends behind
+  // the iOS Chrome/Safari toolbars); minHeight 100vh is the older-browser fallback.
+  root:    { flex: 1, backgroundColor: '#0a1628', ...Platform.select({ web: { minHeight: '100vh', height: '100dvh', width: '100%' } }) },
   safe:    { flex: 1 },
   kav:     { flex: 1 },
-  center:  { flex: 1, alignItems: 'center', justifyContent: 'flex-end', padding: 24, paddingBottom: 16 },
+  center:  { flex: 1, alignItems: 'center', justifyContent: 'flex-end', padding: 24, paddingBottom: 38 },
   versionSmall: {
-    position: 'absolute', right: 12, bottom: 4,
+    position: 'absolute', right: 12, bottom: 12,
     fontSize: 11, color: 'rgba(255,255,255,0.9)',
     textShadowColor: 'rgba(0,0,0,0.9)', textShadowRadius: 4, textShadowOffset: { width: 0, height: 1 },
   },
