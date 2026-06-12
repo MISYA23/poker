@@ -10,14 +10,12 @@ import { SERVER_URL } from '../config';
 // for the Metro bundler; the admin only toggles which of these are active where.
 const TRACK_ASSETS = {
   'chill-tropics': require('../../assets/music/chill-tropics.mp3'),
-  'pirates':       require('../../assets/music/pirates.mp3'),
   'fun-caribbean': require('../../assets/music/fun-caribbean.mp3'),
-  'epic-celtic':   require('../../assets/music/epic-celtic.mp3'),
 };
 
 // Fallback playlists (used until /api/music-config loads, or if it fails)
 const DEFAULT_MENU = ['chill-tropics'];
-const DEFAULT_GAME = ['pirates', 'fun-caribbean', 'epic-celtic'];
+const DEFAULT_GAME = ['fun-caribbean'];
 
 const keysToAssets = (keys) =>
   (keys || []).map(k => TRACK_ASSETS[k]).filter(Boolean);
