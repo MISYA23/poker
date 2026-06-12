@@ -116,8 +116,9 @@ function progressRows(room, game, prevCommunityCount, endPhase) {
 // Called when a new hand starts. stacksBefore = [{id, chips}] captured before
 // game.startHand() posted the blinds, so hand_start records true pre-blind
 // stacks even if posting the blinds auto-ran the hand to showdown.
-// Returns a fresh handUuid.
-async function startHand(room, game, stacksBefore = null) {
+// Synchronous — returns { handUuid, rows } so the caller can both persist the
+// rows and broadcast them live before the next game-state goes out.
+function buildStartRows(room, game, stacksBefore = null) {
   const handUuid = randomUUID();
   room.handEventSeq = 0;
   const st = game.getStateFor(null);
@@ -167,9 +168,14 @@ async function startHand(room, game, stacksBefore = null) {
   // the engine then runs straight to showdown before anyone acts.
   rows.push(...progressRows(room, game, 0, 'pre-flop'));
 
+  return { handUuid, rows };
+}
+
+// Persist a batch of rows to the Redis hand log + refresh the live snapshot.
+async function writeHandRows(room, game, handUuid, rows) {
+  if (!handUuid || !rows?.length) return;
   for (const row of rows) await logEvent(room.id, handUuid, row);
   await setSnapshot(room.id, buildSnapshot(room, game));
-  return handUuid;
 }
 
 // Capture BEFORE game.handleAction() — the logger needs the pre-action street,
@@ -186,9 +192,10 @@ function preActionState(game, playerId) {
 }
 
 // Called after every player-action (human, bot, or turn-timeout fold).
-async function logAction(room, game, pre) {
-  const handUuid = room.currentHandUuid;
-  if (!handUuid) return;
+// Synchronous — returns the rows; the caller persists them via writeHandRows
+// and broadcasts them live.
+function buildActionRows(room, game, pre) {
+  if (!room.currentHandUuid) return [];
 
   const player = game.players.find(p => p.id === pre.playerId);
   // game.lastAction holds the engine's truth: real call amounts, and the
@@ -207,8 +214,7 @@ async function logAction(room, game, pre) {
   }];
   rows.push(...progressRows(room, game, pre.communityCount, pre.phase));
 
-  for (const row of rows) await logEvent(room.id, handUuid, row);
-  await setSnapshot(room.id, buildSnapshot(room, game));
+  return rows;
 }
 
 const EVENT_TYPES = [
@@ -297,4 +303,4 @@ function buildSnapshot(room, game) {
   };
 }
 
-module.exports = { startHand, logAction, preActionState, flushHandToDb, buildSnapshot };
+module.exports = { buildStartRows, buildActionRows, writeHandRows, preActionState, flushHandToDb, buildSnapshot };
