@@ -87,3 +87,4 @@ and log [START] / [DONE] entries for every task. See global CLAUDE.md for protoc
 [02:23 UTC] [DONE] v5.158: moonlit beach ambient bg beneath game table (layer-0 viewport cover, no scrim, full opacity) — changed: client/assets/game-bg.jpg (new), client/src/screens/GameScreen.jsx, client/src/config.js — merged feature/game-bg → main, pushed (Railway deploy ad0246a), branch deleted; web export verified pre-push
 [02:23 UTC] [START] regenerate digital ads asset pack with new UI/artwork (game-bg, chip art) per REGENERATE.md — digital ads/ claimed
 [02:24 UTC] [DONE] quick-match bot fallback investigation — feature works on prod (socket probe + headless UI probe vs prod web v5.157); likely cause of report: Play alpha build is v5.133, predates funnel (v5.141); probe test players + matches cleaned from prod DB; no code changes
+[02:28 UTC] [START] sizing pass — audit build size, compress oversized assets, report — branch chore/sizing-pass
