@@ -13,6 +13,6 @@ function resolveUrl(url) {
 }
 
 export const SERVER_URL = resolveUrl(envUrl);
-export const VERSION = 'v5.156';
-export const BRANCH_VERSION = 'b12.02';
+export const VERSION = 'v5.157';
+export const BRANCH_VERSION = 'b13.01';
 export const VERSION_DISPLAY = `${VERSION} (${BRANCH_VERSION})`;

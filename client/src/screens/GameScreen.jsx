@@ -1056,23 +1056,19 @@ const s = StyleSheet.create({
   nameplateWaiting: {},
 
   // Turn-timer gauge — a clip box that mirrors the nameplate's shape exactly
-  // (same width + corner radii) so the bar's ends follow the plate's rounded
-  // corner. Mine sits just below my plate; the opponent's sits just above his.
-  // Segments run green→red, draining outer→avatar.
+  // (same width + corner radii); the bar sits at its bottom so its ends follow
+  // the plate's rounded corner. Segments run green→red, draining outer→avatar.
   timerClip: {
     position: 'absolute',
-    height: NP_H,
+    top: NP_TOP + 8, height: NP_H,               // nameplate box shifted down by the bar height
     overflow: 'hidden',
+    justifyContent: 'flex-end',                  // bar pinned to the bottom → sits just below the plate, touching it
     zIndex: 4, elevation: 5,
   },
   timerClipMe:  { left: NP_ME_LEFT + TIMER_OUTER_INSET, right: NP_ME_RIGHT,
-                  top: NP_TOP + 8,                // nameplate box shifted down by the bar height
-                  justifyContent: 'flex-end',     // bar pinned to the bottom → sits just below the plate, touching it
                   borderTopLeftRadius: NP_RADIUS, borderBottomLeftRadius: NP_RADIUS,
                   borderTopRightRadius: 0, borderBottomRightRadius: 0 },
   timerClipOpp: { left: NP_OPP_LEFT, right: NP_OPP_RIGHT + TIMER_OUTER_INSET,
-                  top: NP_TOP - 8,                // nameplate box shifted up by the bar height
-                  justifyContent: 'flex-start',   // bar pinned to the top → sits just above the plate, touching it
                   borderTopRightRadius: NP_RADIUS, borderBottomRightRadius: NP_RADIUS,
                   borderTopLeftRadius: 0, borderBottomLeftRadius: 0 },
   timerRow:    { flexDirection: 'row', alignItems: 'stretch', height: 8, gap: 1.5,
