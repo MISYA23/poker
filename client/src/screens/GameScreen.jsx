@@ -115,6 +115,10 @@ const POT_T        = Math.round(TABLE_T + 4 * (TABLE_H / 8) + 14);        // nud
 const OPP_BET_T    = Math.round(TABLE_T + 2 * (TABLE_H / 8));             // row 3 line
 const MY_BET_T     = Math.round(0.620 * DESIGN_H - 20 + TABLE_H / 16);   // down half row
 const MY_BET_L     = Math.round(TABLE_W / 4);                             // right half column (center +62px)
+// Player bet grows UPWARD from this baseline (toward the pot) so a tall chip pile
+// never reaches down into the player's hole cards below it.
+const MY_BET_BASE   = MY_BET_T + 33;                                      // pile bottom — keeps small bets where they were
+const MY_BET_SLOT_H = 96;                                                 // headroom for the tallest pile
 const DEALER_SZ    = Math.round(0.07 * DESIGN_W);
 // Top dealer button: just to the LEFT of the D3 cross (right edge on D-col, centered on row-3 line)
 const DEALER_OPP_L = Math.round(TABLE_L + 3 * (TABLE_W / 4) - DEALER_SZ);
@@ -690,8 +694,8 @@ export default function GameScreen({ navigation }) {
             )}
           </View>
 
-          {/* Player bet */}
-          <View style={[s.betSlot, { top: MY_BET_T, left: MY_BET_L }]} pointerEvents="none">
+          {/* Player bet — bottom-anchored, grows up toward the pot (clears hole cards) */}
+          <View style={[s.betSlot, { top: MY_BET_BASE - MY_BET_SLOT_H, height: MY_BET_SLOT_H, left: MY_BET_L, justifyContent: 'flex-end' }]} pointerEvents="none">
             {(me?.roundBet > 0 || me?.allIn) && (
               <View style={s.betPill}>
                 {me.allIn && <Text style={s.allInTag}>ALL IN</Text>}

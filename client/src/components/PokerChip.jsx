@@ -69,9 +69,11 @@ export function Chip({ value, size = 40 }) {
 // Alias kept for internal ChipStack usage
 export const PokerChip = Chip;
 
-// ── Four colored chips — red 5 · green 25 · black 100 · purple 500 ──
+// ── Colored chips — purple 500 · black 100 · green 25 · red 5 · blue 1 ──
 // Same chip shape; chips pile tight so a stack reads as thickness (taller = more)
-// without counting individual chips.
+// without counting individual chips. Blue (1) exists only so custom bets that
+// aren't a multiple of 5 can be shown exactly — greedy decomposition always
+// prefers the larger chips, so blue is used only for the leftover under 5.
 const CHIP_AR = 256 / 255;   // chip art is ~square (width / height)
 const STEP    = 0.15;        // fraction of chip height each stacked chip reveals
 const DENOMS = [
@@ -79,11 +81,12 @@ const DENOMS = [
   { v: 100, img: require('../../assets/chip-black.png')  },
   { v: 25,  img: require('../../assets/chip-green.png')  },
   { v: 5,   img: require('../../assets/chip-red.png')    },
+  { v: 1,   img: require('../../assets/chip-blue.png')   },
 ];
 
 function decompose(amount) {
   const res = [];
-  let rem = Math.round(Math.max(0, amount) / 5) * 5;   // snap to nearest 5 (smallest chip)
+  let rem = Math.max(0, Math.round(amount));   // exact to the chip (blue=1 covers any remainder)
   for (const d of DENOMS) {
     const n = Math.floor(rem / d.v);
     if (n > 0) res.push({ d, count: n });
