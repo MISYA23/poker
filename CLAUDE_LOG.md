@@ -81,3 +81,6 @@ and log [START] / [DONE] entries for every task. See global CLAUDE.md for protoc
 [15:58 UTC] [DONE] EAS Android build versionCode 13 (commit c2d8cae, v5.133 asset-slim) + submitted to Play alpha track (submission d566ded4 SUBMITTED) — no code changes
 [21:04 UTC] [START] move opponent turn-timer bar above his nameplate (player timer untouched) — branch fix/opp-timer-above
 [21:05 UTC] [DONE] v5.153: opponent turn-timer bar moved above his nameplate (timerClipOpp top/justify flipped; my timer untouched) — changed: client/src/screens/GameScreen.jsx, client/src/config.js, CLAUDE_LOG.md
+[02:14 UTC] [START] revert opponent timer above nameplate back to below — branch fix/opp-timer-below
+[02:15 UTC] [DONE] v5.157: reverted opponent turn-timer back below his nameplate (GameScreen.jsx restored to pre-v5.153 state) — changed: client/src/screens/GameScreen.jsx, client/src/config.js — merged fix/opp-timer-below → main, pushed (Railway deploy), branch deleted
+[02:18 UTC] [START] game screen ambient background (moonlit beach) beneath the table — Group C layer-0 cover image per TABLE_UI_SPEC — branch feature/game-bg

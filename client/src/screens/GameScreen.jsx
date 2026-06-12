@@ -49,6 +49,10 @@ const TABLE_VARIANTS = {
 const TABLE_VARIANT = 'fat';
 const INGAME_TABLE  = TABLE_VARIANTS[TABLE_VARIANT].src;
 
+// Layer 0 ambient — Group C environment fill (spec §1/§2): viewport-anchored,
+// rendered with `cover` so it crops rather than distorts on any aspect ratio.
+const AMBIENT_BG = require('../../assets/game-bg.jpg');
+
 const TURN_DURATION_MS = 20000;
 const TOP_BAR_H    = 50;
 const ACTION_BAR_H = 125;
@@ -610,6 +614,12 @@ export default function GameScreen({ navigation }) {
   return (
     <View style={s.root}>
 
+      {/* Layer 0 — ambient (Group C): fills the whole viewport behind the stage.
+          Anchored to the device, NOT the stage scale — on screens taller/wider
+          than the stage it covers the leftover margins (cover crops, never
+          stretches or letterboxes). */}
+      <Image source={AMBIENT_BG} style={s.ambientBg} resizeMode="cover" pointerEvents="none" />
+
       {/* Group A — stage: scaled to content area only (below top bar, above action buttons) */}
       <View style={[s.stageOuter, { top: stageTop, bottom: stageBotOffset }]} pointerEvents="none">
         <View style={[s.stage, { transform: [{ scale }] }, debugUI && { borderWidth: 2, borderColor: 'yellow' }]}>
@@ -989,6 +999,10 @@ const s = StyleSheet.create({
   // Root — dark jungle base colour shows through wherever the bg image is
   // semi-transparent, lifting the crushed-black vignette edges.
   root: { flex: 1, width: '100%', backgroundColor: '#0a1a2e' },
+
+  // Layer 0 — ambient bg, full opacity (no scrim — game elements carry their
+  // own opaque pills/plates)
+  ambientBg: { ...StyleSheet.absoluteFillObject, width: '100%', height: '100%' },
 
   // Group A: stage container fills screen, centers the scaled canvas
   stageOuter: {
