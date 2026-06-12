@@ -10,7 +10,7 @@ import { GameContext } from './src/context/GameContext';
 import { LobbyContext } from './src/context/LobbyContext';
 import { useSocket } from './src/hooks/useSocket';
 import { clearUser } from './src/utils/user';
-import { track } from './src/utils/analytics';
+import { track, trackScreen } from './src/utils/analytics';
 import { SERVER_URL } from './src/config';
 import { startMusic, setMusicContext, loadMusicConfig } from './src/audio/music';
 import MatchFlowOverlays from './src/components/MatchFlowOverlays';
@@ -348,8 +348,8 @@ export default function App() {
         <SafeAreaProvider>
           <StatusBar style="light" />
           <NavigationContainer ref={navigationRef} linking={linking}
-            onReady={() => { const r = navigationRef.getCurrentRoute()?.name; setRoute(r || 'Login'); setMusicContext(r === 'Game' ? 'game' : 'menu'); }}
-            onStateChange={() => { const r = navigationRef.getCurrentRoute()?.name; setRoute(r || 'Login'); setMusicContext(r === 'Game' ? 'game' : 'menu'); }}>
+            onReady={() => { const r = navigationRef.getCurrentRoute()?.name; setRoute(r || 'Login'); setMusicContext(r === 'Game' ? 'game' : 'menu'); trackScreen(r || 'Login'); }}
+            onStateChange={() => { const r = navigationRef.getCurrentRoute()?.name; setRoute(r || 'Login'); setMusicContext(r === 'Game' ? 'game' : 'menu'); trackScreen(r || 'Login'); }}>
             <Stack.Navigator screenOptions={{ headerShown: false, animation: 'fade' }}>
               <Stack.Screen name="Login" component={LoginScreen} />
               <Stack.Screen name="Lobby"   component={LobbyScreen} />
