@@ -84,3 +84,4 @@ and log [START] / [DONE] entries for every task. See global CLAUDE.md for protoc
 [02:14 UTC] [START] revert opponent timer above nameplate back to below — branch fix/opp-timer-below
 [02:15 UTC] [DONE] v5.157: reverted opponent turn-timer back below his nameplate (GameScreen.jsx restored to pre-v5.153 state) — changed: client/src/screens/GameScreen.jsx, client/src/config.js — merged fix/opp-timer-below → main, pushed (Railway deploy), branch deleted
 [02:18 UTC] [START] game screen ambient background (moonlit beach) beneath the table — Group C layer-0 cover image per TABLE_UI_SPEC — branch feature/game-bg
+[02:23 UTC] [DONE] v5.158: moonlit beach ambient bg beneath game table (layer-0 viewport cover, no scrim, full opacity) — changed: client/assets/game-bg.jpg (new), client/src/screens/GameScreen.jsx, client/src/config.js — merged feature/game-bg → main, pushed (Railway deploy ad0246a), branch deleted; web export verified pre-push
