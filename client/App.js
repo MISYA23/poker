@@ -40,6 +40,9 @@ const linking = {
 export default function App() {
   const [myId, setMyId]           = useState(null);
   const [gameState, setGameState] = useState(null);
+  // Latest live hand-event batch — arrives just before the game-state that
+  // reflects it; GameScreen consumes (and clears) it to choreograph beats
+  const handEventsRef = useRef(null);
   const [error, setError]         = useState(null);
   const [inQueue, setInQueue]     = useState(false);
   const [matchList, setMatchList]       = useState([]);
@@ -131,6 +134,7 @@ export default function App() {
       }
     },
     'match-list':  ({ matches, onlinePlayers: op }) => { setMatchList(matches || []); setOnlinePlayers(op || []); },
+    'hand-events': (batch)           => { handEventsRef.current = batch; },
     'game-state':  (state)           => {
       setGameState(state);
       if (state.atTable && !state.gameOver) setMatchOver(null);
@@ -323,7 +327,7 @@ export default function App() {
   // Game/session context — game state, identity, and stable actions. Memoized so
   // lobby broadcasts (match-list, challenges) don't re-render mid-game screens.
   const gameValue = useMemo(() => ({
-    gameState, myId, matchOver, opponentDisconnected,
+    gameState, myId, matchOver, opponentDisconnected, handEventsRef,
     playerInfo, deckStyle, setDeckStyle, uiConfig,
     emit, onLogin, onLogout, onUpdateProfile,
     onAction, onLeave, onRematch, navigationRef,

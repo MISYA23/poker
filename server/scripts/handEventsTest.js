@@ -59,7 +59,10 @@ async function makePlayer(tag) {
   await new Promise(r => socket.on('connect', r));
   socket.emit('enter-lobby', { playerId });
   await sleep(400);
-  return { playerId, socket, tag, acted: new Set() };
+  const player = { playerId, socket, tag, acted: new Set(), liveRows: [] };
+  // live hand-event stream — every batch the server broadcasts to this player
+  socket.on('hand-events', (batch) => player.liveRows.push(...(batch.rows || [])));
+  return player;
 }
 
 async function startMatch(challenger, accepter) {
@@ -321,6 +324,28 @@ function checkHandInvariants(h, label) {
     check('H3: turn/river dealt after the call, before showdown',
       turnSeq > jamSeq && h3.events[h3.events.length - 2].type === 'showdown');
     check('H3: ended by showdown', h3.events[h3.events.length - 1].data.endedBy === 'showdown');
+  }
+
+  // ════ Live hand-events stream (drives in-game animations) ════
+  console.log('\nLive hand-events stream:');
+  check('live rows broadcast to players', A.liveRows.length > 0, `got ${A.liveRows.length}`);
+  check('live deal_hole rows are redacted (no hole-card leak)',
+    A.liveRows.filter(r => r.type === 'deal_hole').length > 0 &&
+    A.liveRows.every(r => r.type !== 'deal_hole' || !r.data?.cards));
+  if (h1) {
+    // A's live rows for hand 1 must mirror the DB rows exactly
+    const starts = A.liveRows
+      .map((r, i) => (r.type === 'hand_start' ? { i, n: r.data?.handNumber } : null))
+      .filter(Boolean);
+    const s1 = starts.find(x => x.n === 1);
+    const s2 = starts.find(x => x.n === 2);
+    const live1 = s1 ? A.liveRows.slice(s1.i, s2 ? s2.i : undefined) : [];
+    const sig = (type, seq, pid, amount, phase) => `${seq}|${type}|${pid || ''}|${amount || 0}|${phase || ''}`;
+    const liveSig = live1.map(r => sig(r.type, r.seq, r.type === 'deal_hole' ? '' : r.playerId, r.amount, r.phase));
+    const dbSig = h1.events.map(e => sig(e.type, e.seq, e.type === 'deal_hole' ? '' : e.player_id, e.amount, e.phase));
+    check('live stream for H1 mirrors the DB rows (same seq/type/player/amount/phase)',
+      liveSig.join('\n') === dbSig.join('\n'),
+      `live=${liveSig.length} db=${dbSig.length}`);
   }
 
   // ════ Stack continuity across hands ════

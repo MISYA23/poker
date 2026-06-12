@@ -7,7 +7,7 @@ const { Pool }   = require('pg');
 const { randomUUID } = require('crypto');
 const { PokerGame }  = require('./game/PokerGame');
 const { redis }      = require('./redis');
-const { startHand: logStartHand, logAction, preActionState, flushHandToDb } = require('./handLogger');
+const { buildStartRows, buildActionRows, writeHandRows, preActionState, flushHandToDb } = require('./handLogger');
 const { enqueue, dequeue, tryPair, calcElo } = require('./matchmaker');
 const { decideAction, stateFromGame } = require('./bot/botBrain');
 const { getProfile } = require('./bot/profiles');
@@ -165,9 +165,15 @@ function startTurnTimer(m) {
     m.turnDeadline  = null;
     try {
       const pre = preActionState(m.game, pid);
-      m.game.handleAction(pid, 'fold');
-      logAction(m, m.game, pre)
+      // Auto-action on timeout: only fold when actually facing a bet; otherwise
+      // check (no reason to surrender the hand when checking is free).
+      const player   = m.game.players.find(p => p.id === pid);
+      const canCheck = player && m.game.currentBet <= (player.roundBet || 0);
+      m.game.handleAction(pid, canCheck ? 'check' : 'fold');
+      const rows = buildActionRows(m, m.game, pre);
+      writeHandRows(m, m.game, m.currentHandUuid, rows)
         .catch(e => console.error('[timer] logAction:', e.message));
+      emitHandEvents(m, rows);
       broadcastMatchState(m);
       if (m.game.phase === 'showdown') scheduleNextHand(m, cfg.inter_hand_delay_ms);
     } catch (e) {}
@@ -206,8 +212,10 @@ function maybeScheduleBotAction(m) {
         d = fallback();
         m.game.handleAction(m.botId, d.action);
       }
-      logAction(m, m.game, pre)
+      const rows = buildActionRows(m, m.game, pre);
+      writeHandRows(m, m.game, m.currentHandUuid, rows)
         .catch(e => console.error('[bot] logAction:', e.message));
+      emitHandEvents(m, rows);
       broadcastMatchState(m);
       if (m.game.phase === 'showdown') scheduleNextHand(m, cfg.inter_hand_delay_ms);
     } catch (err) {
@@ -217,6 +225,21 @@ function maybeScheduleBotAction(m) {
 }
 
 // ── Broadcast ─────────────────────────────────────────────────────────────────
+
+// Live discrete hand-event stream — emitted right before the game-state that
+// reflects them, so the client can choreograph beats (call chips appear, hold,
+// slide to pot, then deal) instead of jumping straight to the settled state.
+// deal_hole cards are redacted: hole cards only ever travel inside the
+// per-player game-state.
+function emitHandEvents(m, rows) {
+  if (!rows?.length) return;
+  const payload = {
+    matchId: m.id,
+    rows: rows.map(r => r.type === 'deal_hole' ? { ...r, data: {} } : r),
+  };
+  for (const p of matchPlayers(m)) io.to(p.socketId).emit('hand-events', payload);
+  for (const sid of m.observers) io.to(sid).emit('hand-events', payload);
+}
 
 function broadcastMatchState(m) {
   startTurnTimer(m);
@@ -328,7 +351,10 @@ async function beginHand(m) {
   // even auto-run the hand to showdown), so the logger can't recover them
   const stacksBefore = m.game.players.map(p => ({ id: p.id, chips: p.chips }));
   m.game.startHand();
-  m.currentHandUuid = await logStartHand(m, m.game, stacksBefore).catch(e => { console.error('[hand] startHand failed:', e.message); return null; });
+  const { handUuid, rows } = buildStartRows(m, m.game, stacksBefore);
+  m.currentHandUuid = handUuid;
+  await writeHandRows(m, m.game, handUuid, rows).catch(e => console.error('[hand] startHand write failed:', e.message));
+  emitHandEvents(m, rows);
   console.log('[hand] started uuid:', m.currentHandUuid?.slice(0, 8));
 }
 
@@ -877,8 +903,10 @@ io.on('connection', (socket) => {
     try {
       const pre = preActionState(m.game, sp.playerId);
       m.game.handleAction(sp.playerId, action, amount);
-      logAction(m, m.game, pre)
+      const rows = buildActionRows(m, m.game, pre);
+      writeHandRows(m, m.game, m.currentHandUuid, rows)
         .catch(e => console.error('[hand] logAction:', e.message));
+      emitHandEvents(m, rows);
       broadcastMatchState(m);
       if (m.game.phase === 'showdown') scheduleNextHand(m, cfg.inter_hand_delay_ms);
     } catch (err) {

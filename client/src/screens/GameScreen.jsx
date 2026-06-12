@@ -119,6 +119,10 @@ const MY_BET_L     = Math.round(TABLE_W / 4);                             // rig
 // never reaches down into the player's hole cards below it.
 const MY_BET_BASE   = MY_BET_T + 33;                                      // pile bottom — keeps small bets where they were
 const MY_BET_SLOT_H = 96;                                                 // headroom for the tallest pile
+
+// Street-close bet collection — both piles sit equal, then slide into the pot
+const BET_HOLD_MS  = 200;
+const BET_SLIDE_MS = 260;
 const DEALER_SZ    = Math.round(0.07 * DESIGN_W);
 // Top dealer button: just to the LEFT of the D3 cross (right edge on D-col, centered on row-3 line)
 const DEALER_OPP_L = Math.round(TABLE_L + 3 * (TABLE_W / 4) - DEALER_SZ);
@@ -392,6 +396,7 @@ export default function GameScreen({ navigation }) {
   const {
     gameState, myId, onAction, onLeave, onRematch, onLogout,
     matchOver, navigationRef, deckStyle, opponentDisconnected, playerInfo,
+    handEventsRef,
   } = useContext(GameContext);
 
   useEffect(() => {
@@ -477,12 +482,53 @@ export default function GameScreen({ navigation }) {
   const myDeadline  = (observing ? me?.isCurrentPlayer : isMyTurn) ? gameState?.turnDeadline : null;
   const oppDeadline = opponent?.isCurrentPlayer ? gameState?.turnDeadline : null;
 
+  // ── Street-close bet collection ─────────────────────────────────────────
+  // Driven by the live hand-events stream (arrives just before the game-state
+  // that reflects it). When a batch closes a street (deal_board / showdown /
+  // hand_end), the settled state has already cleared the bets and grown the
+  // board — instead of jumping there, show the final equal bet piles, hold
+  // BET_HOLD_MS, slide them into the pot, then release to the live state.
+  const [collect, setCollect] = useState(null); // { bets: {playerId: amt}, pot }
+  const collecting  = !!collect;
+  const collectProg = useRef(new Animated.Value(0)).current;
+  const prevSnapRef = useRef(null);
+  useEffect(() => {
+    const prev = prevSnapRef.current;
+    prevSnapRef.current = gameState;
+    const batch = handEventsRef?.current;
+    if (!batch || !gameState || batch.matchId !== gameState.matchId) return;
+    handEventsRef.current = null; // each batch animates at most once
+    const rows = batch.rows || [];
+    if (!rows.some(r => ['deal_board', 'showdown', 'hand_end'].includes(r.type))) return;
+    if (!prev || prev.matchId !== gameState.matchId || prev.handNumber !== gameState.handNumber) return;
+    // Final piles = what was already on the felt + what the closing action added
+    const bets = {};
+    for (const p of prev.players || []) if (p.roundBet > 0) bets[p.id] = p.roundBet;
+    for (const r of rows) if (r.type === 'action' && r.amount > 0) bets[r.playerId] = (bets[r.playerId] || 0) + r.amount;
+    if (!Object.values(bets).some(v => v > 0)) return;
+    setCollect({ bets, pot: prev.pot || 0 });
+  }, [gameState]);
+  useEffect(() => {
+    if (!collect) return;
+    collectProg.setValue(0);
+    let anim = null;
+    const t = setTimeout(() => {
+      anim = Animated.timing(collectProg, {
+        toValue: 1, duration: BET_SLIDE_MS,
+        easing: Easing.bezier(0.45, 0, 0.75, 1), useNativeDriver: true,
+      });
+      anim.start(({ finished }) => { if (finished) setCollect(null); });
+    }, BET_HOLD_MS);
+    return () => { clearTimeout(t); if (anim) anim.stop(); };
+  }, [collect]);
+
   // Staggered community card reveal
   const targetCC   = gameState?.communityCards?.length || 0;
   const isShowdown = gameState?.phase === 'showdown';
   const [revealedCC, setRevealedCC] = useState(0);
   useEffect(() => {
     if (targetCC === 0) { setRevealedCC(0); return; }
+    if (collecting) return; // hold new cards until the bets finish sliding in
     if (revealedCC >= targetCC) return;
     const timers = [];
     let acc = 0;
@@ -495,7 +541,7 @@ export default function GameScreen({ navigation }) {
       }
     }
     return () => timers.forEach(clearTimeout);
-  }, [targetCC, isShowdown]);
+  }, [targetCC, isShowdown, collecting]);
 
   const [showWinners, setShowWinners] = useState(false);
   useEffect(() => {
@@ -564,8 +610,24 @@ export default function GameScreen({ navigation }) {
   }, [showWinners]);
 
   const locked  = isShowdown && !winDone;
-  const dispPot = locked ? snap.pot : totalPot;
+  const dispPot = locked ? snap.pot : (collecting ? collect.pot : totalPot);
   const chipsFor = p => locked ? (snap.chips[p?.id] ?? p?.chips ?? 0) : (p?.chips ?? 0);
+
+  // While collecting, pills show the final street bets and ride collectProg
+  const oppBetShown = collecting ? (collect.bets[opponent?.id] || 0) : (opponent?.roundBet || 0);
+  const myBetShown  = collecting ? (collect.bets[me?.id] || 0)      : (me?.roundBet || 0);
+  const collectOpacity = collectProg.interpolate({ inputRange: [0, 0.8, 1], outputRange: [1, 1, 0] });
+  const oppCollectStyle = {
+    opacity: collectOpacity,
+    transform: [{ translateY: collectProg.interpolate({ inputRange: [0, 1], outputRange: [0, POT_T - OPP_BET_T] }) }],
+  };
+  const myCollectStyle = {
+    opacity: collectOpacity,
+    transform: [
+      { translateY: collectProg.interpolate({ inputRange: [0, 1], outputRange: [0, POT_T - MY_BET_T] }) },
+      { translateX: collectProg.interpolate({ inputRange: [0, 1], outputRange: [0, -MY_BET_L / 2] }) },
+    ],
+  };
 
   // Pot-to-winner banana flight
   const flightY       = useRef(new Animated.Value(0)).current;
@@ -665,12 +727,12 @@ export default function GameScreen({ navigation }) {
 
           {/* Opponent bet */}
           <View style={[s.betSlot, { top: OPP_BET_T }]} pointerEvents="none">
-            {(opponent?.roundBet > 0 || opponent?.allIn) && (
-              <View style={s.betPill}>
-                {opponent.allIn && <Text style={s.allInTag}>ALL IN</Text>}
-                {opponent.roundBet > 0 && <ChipStack amount={opponent.roundBet} size={33} />}
-                {opponent.roundBet > 0 && <Text style={s.betAmt}>{opponent.roundBet.toLocaleString()}</Text>}
-              </View>
+            {(oppBetShown > 0 || opponent?.allIn) && (
+              <Animated.View style={[s.betPill, collecting && oppCollectStyle]}>
+                {opponent?.allIn && <Text style={s.allInTag}>ALL IN</Text>}
+                {oppBetShown > 0 && <ChipStack amount={oppBetShown} size={33} />}
+                {oppBetShown > 0 && <Text style={s.betAmt}>{oppBetShown.toLocaleString()}</Text>}
+              </Animated.View>
             )}
           </View>
 
@@ -696,12 +758,12 @@ export default function GameScreen({ navigation }) {
 
           {/* Player bet — bottom-anchored, grows up toward the pot (clears hole cards) */}
           <View style={[s.betSlot, { top: MY_BET_BASE - MY_BET_SLOT_H, height: MY_BET_SLOT_H, left: MY_BET_L, justifyContent: 'flex-end' }]} pointerEvents="none">
-            {(me?.roundBet > 0 || me?.allIn) && (
-              <View style={s.betPill}>
-                {me.allIn && <Text style={s.allInTag}>ALL IN</Text>}
-                {me.roundBet > 0 && <ChipStack amount={me.roundBet} size={33} />}
-                {me.roundBet > 0 && <Text style={s.betAmt}>{me.roundBet.toLocaleString()}</Text>}
-              </View>
+            {(myBetShown > 0 || me?.allIn) && (
+              <Animated.View style={[s.betPill, collecting && myCollectStyle]}>
+                {me?.allIn && <Text style={s.allInTag}>ALL IN</Text>}
+                {myBetShown > 0 && <ChipStack amount={myBetShown} size={33} />}
+                {myBetShown > 0 && <Text style={s.betAmt}>{myBetShown.toLocaleString()}</Text>}
+              </Animated.View>
             )}
           </View>
 
