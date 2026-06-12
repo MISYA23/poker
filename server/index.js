@@ -694,67 +694,112 @@ async function persistMatchResult(m, winner, loser, wEloBefore, lEloBefore, wElo
   ]);
 }
 
+// ── Identity & placement ──────────────────────────────────────────────────────
+
+// Bind this socket to a player identity: load the canonical profile
+// (display_name, avatar, ELO, country) from the DB and register it in
+// socketPlayers. The client never sends these — only a playerId. Idempotent and
+// side-effect-free w.r.t. match state, so it is safe to call on every connect,
+// reconnect, or lobby arrival.
+async function bindIdentity(socket, playerId) {
+  let playerName = 'Player', avatarId = 'cigar', country = null;
+  try {
+    const { rows } = await db.query(
+      `SELECT p.display_name, p.avatar_id, p.country, s.elo
+         FROM players p LEFT JOIN player_stats s ON s.player_id = p.id
+        WHERE p.id=$1`, [playerId]);
+    if (rows.length) {
+      playerName = rows[0].display_name;
+      avatarId = rows[0].avatar_id;
+      country = rows[0].country;
+      if (rows[0].elo != null && eloCache[playerId] == null) eloCache[playerId] = rows[0].elo;
+    }
+  } catch (e) { console.error('[identity] db lookup failed:', e.message); }
+
+  const existing = socketPlayers.get(socket.id);
+  const sp = {
+    matchId: existing?.matchId ?? null,
+    ...existing,
+    playerId,
+    playerName,
+    avatarId,
+    country,
+    socketId: socket.id,
+  };
+  socketPlayers.set(socket.id, sp);
+
+  // First sight of this player: geolocate their IP in the background
+  if (!country) {
+    lookupCountry(socketIp(socket)).then(cc => {
+      if (!cc) return;
+      db.query('UPDATE players SET country=$1 WHERE id=$2', [cc, playerId]).catch(() => {});
+      const cur = socketPlayers.get(socket.id);
+      if (cur && cur.playerId === playerId) { cur.country = cc; broadcastMatchList(); }
+    });
+  }
+  return sp;
+}
+
+// If a live match is holding a vacant seat for this identity, re-seat this socket
+// at the table, reap the grace timer, and pull the player back to the game.
+// Returns the match if reclaimed, else null. This is the server reconciling a
+// reconnect to its authoritative position — the player owns where they sit, the
+// client only re-announces that it is back.
+function reclaimSeat(socket, playerId) {
+  for (const m of matches.values()) {
+    if (m.ended) continue;
+    const seat = matchPlayers(m).find(p => p.playerId === playerId && p.vacant);
+    if (!seat) continue;
+    seat.vacant = false;
+    seat.socketId = socket.id;
+    const sp = socketPlayers.get(socket.id);
+    if (sp) sp.matchId = m.id;
+    if (!matchPlayers(m).some(p => p.vacant)) { clearTimeout(m.graceTimer); m.graceTimer = null; }
+    const other = matchPlayers(m).find(p => p.playerId !== playerId);
+    if (other) io.to(other.socketId).emit('opponent-reconnected');
+    io.to(socket.id).emit('match-found', { matchId: m.id, opponent: { name: other?.playerName || '' } });
+    broadcastMatchState(m);
+    broadcastMatchList();
+    console.log(`[match] ${sp?.playerName || playerId} re-seated at ${m.id.slice(0, 8)} after reconnect`);
+    return m;
+  }
+  return null;
+}
+
 // ── Socket handlers ───────────────────────────────────────────────────────────
 
 io.on('connection', (socket) => {
   console.log('[server] connected:', socket.id);
 
+  // Connection-level presence handshake. The client emits this on every socket
+  // (re)connect — it is the single, screen-agnostic way to (re)establish who is
+  // on this connection. The SERVER then places the player at their authoritative
+  // position: if they hold a seat at a live match (e.g. their previous socket
+  // dropped mid-hand and the seat is in its grace window) they are re-seated and
+  // pulled back to the table; otherwise they are free and get a fresh lobby view.
+  //
+  // Crucially this NEVER forfeits and NEVER dequeues — it is pure reconnection
+  // recovery, deliberately distinct from `enter-lobby`, which carries the "I have
+  // walked away from my table" intent. Reusing enter-lobby for reconnects is what
+  // produced the "Not in lobby" error (a reconnected socket the server no longer
+  // recognized) and lost matches on a brief blip.
+  socket.on('session', async ({ playerId } = {}) => {
+    if (!playerId) return;
+    await bindIdentity(socket, playerId);
+    if (reclaimSeat(socket, playerId)) return;   // reconnected mid-match → back to the table
+    broadcastMatchList();                          // free → repopulate their lobby view
+    refreshBroadcasts();
+  });
+
   socket.on('enter-lobby', async ({ playerId } = {}) => {
     if (playerId) {
-      // Load display_name, avatar_id, ELO and country from DB — client never sends these
-      let playerName = 'Player', avatarId = 'cigar', country = null;
-      try {
-        const { rows } = await db.query(
-          `SELECT p.display_name, p.avatar_id, p.country, s.elo
-             FROM players p LEFT JOIN player_stats s ON s.player_id = p.id
-            WHERE p.id=$1`, [playerId]);
-        if (rows.length) {
-          playerName = rows[0].display_name;
-          avatarId = rows[0].avatar_id;
-          country = rows[0].country;
-          if (rows[0].elo != null && eloCache[playerId] == null) eloCache[playerId] = rows[0].elo;
-        }
-      } catch (e) { console.error('[enter-lobby] db lookup failed:', e.message); }
+      await bindIdentity(socket, playerId);
 
-      const existing = socketPlayers.get(socket.id);
-      socketPlayers.set(socket.id, {
-        matchId: existing?.matchId ?? null,
-        ...existing,
-        playerId,
-        playerName,
-        avatarId,
-        country,
-        socketId: socket.id,
-      });
-      // First sight of this player: geolocate their IP in the background
-      if (!country) {
-        lookupCountry(socketIp(socket)).then(cc => {
-          if (!cc) return;
-          db.query('UPDATE players SET country=$1 WHERE id=$2', [cc, playerId]).catch(() => {});
-          const cur = socketPlayers.get(socket.id);
-          if (cur && cur.playerId === playerId) { cur.country = cc; broadcastMatchList(); }
-        });
-      }
-
-      // A live match holding a vacant seat for this identity takes priority
-      // over the lobby — re-seat the new socket and send them to the table.
-      // (Refresh / connection-blip recovery.)
-      for (const m of matches.values()) {
-        if (m.ended) continue;
-        const seat = matchPlayers(m).find(p => p.playerId === playerId && p.vacant);
-        if (!seat) continue;
-        seat.vacant = false;
-        seat.socketId = socket.id;
-        socketPlayers.get(socket.id).matchId = m.id;
-        if (!matchPlayers(m).some(p => p.vacant)) { clearTimeout(m.graceTimer); m.graceTimer = null; }
-        const other = matchPlayers(m).find(p => p.playerId !== playerId);
-        if (other) io.to(other.socketId).emit('opponent-reconnected');
-        io.to(socket.id).emit('match-found', { matchId: m.id, opponent: { name: other?.playerName || '' } });
-        broadcastMatchState(m);
-        broadcastMatchList();
-        console.log(`[match] ${playerName} re-seated at ${m.id.slice(0, 8)} after reconnect`);
-        return;
-      }
+      // Safety reconciliation for navigation races (e.g. a web refresh that boots
+      // straight into the Lobby) where enter-lobby fires while this identity still
+      // holds a vacant seat: treat it as a reconnect, not an abandon. The primary
+      // reconnect path is the `session` handshake above; this guards the race.
+      if (reclaimSeat(socket, playerId)) return;
 
       // Lobby and table are mutually exclusive. If this socket is still seated
       // at a live match, arriving at the lobby means they abandoned it —

@@ -182,7 +182,50 @@ async function startMatch(challenger, accepter) {
   J.socket.emit('leave-table');
   await jReset;
 
-  for (const p of [A, C, D2, E2, F, G, H, J]) p.socket.disconnect();
+  // ════ 8. session handshake: reconnect restores identity + re-seats ════
+  console.log('8. session handshake reconnect:');
+  // (a) Lobby identity: a reconnected socket that announces via `session` can act
+  //     again — without it the server rejects find-match with "Not in lobby".
+  const K = await makePlayer('K');
+  K.socket.disconnect();
+  await sleep(300);
+  const K2 = { playerId: K.playerId, socket: io(URL, { transports: ['websocket'] }) };
+  await new Promise(r => K2.socket.on('connect', r));
+  K2.socket.emit('session', { playerId: K.playerId });
+  await sleep(400);
+  const kQueued = waitFor(K2.socket, 'in-queue', 2500);
+  K2.socket.emit('find-match', { playerId: K.playerId });
+  check('session restores lobby identity (find-match works, no "Not in lobby")', (await kQueued) !== null);
+  const kCancelled = waitFor(K2.socket, 'queue-cancelled', 2000);
+  K2.socket.emit('cancel-match');
+  await kCancelled;
+
+  // (b) Table reclaim: disconnect mid-match, reconnect, announce via `session`
+  //     → re-seated at the SAME match, opponent notified, no stale grace-forfeit.
+  const L = await makePlayer('L');
+  const Mp = await makePlayer('M');
+  const lmMatch = await startMatch(L, Mp);
+  const lBanner = waitFor(L.socket, 'opponent-disconnected', 4000);
+  Mp.socket.disconnect();
+  await lBanner;
+  const lBack = waitFor(L.socket, 'opponent-reconnected', 5000);
+  const M2 = { playerId: Mp.playerId, socket: io(URL, { transports: ['websocket'] }) };
+  await new Promise(r => M2.socket.on('connect', r));
+  const mReseat = waitFor(M2.socket, 'match-found', 5000);
+  M2.socket.emit('session', { playerId: Mp.playerId });
+  const reseat = await mReseat;
+  check('session re-seats player at the SAME match', reseat !== null && reseat.matchId === lmMatch);
+  check('opponent notified reconnected via session', (await lBack) !== null);
+  const lOverStale = waitFor(L.socket, 'match-over', GRACE + 2000);
+  check('no stale grace-forfeit after session rejoin', (await lOverStale) === null);
+  // tear down the live L–M match
+  const mForfeit = waitFor(M2.socket, 'match-over', 4000);
+  L.socket.emit('leave-table');
+  await mForfeit;
+  M2.socket.emit('rematch-vote', { vote: false });
+  await waitFor(M2.socket, 'reset', 3000);
+
+  for (const p of [A, C, D2, E2, F, G, H, J, K2, L, M2]) p.socket.disconnect();
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })().catch(err => { console.error('Test crashed:', err); process.exit(1); });

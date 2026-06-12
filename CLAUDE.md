@@ -205,6 +205,7 @@ poker/
 ## Socket events
 | Event | Direction | Payload |
 |---|---|---|
+| `session` | client→server | `{ playerId }` — connection-level reconnect handshake; emitted on every socket (re)connect. Re-binds identity and lets the server place the player (re-seat at a live match within grace, else lobby). Never forfeits — distinct from `enter-lobby`. |
 | `enter-lobby` | client→server | `{ playerId, playerName, avatarId }` |
 | `find-match` | client→server | `{ playerId, playerName, avatarId }` |
 | `cancel-match` | client→server | — |

@@ -64,6 +64,9 @@ export default function App() {
 
   const navigationRef = useNavigationContainerRef();
   const matchIdRef    = useRef(null);
+  // Current player id, mirrored into a ref so the socket 'connect' handler
+  // (bound once at mount) can re-announce identity on every reconnect.
+  const playerIdRef   = useRef(null);
   // Socket handlers are bound once at mount (useSocket) — they must read these
   // refs, never the overlay state above.
   const searchRef     = useRef(null);
@@ -96,7 +99,17 @@ export default function App() {
       .catch(() => {});
   }, []);
 
+  // Keep the player id available to the mount-bound socket handlers below.
+  useEffect(() => { playerIdRef.current = playerInfo?.playerId ?? null; }, [playerInfo]);
+
   const emit = useSocket({
+    // Re-establish identity on every (re)connect. Socket.IO hands out a new
+    // socket id each time and the server forgets the old one on disconnect; the
+    // `session` handshake re-announces us so the server can place us back where
+    // we belong (lobby, or re-seated at a live match within its grace window).
+    // Without it the server rejects our next action with "Not in lobby" and a
+    // brief blip at the table lapses into a forfeit.
+    connect:           ()            => { if (playerIdRef.current) emit('session', { playerId: playerIdRef.current }); },
     'in-queue':        ()            => { setInQueue(true); setError(null); },
     'queue-cancelled': ()            => { setInQueue(false); setSearch(null); },
     'match-found':     ({ matchId, opponent, fallback }) => {
