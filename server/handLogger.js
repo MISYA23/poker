@@ -7,6 +7,28 @@ const db = new Pool({ connectionString: process.env.DATABASE_URL });
 // matchUuid → integer matches.id (cached)
 const matchIdCache = {};
 
+// ── Hand event log ────────────────────────────────────────────────────────────
+// Every hand is one flat, strictly-sequential stream of discrete events sharing
+// a single per-hand seq counter (room.handEventSeq). Each row:
+//   phase  = the street the event happened ON (captured before the action
+//            mutates the game — a call that closes pre-flop is still pre-flop)
+//   amount = chips that physically moved into the pot with this event
+//
+// Vocabulary:
+//   hand_start   players w/ pre-blind stacks, dealer/blind seats, blind sizes
+//   blind_small  amount = chips posted, data.pot = running pot
+//   blind_big    "
+//   deal_hole    one per player, data.cards
+//   action       one per decision: data {action, to?, allIn?, pot}
+//                action ∈ fold|check|call|bet|raise|all-in (engine label),
+//                to = raise-to total, pot = running pot after this action
+//   deal_board   one per street even on all-in runouts: data {street, cards, allCards}
+//   showdown     hole-card reveal (omitted when the hand ends by fold)
+//   hand_end     always the final row: data {endedBy, pot, winners}
+//
+// Rows are constructed synchronously before any await so a fast follow-up
+// action can never interleave seq assignment.
+
 async function ensurePlayers(players) {
   for (const p of players) {
     if (!p.id || !p.name) continue;
@@ -42,97 +64,174 @@ async function getOrCreateMatchRow(matchUuid, p1, p2, previousMatchUuid) {
   return rows[0].id;
 }
 
-// Called when a new hand starts. Returns a fresh handUuid.
-async function startHand(room, game) {
-  const handUuid = randomUUID();
-  const seq = { n: 0 };
-  const next = () => ++seq.n;
+const fmtCards = (cards) => (cards || []).map(c => `${c.rank}${c.suit}`);
+const nextSeq = (room) => (room.handEventSeq = (room.handEventSeq || 0) + 1);
 
-  await logEvent(room.id, handUuid, {
-    type: 'hand_start', seq: next(), ts: Date.now(), handUuid,
-    players: game.players.map(p => ({ id: p.id, name: p.name, chips: p.chips })),
+// Board reveals + terminal events implied by the game's current state.
+// prevCommunityCount = board size before the triggering mutation; an all-in
+// runout that fills the board in one step still gets one deal_board per street.
+// endPhase = street the triggering action happened on (used for fold-ends).
+function progressRows(room, game, prevCommunityCount, endPhase) {
+  const rows = [];
+  const all = fmtCards(game.communityCards);
+
+  for (const [street, start, end] of [['flop', 0, 3], ['turn', 3, 4], ['river', 4, 5]]) {
+    if (prevCommunityCount < end && all.length >= end) {
+      rows.push({
+        type: 'deal_board', seq: nextSeq(room), ts: Date.now(), phase: street,
+        data: { street, cards: all.slice(start, end), allCards: all.slice(0, end) },
+      });
+    }
+  }
+
+  if (game.phase === 'showdown' && game.winners?.length) {
+    if (!game.handEndedByFold) {
+      rows.push({
+        type: 'showdown', seq: nextSeq(room), ts: Date.now(), phase: 'showdown',
+        data: {
+          hands: game.players
+            .filter(p => !p.folded && p.holeCards?.length)
+            .map(p => ({ playerId: p.id, name: p.name, cards: fmtCards(p.holeCards) })),
+        },
+      });
+    }
+    const pot = game.winners.reduce((s, w) => s + (w.amount || 0), 0);
+    rows.push({
+      type: 'hand_end', seq: nextSeq(room), ts: Date.now(),
+      phase: game.handEndedByFold ? endPhase : 'showdown',
+      data: {
+        endedBy: game.handEndedByFold ? 'fold' : 'showdown',
+        pot,
+        winners: game.winners.map(w => ({
+          playerId: w.playerId, name: w.playerName,
+          amount: w.amount, handName: w.handName,
+        })),
+      },
+    });
+  }
+
+  return rows;
+}
+
+// Called when a new hand starts. stacksBefore = [{id, chips}] captured before
+// game.startHand() posted the blinds, so hand_start records true pre-blind
+// stacks even if posting the blinds auto-ran the hand to showdown.
+// Returns a fresh handUuid.
+async function startHand(room, game, stacksBefore = null) {
+  const handUuid = randomUUID();
+  room.handEventSeq = 0;
+  const st = game.getStateFor(null);
+  const stackOf = (p) => stacksBefore?.find(s => s.id === p.id)?.chips ?? (p.chips + p.totalBet);
+  const rows = [];
+
+  rows.push({
+    type: 'hand_start', seq: nextSeq(room), ts: Date.now(), phase: 'pre-flop',
+    data: {
+      handUuid,
+      handNumber: room.handCount || 1,
+      players: game.players
+        .filter(p => p.holeCards?.length)
+        .map(p => ({ id: p.id, name: p.name, avatarId: p.avatarId, chips: stackOf(p) })),
+      dealerId: st.dealerId,
+      smallBlindId: st.smallBlindId,
+      bigBlindId: st.bigBlindId,
+      smallBlind: game.smallBlind,
+      bigBlind: game.bigBlind,
+    },
   });
+
+  let pot = 0;
+  for (const [pid, type] of [[st.smallBlindId, 'blind_small'], [st.bigBlindId, 'blind_big']]) {
+    const p = game.players.find(pl => pl.id === pid);
+    if (p && p.totalBet > 0) {
+      pot += p.totalBet;
+      rows.push({
+        type, seq: nextSeq(room), ts: Date.now(),
+        playerId: p.id, amount: p.totalBet, phase: 'pre-flop',
+        data: { pot },
+      });
+    }
+  }
 
   for (const p of game.players) {
     if (p.holeCards?.length) {
-      await logEvent(room.id, handUuid, {
-        type: 'deal', seq: next(), ts: Date.now(),
-        playerId: p.id,
-        cards: p.holeCards.map(c => `${c.rank}${c.suit}`),
+      rows.push({
+        type: 'deal_hole', seq: nextSeq(room), ts: Date.now(),
+        playerId: p.id, phase: 'pre-flop',
+        data: { cards: fmtCards(p.holeCards) },
       });
     }
   }
 
-  for (const p of game.players) {
-    if (p.roundBet > 0) {
-      await logEvent(room.id, handUuid, {
-        type: p.isSmallBlind ? 'blind_small' : 'blind_big',
-        seq: next(), ts: Date.now(),
-        playerId: p.id, amount: p.roundBet,
-      });
-    }
-  }
+  // Posting the blinds can settle all betting (blind all-in already covered) —
+  // the engine then runs straight to showdown before anyone acts.
+  rows.push(...progressRows(room, game, 0, 'pre-flop'));
 
+  for (const row of rows) await logEvent(room.id, handUuid, row);
   await setSnapshot(room.id, buildSnapshot(room, game));
   return handUuid;
 }
 
-// Called after every player-action.
-async function logAction(room, game, playerId, action, amount, prevCommunityCount) {
+// Capture BEFORE game.handleAction() — the logger needs the pre-action street,
+// pot, board size and the actor's chips already committed this hand.
+function preActionState(game, playerId) {
+  const p = game.players.find(pl => pl.id === playerId);
+  return {
+    playerId,
+    phase: game.phase,
+    pot: game.pot,
+    communityCount: game.communityCards?.length || 0,
+    totalBet: p?.totalBet || 0,
+  };
+}
+
+// Called after every player-action (human, bot, or turn-timeout fold).
+async function logAction(room, game, pre) {
   const handUuid = room.currentHandUuid;
   if (!handUuid) return;
 
-  const seq = room.handEventSeq = (room.handEventSeq || 0) + 1;
+  const player = game.players.find(p => p.id === pre.playerId);
+  // game.lastAction holds the engine's truth: real call amounts, and the
+  // bet/raise/all-in label it actually applied (not the client's raw input)
+  const la = game.lastAction?.playerId === pre.playerId ? game.lastAction : null;
+  const label = la?.action || 'fold';
+  const committed = Math.max(0, (player?.totalBet || 0) - pre.totalBet);
 
-  await logEvent(room.id, handUuid, {
-    type: 'action', seq, ts: Date.now(),
-    playerId, action,
-    amount: amount || 0,
-    phase: game.phase,
-    data: { action, amount: amount || 0 },
-  });
+  const data = { action: label, pot: pre.pot + committed };
+  if (['bet', 'raise', 'all-in'].includes(label) && la?.amount != null) data.to = la.amount;
+  if (player?.allIn && label !== 'all-in') data.allIn = true;
 
-  // Community cards newly revealed
-  const newCards = game.communityCards.slice(prevCommunityCount);
-  if (newCards.length > 0) {
-    const commSeq = room.handEventSeq = (room.handEventSeq || 0) + 1;
-    await logEvent(room.id, handUuid, {
-      type: 'community', seq: commSeq, ts: Date.now(),
-      phase: game.phase,
-      data: {
-        cards: newCards.map(c => `${c.rank}${c.suit}`),
-        allCards: game.communityCards.map(c => `${c.rank}${c.suit}`),
-        phase: game.phase,
-      },
-    });
-  }
+  const rows = [{
+    type: 'action', seq: nextSeq(room), ts: Date.now(),
+    playerId: pre.playerId, amount: committed, phase: pre.phase, data,
+  }];
+  rows.push(...progressRows(room, game, pre.communityCount, pre.phase));
 
-  // Showdown
-  if (game.phase === 'showdown' && game.winners?.length) {
-    const sdSeq = room.handEventSeq = (room.handEventSeq || 0) + 1;
-    await logEvent(room.id, handUuid, {
-      type: 'showdown', seq: sdSeq, ts: Date.now(),
-      data: {
-        hands: game.players.map(p => ({
-          playerId: p.id,
-          cards: p.holeCards?.map(c => `${c.rank}${c.suit}`) || [],
-        })),
-        winners: game.winners.map(w => ({
-          playerId: w.playerId,
-          amount: w.amount,
-          handName: w.handName,
-        })),
-      },
-    });
-  }
-
+  for (const row of rows) await logEvent(room.id, handUuid, row);
   await setSnapshot(room.id, buildSnapshot(room, game));
 }
+
+const EVENT_TYPES = [
+  'hand_start', 'blind_small', 'blind_big', 'deal_hole',
+  'action', 'deal_board', 'showdown', 'hand_end',
+];
 
 // Called when hand ends — flush Redis log → Postgres.
 async function flushHandToDb(room, game) {
   const handUuid = room.currentHandUuid;
   if (!handUuid) return;
+
+  // Everything below must be captured synchronously — the next hand can begin
+  // (and reset winners/communityCards/pot) while the awaits are in flight
+  const winner = game.winners?.[0];
+  const summary = {
+    handNumber: room.handCount || 1,
+    // game.pot zeroes when the pot is awarded — the winners' total is the pot
+    pot: game.winners?.reduce((s, w) => s + (w.amount || 0), 0) || 0,
+    communityCards: JSON.stringify(fmtCards(game.communityCards)),
+    winnerId: winner?.playerId || null,
+    winningHand: winner?.handName || null,
+  };
 
   try {
     const events = await getHandEvents(room.id, handUuid);
@@ -142,23 +241,21 @@ async function flushHandToDb(room, game) {
     if (!p1?.id || !p2?.id) { await clearHandEvents(room.id, handUuid); return; }
 
     const matchDbId = await getOrCreateMatchRow(room.id, p1, p2, room.previousMatchUuid);
-    const winner = game.winners?.[0];
 
     const { rows: [hand] } = await db.query(
       `INSERT INTO hands (match_id, hand_uuid, hand_number, ended_at, pot, community_cards, winner_id, winning_hand)
        VALUES ($1, $2, $3, NOW(), $4, $5, $6, $7) RETURNING id`,
       [
-        matchDbId, handUuid, room.handCount || 1,
-        game.pot || 0,
-        JSON.stringify(game.communityCards?.map(c => `${c.rank}${c.suit}`) || []),
-        winner?.playerId || null,
-        winner?.handName || null,
+        matchDbId, handUuid, summary.handNumber,
+        summary.pot,
+        summary.communityCards,
+        summary.winnerId,
+        summary.winningHand,
       ]
     );
 
-    // Bulk insert events — player_id only, no name
     for (const ev of events) {
-      if (['action', 'blind_small', 'blind_big', 'deal', 'community', 'showdown', 'hand_start'].includes(ev.type)) {
+      if (EVENT_TYPES.includes(ev.type)) {
         await db.query(
           `INSERT INTO hand_events (hand_id, sequence_num, event_type, player_id, amount, phase, data)
            VALUES ($1, $2, $3, $4, $5, $6, $7)`,
@@ -167,7 +264,7 @@ async function flushHandToDb(room, game) {
             ev.playerId || null,
             ev.amount || 0,
             ev.phase || null,
-            JSON.stringify(ev.data || ev),
+            JSON.stringify(ev.data || {}),
           ]
         );
       }
@@ -200,4 +297,4 @@ function buildSnapshot(room, game) {
   };
 }
 
-module.exports = { startHand, logAction, flushHandToDb, buildSnapshot };
+module.exports = { startHand, logAction, preActionState, flushHandToDb, buildSnapshot };
