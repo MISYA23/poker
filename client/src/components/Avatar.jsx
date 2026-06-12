@@ -7,10 +7,14 @@ const AVATAR_IMAGES = {
   queen: require('../../assets/queen.png'),
   lemur: require('../../assets/lemur.png'),
   captain: require('../../assets/captain.png'),
+  baboon: require('../../assets/baboon.png'),
+  sailor: require('../../assets/sailor.png'),
+  banana: require('../../assets/banana.png'),
+  parrot: require('../../assets/parrot.png'),
 };
 
 export default function Avatar({ size = 52, avatarId }) {
-  const source = AVATAR_IMAGES[avatarId] || AVATAR_IMAGES.cigar || AVATAR_IMAGES.queen;
+  const source = AVATAR_IMAGES[avatarId] || AVATAR_IMAGES.captain || AVATAR_IMAGES.queen;
   return (
     <View style={[styles.wrap, { width: size, height: size, borderRadius: size / 2 }]}>
       <Image source={source} style={{ width: size, height: size, borderRadius: size / 2 }} resizeMode="cover" />

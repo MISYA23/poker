@@ -13,6 +13,10 @@ const AVATAR_IMAGES = {
   queen: require('../../assets/queen.png'),
   lemur: require('../../assets/lemur.png'),
   captain: require('../../assets/captain.png'),
+  baboon: require('../../assets/baboon.png'),
+  sailor: require('../../assets/sailor.png'),
+  banana: require('../../assets/banana.png'),
+  parrot: require('../../assets/parrot.png'),
 };
 
 const RANK_COLORS = ['#FFD700', '#C0C0C0', '#CD7F32'];
@@ -70,7 +74,7 @@ export default function LeaderboardScreen({ navigation }) {
               </Text>
               <View style={s.colName}>
                 <Image
-                  source={AVATAR_IMAGES[p.avatarId] || AVATAR_IMAGES.cigar}
+                  source={AVATAR_IMAGES[p.avatarId] || AVATAR_IMAGES.captain}
                   style={s.avatar}
                 />
                 <Text style={s.flag}>{p.isBot ? '🤖' : flagEmoji(p.country)}</Text>

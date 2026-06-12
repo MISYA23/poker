@@ -13,12 +13,16 @@ const AVATAR_IMAGES = {
   queen: require('../../assets/queen.png'),
   lemur: require('../../assets/lemur.png'),
   captain: require('../../assets/captain.png'),
+  baboon: require('../../assets/baboon.png'),
+  sailor: require('../../assets/sailor.png'),
+  banana: require('../../assets/banana.png'),
+  parrot: require('../../assets/parrot.png'),
 };
 
 function PlayerRow({ player, action, actionLabel, actionColor, secondAction, secondLabel }) {
   return (
     <View style={s.playerRow}>
-      <Image source={AVATAR_IMAGES[player.avatarId] || AVATAR_IMAGES.cigar} style={s.avatar} />
+      <Image source={AVATAR_IMAGES[player.avatarId] || AVATAR_IMAGES.captain} style={s.avatar} />
       <View style={s.playerInfo}>
         <Text style={s.playerName} numberOfLines={1}>{player.displayName || player.name}</Text>
         {player.elo != null && <Text style={s.playerElo}>ELO {player.elo}</Text>}
@@ -189,7 +193,7 @@ export default function FriendsTab({ onlinePlayers }) {
       {/* Incoming requests — prominent cards at top */}
       {incoming.map(f => (
         <View key={f.friendId} style={s.requestCard}>
-          <Image source={AVATAR_IMAGES[f.avatarId] || AVATAR_IMAGES.cigar} style={s.requestAvatar} />
+          <Image source={AVATAR_IMAGES[f.avatarId] || AVATAR_IMAGES.captain} style={s.requestAvatar} />
           <View style={s.requestInfo}>
             <Text style={s.requestName}>{f.displayName}</Text>
             <Text style={s.requestSub}>wants to be your friend</Text>

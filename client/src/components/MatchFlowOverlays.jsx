@@ -9,6 +9,10 @@ const AVATAR_IMAGES = {
   queen: require('../../assets/queen.png'),
   lemur: require('../../assets/lemur.png'),
   captain: require('../../assets/captain.png'),
+  baboon: require('../../assets/baboon.png'),
+  sailor: require('../../assets/sailor.png'),
+  banana: require('../../assets/banana.png'),
+  parrot: require('../../assets/parrot.png'),
 };
 
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
@@ -19,7 +23,7 @@ export function AvatarBadge({ avatarId, country, size = 74 }) {
   return (
     <View style={{ width: size, height: size }}>
       <Image
-        source={AVATAR_IMAGES[avatarId] || AVATAR_IMAGES.cigar}
+        source={AVATAR_IMAGES[avatarId] || AVATAR_IMAGES.captain}
         style={{ width: size, height: size, borderRadius: size * 0.26, backgroundColor: '#1b2a3b' }}
         resizeMode="cover"
       />

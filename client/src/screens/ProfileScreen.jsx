@@ -1,6 +1,6 @@
 import React, { useContext, useState, useEffect } from 'react';
 import {
-  View, Text, TextInput, Pressable, Image, ScrollView, StyleSheet, ActivityIndicator, Platform,
+  View, Text, TextInput, Pressable, Image, ScrollView, StyleSheet, ActivityIndicator, Platform, Dimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { GameContext } from '../context/GameContext';
@@ -15,7 +15,20 @@ const AVATAR_IMAGES = {
   queen: require('../../assets/queen.png'),
   lemur: require('../../assets/lemur.png'),
   captain: require('../../assets/captain.png'),
+  baboon: require('../../assets/baboon.png'),
+  sailor: require('../../assets/sailor.png'),
+  banana: require('../../assets/banana.png'),
+  parrot: require('../../assets/parrot.png'),
 };
+
+// captain is the default avatar → always show it first in the picker
+const captainFirst = (list) =>
+  [...list].sort((a, b) => (a.avatar_id === 'captain' ? -1 : 0) - (b.avatar_id === 'captain' ? -1 : 0));
+
+// Avatar picker grid: 5 per row, sized to the screen width (capped for desktop web)
+const AV_COLS = 5;
+const AV_GAP  = 10;
+const AV_SIZE = Math.floor((Math.min(Dimensions.get('window').width, 440) - 40 - AV_GAP * (AV_COLS - 1)) / AV_COLS);
 
 export default function ProfileScreen({ navigation }) {
   const { playerInfo, onUpdateProfile, deckStyle, setDeckStyle } = useContext(GameContext);
@@ -29,10 +42,10 @@ export default function ProfileScreen({ navigation }) {
 
   const [name, setName]         = useState(playerInfo?.name || '');
   const [avatars, setAvatars]   = useState(
-    Object.keys(AVATAR_IMAGES).map(id => ({ avatar_id: id, image_key: id }))
+    captainFirst(Object.keys(AVATAR_IMAGES).map(id => ({ avatar_id: id, image_key: id })))
   );
   const [avatarId, setAvatarId] = useState(
-    AVATAR_IMAGES[playerInfo?.avatarId] ? playerInfo.avatarId : 'cigar'
+    AVATAR_IMAGES[playerInfo?.avatarId] ? playerInfo.avatarId : 'captain'
   );
   const [saving, setSaving]     = useState(false);
   const [history, setHistory]   = useState(null);
@@ -41,7 +54,15 @@ export default function ProfileScreen({ navigation }) {
   useEffect(() => {
     fetch(`${SERVER_URL}/api/avatars`)
       .then(r => r.json())
-      .then(rows => setAvatars(rows.filter(a => AVATAR_IMAGES[a.image_key])))
+      .then(rows => {
+        const serverAvs = rows.filter(a => AVATAR_IMAGES[a.image_key]);
+        const known = new Set(serverAvs.map(a => a.avatar_id));
+        // also offer any locally-bundled avatar the server doesn't list yet
+        const localOnly = Object.keys(AVATAR_IMAGES)
+          .filter(id => !known.has(id))
+          .map(id => ({ avatar_id: id, image_key: id }));
+        setAvatars(captainFirst([...serverAvs, ...localOnly]));
+      })
       .catch(() => {});
   }, []);
 
@@ -180,10 +201,10 @@ const s = StyleSheet.create({
   sectionLbl: { color: colors.gray, fontSize: 11, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 1 },
   input: { backgroundColor: 'rgba(0,0,0,0.4)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12, color: colors.white, fontSize: 16 },
   uuidTxt: { color: 'rgba(255,255,255,0.3)', fontSize: 11, paddingHorizontal: 4 },
-  avatarRow: { flexDirection: 'row', gap: 12 },
-  avatarOpt: { width: 64, height: 64, borderRadius: 32, borderWidth: 2, borderColor: 'rgba(255,255,255,0.2)', overflow: 'hidden' },
+  avatarRow: { flexDirection: 'row', flexWrap: 'wrap', gap: AV_GAP },
+  avatarOpt: { width: AV_SIZE, height: AV_SIZE, borderRadius: AV_SIZE / 2, borderWidth: 2, borderColor: 'rgba(255,255,255,0.2)', overflow: 'hidden' },
   avatarSel: { borderColor: colors.goldLight },
-  avatarImg: { width: 64, height: 64 },
+  avatarImg: { width: AV_SIZE, height: AV_SIZE },
   saveBtn: { backgroundColor: colors.gold, borderRadius: 12, paddingVertical: 14, alignItems: 'center' },
   saveDim: { opacity: 0.45 },
   saveTxt: { color: '#000', fontSize: 16, fontWeight: '800' },

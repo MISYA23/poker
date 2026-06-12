@@ -319,7 +319,7 @@ function DisconnectBanner({ deadline }) {
 }
 
 // ─── PlayerPod — avatar + nameplate only (hole cards are now separate) ────────
-function PlayerPod({ player, isMe, observing, turnDeadline, lastAction, win, displayChips, deckStyle }) {
+function PlayerPod({ player, isMe, observing, turnDeadline, lastAction, win, displayChips, deckStyle, avatarOverride }) {
   const actionLbl = useActionFlash(player, lastAction);
   const present   = !!player;
   const isActive  = present && !!player.isCurrentPlayer;
@@ -335,7 +335,7 @@ function PlayerPod({ player, isMe, observing, turnDeadline, lastAction, win, dis
       isMe ? s.avatarBlockMe : s.avatarBlockOpp,
       !present && s.avatarPlaceholder,
     ]}>
-      <Avatar size={AVATAR_SZ} avatarId={player?.avatarId} />
+      <Avatar size={AVATAR_SZ} avatarId={avatarOverride || player?.avatarId} />
       {allIn && (
         <View style={[s.avatarAllInGlow, { width: AVATAR_SZ, height: AVATAR_SZ, borderRadius: AVATAR_SZ / 2 }]}
           pointerEvents="none" />
@@ -732,6 +732,7 @@ export default function GameScreen({ navigation }) {
               turnDeadline={myDeadline} lastAction={gameState?.lastAction}
               win={me ? activeWinners[me.id] : null}
               displayChips={me ? chipsFor(me) : 0}
+              avatarOverride={observing ? undefined : playerInfo?.avatarId}
               deckStyle={deckStyle} />
           </View>
 

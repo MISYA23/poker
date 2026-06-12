@@ -66,7 +66,7 @@ export default function LoginScreen() {
 
     const playerId   = serverRes?.playerId || `g_${profile.id}`;
     const playerName = serverRes?.name || profile.given_name || profile.name || '';
-    const av         = serverRes?.avatarId || 'cigar';
+    const av         = serverRes?.avatarId || 'captain';
 
     await setUser({ playerId, name: playerName, email: profile.email });
     onLogin(playerName, av, playerId);
@@ -76,7 +76,7 @@ export default function LoginScreen() {
   useEffect(() => {
     getUser().then(async (user) => {
       if (!user?.playerId || !user?.name) return;
-      let av = 'cigar';
+      let av = 'captain';
       try {
         const data = await fetch(`${SERVER_URL}/api/player/${user.playerId}/profile`).then(r => r.json());
         if (data.avatarId) av = data.avatarId;
@@ -135,7 +135,7 @@ export default function LoginScreen() {
       body: JSON.stringify({ playerId, name: trimmed }),
     });
     await setUser({ name: trimmed, playerId });
-    onLogin(trimmed, 'cigar', playerId);
+    onLogin(trimmed, 'captain', playerId);
   };
 
   return (
