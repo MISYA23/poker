@@ -2523,10 +2523,10 @@ async function initMusicTracks() {
     `);
     const seeds = [
       ['chill-tropics', 'Chill Tropics', true,  false, 1],
-      ['pirates',       'Pirates',       false, true,  2],
-      ['fun-caribbean', 'Fun Caribbean', false, true,  3],
-      ['epic-celtic',   'Epic Celtic',   false, true,  4],
+      ['fun-caribbean', 'Fun Caribbean', false, true,  2],
     ];
+    // Tracks no longer shipped in the client build
+    await db.query(`DELETE FROM music_tracks WHERE track_key IN ('pirates', 'epic-celtic')`);
     for (const [key, label, menu, game, sort] of seeds) {
       await db.query(
         `INSERT INTO music_tracks (track_key, label, menu, game, sort)
