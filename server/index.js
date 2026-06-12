@@ -2441,19 +2441,24 @@ async function initAvatars() {
     )
   `);
   const seeds = [
-    ['cigar', 'Cigar Monkey', 'cigar'],
-    ['queen', 'Queen',        'queen'],
-    ['lemur', 'Lemur',        'lemur'],
-    ['captain', 'Captain',    'captain'],
+    ['captain', 'Captain Flint', 'captain'],  // default
+    ['queen',   'Pearl',         'queen'],
+    ['banana',  'Banjo',         'banana'],
+    ['lemur',   'Skip',          'lemur'],
+    ['baboon',  'Mad Jack',      'baboon'],
+    ['sailor',  'Big Buck',      'sailor'],
+    ['cigar',   'Don Rumbo',     'cigar'],
+    ['parrot',  'Snitch',        'parrot'],
   ];
   for (const [id, name, key] of seeds) {
     await db.query(
-      `INSERT INTO avatars (avatar_id, display_name, image_key) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING`,
+      `INSERT INTO avatars (avatar_id, display_name, image_key) VALUES ($1, $2, $3)
+       ON CONFLICT (avatar_id) DO UPDATE SET display_name = EXCLUDED.display_name, image_key = EXCLUDED.image_key`,
       [id, name, key]
     );
   }
-  // Migrate any players with stale avatar_ids to 'cigar'
-  await db.query(`UPDATE players SET avatar_id = 'cigar' WHERE avatar_id NOT IN (SELECT avatar_id FROM avatars)`);
+  // Migrate any players with stale avatar_ids to the default ('captain')
+  await db.query(`UPDATE players SET avatar_id = 'captain' WHERE avatar_id NOT IN (SELECT avatar_id FROM avatars)`);
   // Add FK constraint if not already present
   await db.query(`
     DO $$
