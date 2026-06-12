@@ -7,7 +7,7 @@ const { Pool }   = require('pg');
 const { randomUUID } = require('crypto');
 const { PokerGame }  = require('./game/PokerGame');
 const { redis }      = require('./redis');
-const { startHand: logStartHand, logAction, flushHandToDb } = require('./handLogger');
+const { startHand: logStartHand, logAction, preActionState, flushHandToDb } = require('./handLogger');
 const { enqueue, dequeue, tryPair, calcElo } = require('./matchmaker');
 const { decideAction, stateFromGame } = require('./bot/botBrain');
 const { getProfile } = require('./bot/profiles');
@@ -164,7 +164,10 @@ function startTurnTimer(m) {
     m.timerPlayerId = null;
     m.turnDeadline  = null;
     try {
+      const pre = preActionState(m.game, pid);
       m.game.handleAction(pid, 'fold');
+      logAction(m, m.game, pre)
+        .catch(e => console.error('[timer] logAction:', e.message));
       broadcastMatchState(m);
       if (m.game.phase === 'showdown') scheduleNextHand(m, cfg.inter_hand_delay_ms);
     } catch (e) {}
@@ -195,7 +198,7 @@ function maybeScheduleBotAction(m) {
       d = fallback();
     }
     try {
-      const prevCC = m.game.communityCards?.length || 0;
+      const pre = preActionState(m.game, m.botId);
       try {
         m.game.handleAction(m.botId, d.action, d.amount);
       } catch (e) {
@@ -203,7 +206,7 @@ function maybeScheduleBotAction(m) {
         d = fallback();
         m.game.handleAction(m.botId, d.action);
       }
-      logAction(m, m.game, m.botId, d.action, d.amount, prevCC)
+      logAction(m, m.game, pre)
         .catch(e => console.error('[bot] logAction:', e.message));
       broadcastMatchState(m);
       if (m.game.phase === 'showdown') scheduleNextHand(m, cfg.inter_hand_delay_ms);
@@ -321,8 +324,11 @@ async function beginHand(m) {
   const blinds = blindsForHand(m.handCount, fmt);
   m.game.smallBlind = blinds.sb;
   m.game.bigBlind   = blinds.bb;
+  // Pre-blind stacks captured here — startHand() posts the blinds (and can
+  // even auto-run the hand to showdown), so the logger can't recover them
+  const stacksBefore = m.game.players.map(p => ({ id: p.id, chips: p.chips }));
   m.game.startHand();
-  m.currentHandUuid = await logStartHand(m, m.game).catch(e => { console.error('[hand] startHand failed:', e.message); return null; });
+  m.currentHandUuid = await logStartHand(m, m.game, stacksBefore).catch(e => { console.error('[hand] startHand failed:', e.message); return null; });
   console.log('[hand] started uuid:', m.currentHandUuid?.slice(0, 8));
 }
 
@@ -869,9 +875,9 @@ io.on('connection', (socket) => {
     const m = liveMatchOf(sp);
     if (!m) return;
     try {
-      const prevCC = m.game.communityCards?.length || 0;
+      const pre = preActionState(m.game, sp.playerId);
       m.game.handleAction(sp.playerId, action, amount);
-      logAction(m, m.game, sp.playerId, action, amount, prevCC)
+      logAction(m, m.game, pre)
         .catch(e => console.error('[hand] logAction:', e.message));
       broadcastMatchState(m);
       if (m.game.phase === 'showdown') scheduleNextHand(m, cfg.inter_hand_delay_ms);
