@@ -126,6 +126,24 @@ class PokerGame {
 
     const utgIdx = count === 2 ? sbIdx : this._nextActiveIndex(bbIdx);
     this.currentPlayerId = this.players[utgIdx].id;
+
+    // If posting the blinds already settled all possible betting — a player is
+    // all-in from their blind and the opponent's blind already covers it (so no
+    // one can meaningfully act) — run the board straight to showdown.
+    if (this._noContestedAction()) {
+      this._advancePhase();
+    }
+  }
+
+  // True when no further betting is possible: everyone is all-in, or only one
+  // player can still act and they have already matched the top bet on the table.
+  _noContestedAction() {
+    const live   = this.players.filter(p => p.isActive && !p.folded);
+    const canAct = live.filter(p => !p.allIn);
+    if (canAct.length === 0) return true;            // all live players all-in
+    if (canAct.length > 1)  return false;            // 2+ can still bet → real action
+    const topBet = Math.max(...live.map(p => p.roundBet));
+    return canAct[0].roundBet >= topBet;             // lone actor has nothing to call
   }
 
   _postBlind(playerId, amount) {
