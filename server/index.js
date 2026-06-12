@@ -165,7 +165,11 @@ function startTurnTimer(m) {
     m.turnDeadline  = null;
     try {
       const pre = preActionState(m.game, pid);
-      m.game.handleAction(pid, 'fold');
+      // Auto-action on timeout: only fold when actually facing a bet; otherwise
+      // check (no reason to surrender the hand when checking is free).
+      const player   = m.game.players.find(p => p.id === pid);
+      const canCheck = player && m.game.currentBet <= (player.roundBet || 0);
+      m.game.handleAction(pid, canCheck ? 'check' : 'fold');
       logAction(m, m.game, pre)
         .catch(e => console.error('[timer] logAction:', e.message));
       broadcastMatchState(m);
