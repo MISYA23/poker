@@ -59,23 +59,16 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   page.on('pageerror', (e) => console.log('pageerror:', e.message));
   await page.goto(URL, { waitUntil: 'networkidle' });
 
-  // Lobby
-  const playBot = page.getByText('PLAY BOT', { exact: false }).first();
-  await playBot.waitFor({ timeout: 30000 });
+  // Lobby (v5.158 redesign: QUICK MATCH hero + "Looking to play" list).
+  // Do NOT click QUICK MATCH — it broadcasts a challenge to every human online.
+  // The house bot row ("Always ready 🤖") starts a bot match instantly; it is
+  // rendered last in the list, so its VS button is the last one on the page.
+  await page.getByText('Always ready', { exact: false }).first().waitFor({ timeout: 30000 });
   await sleep(2500);
   await page.screenshot({ path: path.join(SHOTS, 'lobby.png') });
 
-  // Online tab (named bots with ELO + flags), if present
-  const onlineTab = page.getByText(/^Online$/).first();
-  if (await onlineTab.isVisible().catch(() => false)) {
-    await onlineTab.click();
-    await sleep(1500);
-    await page.screenshot({ path: path.join(SHOTS, 'online-tab.png') });
-  }
-
-  // Start a bot match
-  await playBot.click();
-  console.log('clicked PLAY BOT');
+  await page.getByText(/^VS$/).last().click();
+  console.log('clicked VS on house bot');
   await page.getByText(/^Fold$/).first().waitFor({ timeout: 30000 });
   console.log('in match');
   await sleep(800);
@@ -104,10 +97,21 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     if (await fold.isVisible().catch(() => false)) {
       const raise = page.getByText(/^(Bet|Raise) [\d,]+$/).first();
       const callOrCheck = page.getByText(/^(Check|Call)/).first();
-      const doRaise = acted % 4 === 2 && (await raise.isVisible().catch(() => false));
+      const allIn = page.getByText(/^All In$/).first();
+      const canCall = await callOrCheck.isVisible().catch(() => false);
+      const canRaise = await raise.isVisible().catch(() => false);
+      const doRaise = acted % 4 === 2 && canRaise;
       try {
-        if (doRaise) { await raise.click({ timeout: 1500 }); console.log('raised'); }
-        else if (await callOrCheck.isVisible().catch(() => false)) {
+        if (!canCall && !canRaise && (await allIn.isVisible().catch(() => false))) {
+          // Facing a shove: only Fold / All In exist. Hold the drama on camera,
+          // then fold early in the run (keep the match alive) or call late.
+          await sleep(3500);
+          await page.screenshot({ path: path.join(SHOTS, `game-${String(shot++).padStart(3, '0')}.png`) }).catch(() => {});
+          if (Date.now() - start > 55000) { await allIn.click({ timeout: 1500 }); console.log('called all-in'); }
+          else { await fold.click({ timeout: 1500 }); console.log('folded to shove'); }
+        }
+        else if (doRaise) { await raise.click({ timeout: 1500 }); console.log('raised'); }
+        else if (canCall) {
           await callOrCheck.click({ timeout: 1500 }); console.log('called/checked');
         }
         acted++;

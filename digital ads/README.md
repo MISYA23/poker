@@ -1,7 +1,10 @@
 # Poker Monkey — Digital Ads Asset Pack
 
 Everything requested for Google Ads + Meta (Facebook/Instagram) campaigns.
-**Landing page / web app:** https://poker-production-d726.up.railway.app
+**Landing page / web app:** https://pokermonkey.app
+
+Regenerated 2026-06-11 against v5.158: pirate-flag brand logo ("1 ON 1 POKER"),
+moonlit-beach game background, wooden pirate table, new chip art, redesigned lobby.
 
 ## Inventory
 
@@ -22,7 +25,7 @@ Footage is a genuine match vs the "Rick Deckard" bot on prod, captured in-browse
 | primary_4x5_allin.png | 4:5 | 1080x1350 | FB/IG feed primary (all-in drama) |
 | primary_4x5_showdown.png | 4:5 | 1080x1350 | FB/IG feed primary ("read a bluff?") |
 | square_1x1_allin.png | 1:1 | 1080x1080 | FB/IG square |
-| square_1x1_lobby.png | 1:1 | 1080x1080 | FB/IG square (bots/ranking angle) |
+| square_1x1_action.png | 1:1 | 1080x1080 | FB/IG square (bots/ranking angle, flop betting shot) |
 | landscape_1200x628.png | 1.91:1 | 1200x628 | Google Display/PMax, FB link ads |
 
 ### logo/
@@ -46,4 +49,4 @@ All assets are scripted in `_build/` (gitignored raw footage):
 ## Notes
 - Videos are silent — Brian adds music later (YouTube Audio Library / Pixabay are safe sources).
 - A throwaway guest player `AceMonkey` (id in `_build/raw/player.txt`) was created on prod for the capture; its bot matches are real DB rows. Harmless, but can be cleaned like the old `test_%` players if desired.
-- The cigar in the logo may trip tobacco-imagery review on Meta — see copy.md policy notes.
+- Brand logo is now the cigar-free pirate flag; the cigar monkey only appears as a small in-game avatar in screenshots — see copy.md policy notes.

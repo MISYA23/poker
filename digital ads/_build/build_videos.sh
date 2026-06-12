@@ -14,8 +14,8 @@ GP="[0:v][1:v]concat=n=2:v=1[g];[g][4:v]overlay=0:0[gt]"
 
 # 9:16  1080x1920 — direct upscale
 ffmpeg -v error -y \
-  -ss 57   -t 6.5 -i "$RAW" \
-  -ss 89.5 -t 6   -i "$RAW" \
+  -ss 46   -t 6.5 -i "$RAW" \
+  -ss 79.5 -t 6   -i "$RAW" \
   -loop 1 -t 3 -i _endcards/end_1080x1920.png \
   -f lavfi -t 16 -i anullsrc=r=44100:cl=stereo \
   -loop 1 -t 13 -i _endcards/banner_720x50.png \
@@ -28,8 +28,8 @@ ffmpeg -v error -y \
 
 # 1:1  1080x1080 — blurred-bg pillarbox
 ffmpeg -v error -y \
-  -ss 57   -t 6.5 -i "$RAW" \
-  -ss 89.5 -t 6   -i "$RAW" \
+  -ss 46   -t 6.5 -i "$RAW" \
+  -ss 79.5 -t 6   -i "$RAW" \
   -loop 1 -t 3 -i _endcards/end_1080x1080.png \
   -f lavfi -t 16 -i anullsrc=r=44100:cl=stereo \
   -loop 1 -t 13 -i _endcards/banner_720x50.png \
@@ -44,8 +44,8 @@ ffmpeg -v error -y \
 
 # 16:9  1920x1080 — blurred-bg pillarbox
 ffmpeg -v error -y \
-  -ss 57   -t 6.5 -i "$RAW" \
-  -ss 89.5 -t 6   -i "$RAW" \
+  -ss 46   -t 6.5 -i "$RAW" \
+  -ss 79.5 -t 6   -i "$RAW" \
   -loop 1 -t 3 -i _endcards/end_1920x1080.png \
   -f lavfi -t 16 -i anullsrc=r=44100:cl=stereo \
   -loop 1 -t 13 -i _endcards/banner_720x50.png \

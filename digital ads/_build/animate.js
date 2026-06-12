@@ -12,7 +12,8 @@ const W = 1080, H = 1920, FPS = 30, DUR_MS = 15000;
 const FRAMES = Math.round((DUR_MS / 1000) * FPS); // 450
 const FRAMES_DIR = path.join(__dirname, 'raw', 'frames');
 const OUT = path.resolve(__dirname, '../video/poker_monkey_15s_9x16_motion.mp4');
-const LOGO = 'file://' + path.resolve(__dirname, '../../client/assets/cigar.png');
+// v5.158 rebrand: pirate flag wordmark, no cigar imagery (Meta tobacco policy).
+const LOGO = 'file://' + path.resolve(__dirname, '../../client/assets/flag-logo.png');
 const CLIP = 'file://' + path.join(__dirname, 'raw', 'ad_clip.webm');
 
 // Video plays inside the phone from t=4900ms, clip is 7.2s.
@@ -30,8 +31,8 @@ const HTML = `<!doctype html><html><head><meta charset="utf8"><style>
   .gold { color:#f0c040; }
   /* S1 — logo hook */
   #s1 { inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:54px; }
-  #s1 img { width:440px; height:440px; border-radius:50%; }
-  #s1 .nm { font-size:92px; font-weight:900; letter-spacing:.1em; white-space:nowrap; }
+  #s1 img { width:760px; filter:drop-shadow(0 18px 60px rgba(240,192,64,.35)); }
+  #s1 .nm { font-size:54px; font-weight:900; letter-spacing:.22em; white-space:nowrap; color:#f0c040; }
   /* S2 — headline card */
   #s2 { inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:30px; }
   #s2 .eyebrow { color:#f0c040; letter-spacing:.22em; font-size:34px; font-weight:900; }
@@ -66,7 +67,7 @@ const HTML = `<!doctype html><html><head><meta charset="utf8"><style>
                   background:linear-gradient(115deg, rgba(255,255,255,.09) 0%, rgba(255,255,255,0) 28%); }
   /* S4 — end card */
   #s4 { inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:44px; }
-  #s4 img { width:330px; height:330px; border-radius:50%; box-shadow:0 16px 70px rgba(240,192,64,.5); }
+  #s4 img { width:600px; filter:drop-shadow(0 16px 70px rgba(240,192,64,.4)); }
   #s4 .nm { font-size:96px; font-weight:900; letter-spacing:.08em; white-space:nowrap; }
   #s4 .tag { font-size:36px; color:#bdc3c7; font-family:Arial,sans-serif; font-weight:bold; text-align:center; max-width:86%; }
   #s4 .cta { background:linear-gradient(180deg,#f0c040,#d4a017); color:#101010; font-weight:900;
@@ -74,9 +75,9 @@ const HTML = `<!doctype html><html><head><meta charset="utf8"><style>
   #s4 .fine { font-size:26px; color:rgba(250,250,250,.55); font-family:Arial,sans-serif; font-weight:bold; }
 </style></head><body>
   <div class="abs suits" id="suits">${'♠ ♥ ♣ ♦ '.repeat(160)}</div>
-  <div class="abs" id="s1"><img src="${LOGO}"><div class="nm">POKER <span class="gold">MONKEY</span></div></div>
+  <div class="abs" id="s1"><img src="${LOGO}"><div class="nm">1V1 · ELO RATED · FREE</div></div>
   <div class="abs" id="s2">
-    <div class="eyebrow">HEADS-UP TEXAS HOLD’EM</div>
+    <div class="eyebrow">1-ON-1 TEXAS HOLD’EM</div>
     <div class="l1" id="l1">All in.</div>
     <div class="l2 gold" id="l2">Zero cost.</div>
   </div>
@@ -90,8 +91,7 @@ const HTML = `<!doctype html><html><head><meta charset="utf8"><style>
   </div>
   <div class="abs" id="s4">
     <img src="${LOGO}">
-    <div class="nm">POKER <span class="gold">MONKEY</span></div>
-    <div class="tag">Free Heads-Up Texas Hold’em — vs. live players &amp; bots</div>
+    <div class="tag">Free 1-on-1 Texas Hold’em — vs. live players &amp; bots</div>
     <div class="cta" id="cta">Play Free Now</div>
     <div class="fine">Free to play · No real money</div>
   </div>

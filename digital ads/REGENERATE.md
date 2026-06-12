@@ -26,14 +26,17 @@ banner is a PNG overlay, don't try drawtext again).
   (MutationObserver on documentElement at init time throws and silently kills the script).
 - A 250ms interval strips dev chrome from every frame: version watermark (`v5.xxx`)
   and the Feedback pill. **If the UI redesign renames/moves these, update the regexes.**
-- Records 720x1280 @ dsf2 (stills land at 1440x2560), clicks `PLAY BOT`, then plays
+- Records 720x1280 @ dsf2 (stills land at 1440x2560), starts a bot match, then plays
   ~85s: call/check mostly, raise every 4th action.
-- KNOWN GAP: when facing an all-in, the only buttons are `Fold`/`All In` and the loop
-  clicks neither → it stalls until the turn timer auto-folds (~30s of static footage).
-  That accidentally produced great drama shots, but if you want more action density,
-  add an `All In` click branch.
-- Selectors are text-based (`PLAY BOT`, `^Fold$`, `^(Check|Call)`, `^(Bet|Raise) [\d,]+$`,
-  `Play Again`) — **re-check these against the redesigned UI before running.**
+- v5.158 lobby: there is NO "PLAY BOT" button anymore. **Do not click QUICK MATCH** —
+  it broadcasts a challenge to every human online. The script instead clicks the VS
+  button on the house-bot row ("Always ready 🤖"), which starts a bot match instantly;
+  that row renders last, so `getByText(/^VS$/).last()` is the bot.
+- Facing a shove (`Fold`/`All In` only): the loop now holds 3.5s for drama, then folds
+  before the 55s mark and calls all-in after it — ends the run on a showdown +
+  match-over modal instead of the old 30s timer stall.
+- Selectors are text-based (`Always ready`, `^VS$`, `^Fold$`, `^(Check|Call)`,
+  `^(Bet|Raise) [\d,]+$`, `^All In$`, `Play Again`) — **re-check against the UI before running.**
 
 ## Step 2 — render.js (statics, logos, end cards)
 
@@ -41,11 +44,13 @@ banner is a PNG overlay, don't try drawtext again).
 - MUST write HTML to a temp file and `page.goto(file://...)` — `setContent` makes the
   page `about:blank`, which blocks `file://` images (first run produced empty frames).
 - Brand inputs to update for the new art:
-  - `LOGO` const → currently `client/assets/cigar.png` (the monkey avatar; the real
-    `icon.png` was an Expo placeholder). Point at the final logo file.
+  - `FLAG` const → `client/assets/flag-logo.png` (955x626 pirate flag wordmark, the
+    brand mark since v5.158; cigar-free). `MONKEY` → `login-monkey.png` (pirate
+    portrait, backs the 9:16 end card only — landscape/square use the suits bg
+    because the face fights the CTA). Flag is ~3:2: size by WIDTH, never crop round.
   - Colors in `BASE_CSS` → pulled by hand from `client/src/theme.js`
     (navy `#0a1322`, gold `#f0c040`/`#d4a017`). Re-sync with the new palette.
-  - Hero screenshots → `SHOT_ALLIN` / `SHOT_SHOWDOWN` / `SHOT_LOBBY` consts; after each
+  - Hero screenshots → `SHOT_ALLIN` / `SHOT_SHOWDOWN` / `SHOT_ACTION` consts; after each
     new capture, eyeball `_build/raw/shots/` and repoint to the most dramatic frames
     (all-in moments, showdowns, betting controls visible).
 - `.phonebox` needs `overflow:hidden` (screenshot bleeds past the fade otherwise);
@@ -55,7 +60,7 @@ banner is a PNG overlay, don't try drawtext again).
 ## Step 3 — build_videos.sh (three 15s MP4s)
 
 - Cuts TWO segments from `raw/gameplay.webm` and fades into a per-aspect end card:
-  segment timestamps are HARDCODED (`-ss 57 -t 6.5` + `-ss 89.5 -t 6`) and MUST be
+  segment timestamps are HARDCODED (2026-06-11 capture: `-ss 46 -t 6.5` + `-ss 79.5 -t 6`) and MUST be
   re-picked for every new capture. To pick: extract probe frames —
   `ffmpeg -ss <t> -i raw/gameplay.webm -frames:v 1 -vf scale=270:-1 probe/f<t>.png`
   every ~6s, view them, choose (a) a window with betting controls visible and
@@ -82,7 +87,8 @@ banner is a PNG overlay, don't try drawtext again).
   <video> to an exact timestamp; node loops 450 frames at 33.3ms steps, screenshots
   each, ffmpeg assembles. Fully deterministic — re-runs are pixel-identical.
   ~2 min render.
-- Needs `raw/ad_clip.webm` first (built in this doc's Step 3 prep):
+- Needs `raw/ad_clip.webm` first (built in this doc's Step 3 prep; 2026-06-11 capture
+  used `-ss 47 -t 3.5` + `-ss 83 -t 3.7`):
   `ffmpeg -ss 60 -t 3.5 -i raw/gameplay.webm -ss 91.8 -t 3.7 -i raw/gameplay.webm \
    -filter_complex "[0:v][1:v]concat=n=2:v=1,fps=30[v]" -map "[v]" -c:v libvpx-vp9 -crf 24 -b:v 0 raw/ad_clip.webm`
   (re-pick those timestamps per capture). MUST be VP8/VP9 webm — Playwright's

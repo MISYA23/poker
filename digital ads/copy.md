@@ -1,6 +1,6 @@
 # Poker Monkey — Ad Copy
 
-**Landing page / web app URL:** https://poker-production-d726.up.railway.app
+**Landing page / web app URL:** https://pokermonkey.app (railway URL https://poker-production-d726.up.railway.app also works)
 **Always include in ads:** "Free to play · No real money" (keeps Google/Meta gambling policy reviewers happy — this is social poker, not real-money gambling).
 
 ---
@@ -18,6 +18,7 @@
 | 6 | Play Poker Free In-Browser | 26 |
 | 7 | Instant Matches, Any Hour | 25 |
 | 8 | Climb the ELO Rankings | 22 |
+| 9 | 1 on 1 Poker — Free & Rated | 27 |
 
 ### Descriptions (max 90 chars)
 | # | Description | Chars |
@@ -64,5 +65,5 @@ Our bots don't go easy. Rick Deckard plays tight-aggressive. HAL 9000 never tilt
 
 ## Notes for ad review / policy
 - This is **social poker** (no real-money wagering, no prizes). Both Google and Meta allow it without a gambling license, but always keep the "no real money" line in creative and copy.
-- The logo monkey has a **cigar** — if an ad gets disapproved for tobacco imagery, swap to a cropped version (sunglasses only) and resubmit. Flagging now so a rejection isn't a surprise.
+- Brand logo is now the **pirate flag wordmark** ("POKER MONKEY / 1 ON 1 POKER") — no tobacco imagery in any logo or end card. The cigar monkey survives only as a tiny in-game avatar inside gameplay screenshots; low disapproval risk, but if Meta flags tobacco, that's where it's coming from.
 - Videos are silent by design — Brian adds music later. Meta/Google both accept silent video (feeds autoplay muted).
