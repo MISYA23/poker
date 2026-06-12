@@ -42,8 +42,9 @@ function blindsForHand(handNumber, fmt = BLIND_SCHEDULE) {
 
 // Table variants — switch by changing TABLE_VARIANT ('tall' | 'fat').
 // Each variant carries its own native aspect so the table box always matches it.
+// Only the active variant's asset ships; the tall one (game-table.png,
+// 1024×1536) lives in git history — restore it and its entry to switch back.
 const TABLE_VARIANTS = {
-  tall: { src: require('../../assets/game-table.png'),     aspect: 1024 / 1536 },
   fat:  { src: require('../../assets/game-table-fat.png'), aspect: 960 / 1536 },
 };
 const TABLE_VARIANT = 'fat';
