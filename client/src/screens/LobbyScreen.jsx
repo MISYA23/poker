@@ -278,7 +278,7 @@ export default function LobbyScreen({ navigation }) {
                 <Pressable style={s.lbCard} onPress={() => navigation.navigate('Leaderboard')}>
                   {(lbData.entries || []).slice(0, 3).map((p, i) => (
                     <View key={p.playerId} style={s.lbRow}>
-                      <Text style={s.lbMedal}>{['🥇','🥈','🥉'][i]}</Text>
+                      <Text style={s.lbRank}>{i + 1}</Text>
                       <Text style={s.lbName} numberOfLines={1}>{p.displayName}</Text>
                       <Text style={s.lbFlag}>{p.isBot ? '🤖' : flagEmoji(p.country)}</Text>
                       <Text style={s.lbElo}>{p.elo}</Text>
@@ -457,7 +457,6 @@ const s = StyleSheet.create({
   },
   lbRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 14, paddingVertical: 10 },
   lbRowMe: { backgroundColor: 'rgba(240,192,64,0.1)' },
-  lbMedal:  { fontSize: 18, width: 28, textAlign: 'center' },
   lbRank:   { color: colors.goldLight, fontSize: 13, fontWeight: '900', width: 28, textAlign: 'center' },
   lbName:   { flex: 1, color: colors.white, fontSize: 14, fontWeight: '800' },
   lbNameMe: { color: colors.goldLight },

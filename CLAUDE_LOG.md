@@ -127,3 +127,6 @@ and log [START] / [DONE] entries for every task. See global CLAUDE.md for protoc
 [17:24 UTC] [DONE] v5.170: analytics table + FirstMatchBegun/FirstMatchComplete server-side events; retired client track('FinishMatch')
 
 [17:27 UTC] [START] leaderboard row redesign — match mockup: rank numbers, large avatar-in-square, flag overlay, no medals/sub-lines — branch feature/leaderboard-ui
+
+[17:29 UTC] [DONE] v5.170 deployed (6964da5) — leaderboard row redesign: rank numbers, avatar-in-square+flag, no medals/tabs/reload, web maxWidth fixed
+[17:31 UTC] [DONE] v5.171: Back to Lobby button shown while waiting for opponent rematch response
