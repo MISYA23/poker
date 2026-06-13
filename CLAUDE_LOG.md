@@ -118,3 +118,4 @@ and log [START] / [DONE] entries for every task. See global CLAUDE.md for protoc
 [16:43 UTC] [DONE] v5.165 merged feature/ad-landing-pages → main + pushed (Railway deploy 2a20140); branch deleted
 [16:47 UTC] [START] admin/players: checkbox multi-select + delete accounts (with cascade + live socket kick + confirm dialog) — branch feature/ad-landing-pages
 [16:52 UTC] [DONE] v5.166: admin/players multi-select delete (cascade + socket kick + confirm dialog) + country flags — pushed f8dcb3b to main (Railway deploy)
+[17:05 UTC] [DONE] v5.167: bots show 🤖 badge instead of country flag — AvatarBadge isBot prop, LobbyScreen + OpponentCard updated, BOTS country:null, bot match-found includes isBot+avatarId — pushed e68a3f1 to main
