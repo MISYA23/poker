@@ -122,3 +122,8 @@ and log [START] / [DONE] entries for every task. See global CLAUDE.md for protoc
 [17:07 UTC] [DONE] v5.168: radar pulse CSS keyframes on web, Animated on native (MatchFlowOverlays.jsx)
 
 [17:08 UTC] [START] leaderboard redesign — inline lobby card + full screen hero/neighborhood/tabs per UPDATE_leaderboard.md — branch feature/leaderboard-redesign
+
+[17:23 UTC] [DONE] v5.169 merged + deployed to prod (4ec09ea); branch deleted
+[17:24 UTC] [DONE] v5.170: analytics table + FirstMatchBegun/FirstMatchComplete server-side events; retired client track('FinishMatch')
+
+[17:27 UTC] [START] leaderboard row redesign — match mockup: rank numbers, large avatar-in-square, flag overlay, no medals/sub-lines — branch feature/leaderboard-ui
