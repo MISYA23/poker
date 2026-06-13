@@ -1698,9 +1698,11 @@ app.get('/api/admin/players', async (_, res) => {
     const { rows } = await db.query(`
       SELECT p.id, p.display_name, p.avatar_id, p.is_guest, p.country,
              p.created_at, p.last_seen_at,
-             ps.elo, ps.matches_played, ps.matches_won
+             ps.elo, ps.matches_played, ps.matches_won,
+             a.first_match_begun, a.first_match_complete
       FROM players p
       LEFT JOIN player_stats ps ON ps.player_id = p.id
+      LEFT JOIN analytics     a  ON a.player_id  = p.id
       ORDER BY p.created_at DESC
     `);
     res.json(rows);
@@ -1840,6 +1842,7 @@ app.get('/admin/players', (_, res) => {
     #modal .btns .cancel:hover { background: #30363d; }
     #modal .btns .confirm { background: #b91c1c; color: #fff; }
     #modal .btns .confirm:hover { background: #dc2626; }
+    .badge { display: inline-block; font-size: 0.75rem; margin-left: 5px; opacity: 0.9; cursor: default; }
   </style>
 </head>
 <body>
@@ -1887,7 +1890,12 @@ app.get('/admin/players', (_, res) => {
     }
 
     const COLS = [
-      { key: 'display_name', label: 'Name',     fmt: (v, row) => flag(row.country) + (v ?? '—') },
+      { key: 'display_name', label: 'Name',     fmt: (v, row) => flag(row.country) + (v ?? '—'), html: (v, row) => {
+        let s = flag(row.country) + (v ?? '—');
+        if (row.first_match_begun)    s += '<span class="badge" title="Committed an action">🃏</span>';
+        if (row.first_match_complete) s += '<span class="badge" title="Completed a match">🏅</span>';
+        return s;
+      }},
       { key: 'id',           label: 'ID',        fmt: v => v,         cls: 'id' },
       { key: 'is_guest',     label: 'Type',      fmt: v => v ? 'guest' : 'registered', cls: 'guest' },
       { key: 'elo',          label: 'ELO',       fmt: v => v ?? '—',  cls: 'elo' },
@@ -1990,7 +1998,8 @@ app.get('/admin/players', (_, res) => {
         COLS.forEach(col => {
           const td = document.createElement('td');
           if (col.cls) td.className = col.cls;
-          td.textContent = col.fmt(row[col.key], row);
+          if (col.html) td.innerHTML = col.html(row[col.key], row);
+          else td.textContent = col.fmt(row[col.key], row);
           tr.appendChild(td);
         });
         tbody.appendChild(tr);
