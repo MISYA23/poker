@@ -1002,9 +1002,16 @@ export default function GameScreen({ navigation }) {
                 </Pressable>
               </View>
             ) : matchOver.myVote ? (
-              <Text style={s.modalWaiting}>
-                {matchOver.opponentWantsRematch ? 'Starting rematch…' : 'Waiting for opponent…'}
-              </Text>
+              <>
+                <Text style={s.modalWaiting}>
+                  {matchOver.opponentWantsRematch ? 'Starting rematch…' : 'Waiting for opponent…'}
+                </Text>
+                <View style={s.modalBtns}>
+                  <Pressable style={[s.modalBtn, s.modalBtnYes]} onPress={onLeave}>
+                    <Text style={s.modalBtnTxt}>Back to Lobby</Text>
+                  </Pressable>
+                </View>
+              </>
             ) : matchOver.opponentWantsRematch ? (
               <>
                 <Text style={s.modalSub}>{matchOver.opponentWantsRematch} wants a rematch!</Text>
