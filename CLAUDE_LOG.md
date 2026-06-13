@@ -130,3 +130,6 @@ and log [START] / [DONE] entries for every task. See global CLAUDE.md for protoc
 
 [17:29 UTC] [DONE] v5.170 deployed (6964da5) — leaderboard row redesign: rank numbers, avatar-in-square+flag, no medals/tabs/reload, web maxWidth fixed
 [17:31 UTC] [DONE] v5.171: Back to Lobby button shown while waiting for opponent rematch response
+
+[17:36 UTC] [DONE] v5.171 deployed (e6f7a46) — removed medal emojis from lobby leaderboard card
+[17:44 UTC] [DONE] v5.172: Meta Conversions API wired for FirstMatchBegun/FirstMatchComplete (SHA256 external_id, Railway env vars set)

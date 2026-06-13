@@ -279,8 +279,8 @@ export default function LobbyScreen({ navigation }) {
                   {(lbData.entries || []).slice(0, 3).map((p, i) => (
                     <View key={p.playerId} style={s.lbRow}>
                       <Text style={s.lbRank}>{i + 1}</Text>
-                      <Text style={s.lbName} numberOfLines={1}>{p.displayName}</Text>
                       <Text style={s.lbFlag}>{p.isBot ? '🤖' : flagEmoji(p.country)}</Text>
+                      <Text style={s.lbName} numberOfLines={1}>{p.displayName}</Text>
                       <Text style={s.lbElo}>{p.elo}</Text>
                     </View>
                   ))}
@@ -289,8 +289,8 @@ export default function LobbyScreen({ navigation }) {
                       <View style={s.lbSep} />
                       <View style={[s.lbRow, s.lbRowMe]}>
                         <Text style={s.lbRank}>#{lbData.myStats.rank}</Text>
-                        <Text style={[s.lbName, s.lbNameMe]} numberOfLines={1}>{playerInfo?.name}</Text>
                         <Text style={s.lbFlag}>{flagEmoji(playerInfo?.country)}</Text>
+                        <Text style={[s.lbName, s.lbNameMe]} numberOfLines={1}>{playerInfo?.name}</Text>
                         <Text style={[s.lbElo, s.lbEloMe]}>{lbData.myStats.elo}</Text>
                       </View>
                     </>
