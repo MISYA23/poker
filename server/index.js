@@ -4,7 +4,7 @@ const http       = require('http');
 const { Server } = require('socket.io');
 const cors       = require('cors');
 const { Pool }   = require('pg');
-const { randomUUID } = require('crypto');
+const { randomUUID, createHash } = require('crypto');
 const { PokerGame }  = require('./game/PokerGame');
 const { redis }      = require('./redis');
 const { buildStartRows, buildActionRows, writeHandRows, preActionState, flushHandToDb } = require('./handLogger');
@@ -72,8 +72,27 @@ async function loadMatchAnalytics(m) {
 }
 
 function fireAnalyticsEvent(eventName, playerId) {
-  // TODO: wire Meta Conversions API
   console.log(`[analytics] ${eventName} — player: ${playerId}`);
+  const pixelId = process.env.META_PIXEL_ID;
+  const token   = process.env.META_CONVERSIONS_TOKEN;
+  if (!pixelId || !token) return;
+  const externalId = createHash('sha256').update(playerId).digest('hex');
+  const body = JSON.stringify({
+    data: [{
+      event_name:    eventName,
+      event_time:    Math.floor(Date.now() / 1000),
+      action_source: 'app',
+      user_data:     { external_id: externalId },
+    }],
+  });
+  fetch(`https://graph.facebook.com/v19.0/${pixelId}/events?access_token=${token}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body,
+  })
+    .then(r => r.json())
+    .then(r => { if (r.error) console.error('[analytics] Meta API error:', r.error.message); })
+    .catch(e => console.error('[analytics] Meta API fetch failed:', e.message));
 }
 
 async function markAnalytics(playerId, field) {
