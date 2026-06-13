@@ -19,7 +19,7 @@ const INVITE_URL = 'https://pokermonkey.app';
 //   issued   — I challenged them         → green, Cancel
 //   normal   — challengeable human       → gold VS button
 // Players in a bot game are still listed (they're waiting for humans too).
-function PlayerRow({ p, incoming, issued, onChallenge, onCancelChallenge, onAccept, debug }) {
+function PlayerRow({ p, incoming, issued, onChallenge, onCancelChallenge, onAccept }) {
   // Bot-game players still read "Looking to play" — they only flip to
   // "Playing a bot" once they've refused (or ignored) a challenge there
   const status =
@@ -29,7 +29,7 @@ function PlayerRow({ p, incoming, issued, onChallenge, onCancelChallenge, onAcce
     p.botRefused ? 'Playing a bot 🤖'   : 'Looking to play';
   const green = incoming || issued;
   return (
-    <View style={[s.row, green && s.rowGreen, debug && { borderWidth: 2, borderColor: 'orange' }]}>
+    <View style={[s.row, green && s.rowGreen]}>
       <AvatarBadge avatarId={p.avatarId} country={p.country} size={46} />
       <View style={s.rowWho}>
         <Text style={s.rowName} numberOfLines={1}>{p.name}</Text>
@@ -78,7 +78,6 @@ export default function LobbyScreen({ navigation }) {
   }, [navigation, playerInfo?.playerId, emit]);
 
   const [menuOpen, setMenuOpen] = useState(false);
-  const [debugUI, setDebugUI] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
   const copiedTimer = useRef(null);
 
@@ -134,8 +133,8 @@ export default function LobbyScreen({ navigation }) {
       <SafeAreaView style={s.safe}>
 
         {/* Header */}
-        <View style={[s.topbar, debugUI && { borderWidth: 2, borderColor: 'red' }]}>
-          <View style={[s.who, debugUI && { borderWidth: 2, borderColor: 'cyan' }]}>
+        <View style={s.topbar}>
+          <View style={s.who}>
             <Text style={s.hi} numberOfLines={1}>{(playerInfo?.name || '').slice(0, 10)}</Text>
             <View style={s.eloPill}>
               <Text style={s.eloLbl}>ELO </Text>
@@ -143,8 +142,8 @@ export default function LobbyScreen({ navigation }) {
             </View>
           </View>
           <View style={s.topbarBtns}>
-            <SoundButton style={[s.ham, debugUI && { borderWidth: 2, borderColor: 'magenta' }]} />
-            <Pressable style={[s.ham, debugUI && { borderWidth: 2, borderColor: 'magenta' }]} onPress={() => setMenuOpen(o => !o)}>
+            <SoundButton style={s.ham} />
+            <Pressable style={s.ham} onPress={() => setMenuOpen(o => !o)}>
               <Text style={s.hamTxt}>☰</Text>
             </Pressable>
           </View>
@@ -157,9 +156,6 @@ export default function LobbyScreen({ navigation }) {
               <Pressable style={s.menuItem} onPress={() => { setMenuOpen(false); navigationRef.navigate('Profile'); }}>
                 <Text style={s.menuItemTxt}>👤 Profile</Text>
               </Pressable>
-              <Pressable style={s.menuItem} onPress={() => { setDebugUI(v => !v); setMenuOpen(false); }}>
-                <Text style={s.menuItemTxt}>{debugUI ? '🟢' : '⚫'} UI Debug</Text>
-              </Pressable>
               <Pressable style={[s.menuItem, { borderBottomWidth: 0 }]} onPress={() => { setMenuOpen(false); onLogout(); }}>
                 <Text style={s.menuItemTxt}>🚪 Log Out</Text>
               </Pressable>
@@ -168,7 +164,7 @@ export default function LobbyScreen({ navigation }) {
         )}
 
         <ScrollView contentContainerStyle={s.scroll} keyboardShouldPersistTaps="handled">
-          <View style={[s.col, debugUI && { borderWidth: 2, borderColor: 'blue' }]}>
+          <View style={s.col}>
 
             {/* Presence chip — only when MORE THAN 3 humans online */}
             {humans.length > 3 && (
@@ -184,7 +180,7 @@ export default function LobbyScreen({ navigation }) {
             {error && <Text style={s.error}>{error}</Text>}
 
             {/* QUICK MATCH */}
-            <Pressable style={({ pressed }) => [s.hero, pressed && { transform: [{ scale: 0.985 }] }, debugUI && { borderWidth: 2, borderColor: 'yellow' }]}
+            <Pressable style={({ pressed }) => [s.hero, pressed && { transform: [{ scale: 0.985 }] }]}
               onPress={() => onFindMatch(myPlayerId)}>
               <View style={s.heroBolt}><Text style={s.heroBoltTxt}>⚡</Text></View>
               <Text style={s.heroTxt}>QUICK MATCH</Text>
@@ -192,7 +188,7 @@ export default function LobbyScreen({ navigation }) {
             </Pressable>
 
             {/* Looking to play */}
-            <View style={[s.sec, debugUI && { borderWidth: 2, borderColor: 'green' }]}>
+            <View style={s.sec}>
               <Text style={s.secIcGold}>⚡</Text>
               <Text style={[s.secTitle, s.secTitleGold]}>Looking to play</Text>
               <View style={s.count}><Text style={s.countTxt}>{looking.length + (freeBot ? 1 : 0)}</Text></View>
@@ -203,14 +199,14 @@ export default function LobbyScreen({ navigation }) {
                   <PlayerRow key={p.id} p={p}
                     incoming={isIncoming(p.id)} issued={isIssued(p.id)}
                     onChallenge={onChallenge} onCancelChallenge={onWithdrawChallenge}
-                    onAccept={onAcceptChallenge} debug={debugUI} />
+                    onAccept={onAcceptChallenge} />
                 ))}
                 {freeBot && (
                   <PlayerRow key={freeBot.id} p={freeBot}
-                    onChallenge={onChallenge} debug={debugUI} />
+                    onChallenge={onChallenge} />
                 )}
                 {/* Invite friends — action row, final slot of the list */}
-                <View style={[s.inviteRow, debugUI && { borderWidth: 2, borderColor: 'orange' }]}>
+                <View style={s.inviteRow}>
                   <View style={s.inviteTile}><Text style={s.inviteTileTxt}>＋</Text></View>
                   <View style={s.rowWho}>
                     <Text style={s.rowName}>Invite friends</Text>
@@ -236,13 +232,13 @@ export default function LobbyScreen({ navigation }) {
             {/* Live now */}
             {liveRows.length > 0 && (
               <>
-                <View style={[s.sec, debugUI && { borderWidth: 2, borderColor: 'green' }]}>
+                <View style={s.sec}>
                   <View style={s.liveDotHead} />
                   <Text style={s.secTitle}>Live now</Text>
                   <View style={s.count}><Text style={s.countTxt}>{liveRows.length}</Text></View>
                 </View>
                 {liveRows.map(m => (
-                  <Pressable key={m.id} style={[s.liveRow, debugUI && { borderWidth: 2, borderColor: 'purple' }]} onPress={() => onObserve(m.id)}>
+                  <Pressable key={m.id} style={s.liveRow} onPress={() => onObserve(m.id)}>
                     <View style={s.liveRec}>
                       <View style={s.liveDot} />
                       <Text style={s.liveRecTxt}>LIVE</Text>

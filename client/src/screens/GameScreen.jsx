@@ -13,7 +13,7 @@ import BettingControls from '../components/BettingControls';
 import PreviousHandDialog from '../components/PreviousHandDialog';
 import SoundButton from '../components/SoundButton';
 import { colors } from '../theme';
-import { VERSION_DISPLAY, SERVER_URL } from '../config';
+import { SERVER_URL } from '../config';
 import { playSfx } from '../audio/sfx';
 
 const FEEDBACK_OPTIONS = [
@@ -406,7 +406,6 @@ export default function GameScreen({ navigation }) {
   }, []);
 
   const [menuOpen,      setMenuOpen]      = useState(false);
-  const [debugUI,       setDebugUI]       = useState(false);
   const [leaveWarning,  setLeaveWarning]  = useState(false);
   const [replayOpen,    setReplayOpen]    = useState(false);
 
@@ -689,27 +688,10 @@ export default function GameScreen({ navigation }) {
 
       {/* Group A — stage: scaled to content area only (below top bar, above action buttons) */}
       <View style={[s.stageOuter, { top: stageTop, bottom: stageBotOffset }]} pointerEvents="none">
-        <View style={[s.stage, { transform: [{ scale }] }, debugUI && { borderWidth: 2, borderColor: 'yellow' }]}>
+        <View style={[s.stage, { transform: [{ scale }] }]}>
 
           {/* Layer 2: Table surface */}
           <Image source={INGAME_TABLE} style={s.tableImg} resizeMode="contain" />
-
-          {/* DEBUG GRID */}
-          {debugUI && ['A','B','C','D'].map((col, c) =>
-            [1,2,3,4,5,6,7,8].map(row => (
-              <View key={`${col}${row}`} style={{
-                position: 'absolute',
-                left: TABLE_L + c * (TABLE_W / 4),
-                top: TABLE_T + (row - 1) * (TABLE_H / 8),
-                width: TABLE_W / 4,
-                height: TABLE_H / 8,
-                borderWidth: 0.5,
-                borderColor: 'rgba(255,255,0,0.35)',
-              }} pointerEvents="none">
-                <Text style={{ color: 'rgba(255,255,0,0.5)', fontSize: 9, margin: 2 }}>{col}{row}</Text>
-              </View>
-            ))
-          )}
 
           {/* Layer 3: Game elements — all absolutely positioned in canvas coords */}
 
@@ -809,12 +791,11 @@ export default function GameScreen({ navigation }) {
       <SafeAreaView style={s.chrome} pointerEvents="box-none">
 
         {/* Top bar */}
-        <View style={[s.topBar, debugUI && { borderWidth: 2, borderColor: 'red' }]} pointerEvents="box-none">
+        <View style={s.topBar} pointerEvents="box-none">
           <View style={s.topBarLeft}>
             <Pressable style={s.menuBtn} onPress={() => setReplayOpen(true)}>
               <Text style={s.menuBtnTxt}>↺</Text>
             </Pressable>
-            <Text style={s.version}>{VERSION_DISPLAY}</Text>
           </View>
           {gameState?.handNumber > 0 && (() => {
             const next = blindsForHand(gameState.handNumber + 1, blindFmt);
@@ -862,7 +843,7 @@ export default function GameScreen({ navigation }) {
         <View style={{ flex: 1 }} pointerEvents="none" />
 
         {/* Bottom betting controls (Group B) — fixed ergonomic height */}
-        <View style={[s.bottomChrome, debugUI && { borderWidth: 2, borderColor: 'blue' }]} pointerEvents="box-none">
+        <View style={s.bottomChrome} pointerEvents="box-none">
           {isMyTurn && (
             <BettingControls
               gameState={gameState} myId={myId}
@@ -889,10 +870,6 @@ export default function GameScreen({ navigation }) {
                     if (gameState && me && !matchOver && !observing) { setLeaveWarning(true); } else { onLeave(); }
                   }}>
                   <Text style={s.menuItemTxt}>🚪 Leave Table</Text>
-                </Pressable>
-                <Pressable style={s.menuItem}
-                  onPress={() => { setDebugUI(v => !v); setMenuOpen(false); }}>
-                  <Text style={s.menuItemTxt}>{debugUI ? '🟢' : '⚫'} UI Debug</Text>
                 </Pressable>
                 <Pressable style={[s.menuItem, s.menuItemRed]}
                   onPress={() => { setMenuOpen(false); onLeave(); onLogout?.(); }}>

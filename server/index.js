@@ -2283,7 +2283,7 @@ app.get('/terms', (_, res) => res.send(`<!DOCTYPE html>
 <p><strong>Last updated: June 2025</strong></p>
 <p>By accessing or using Poker Monkey ("the App"), you agree to these Terms of Service. If you do not agree, do not use the App.</p>
 <h2>1. Use of the App</h2>
-<p>Poker Monkey is a free-to-play online poker game. You must be at least 13 years old to use the App. No real money is wagered — all chips are virtual and have no monetary value.</p>
+<p>Poker Monkey is a free-to-play social poker game intended for adults. You must be at least 18 years old (or the legal gambling age in your jurisdiction, if higher) to use the App. No real money is wagered and there are no in-app purchases — all chips are virtual game tokens with no monetary value, and cannot be purchased, sold, traded, or redeemed for money or anything of real-world value. Practice or success at social casino gaming does not imply future success at real money gambling.</p>
 <h2>2. Accounts</h2>
 <p>You are responsible for maintaining the confidentiality of your account. You agree not to share your account, impersonate others, or use the App in any way that violates applicable law.</p>
 <h2>3. Acceptable Use</h2>
@@ -2372,6 +2372,132 @@ app.get('/admin/music', (_, res) => res.send(ADMIN_SHELL('Music', `
     btn.textContent = res.ok ? '✓ Saved' : 'Error';
     setTimeout(() => { btn.textContent = 'Save'; }, 2000);
   }`)));
+
+// ── Ad landing pages (Google / Meta social casino compliance) ────────────────
+// Both platforms require the destination to make explicit: 18+, no real-money
+// gambling, no prizes of real-world value, IAP disclosure, responsible-play info.
+app.use('/lp-assets', express.static(path.join(__dirname, 'landing-assets'), { maxAge: '7d' }));
+
+const LANDING_PAGE = (source) => `<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Poker Monkey — Free Social Poker | 18+ | No Real Money</title>
+<meta name="description" content="Poker Monkey is a free-to-play social poker game for adults 18+. Virtual chips only — no real money gambling, no cash prizes, no in-app purchases.">
+<!-- Meta Pixel -->
+<script>
+!function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=function(){n.callMethod?
+n.callMethod.apply(n,arguments):n.queue.push(arguments)};if(!f._fbq)f._fbq=n;
+n.push=n;n.loaded=!0;n.version='2.0';n.queue=[];t=b.createElement(e);t.async=!0;
+t.src=v;s=b.getElementsByTagName(e)[0];s.parentNode.insertBefore(t,s)}(window,
+document,'script','https://connect.facebook.net/en_US/fbevents.js');
+fbq('init', '1984837125752911');
+fbq('track', 'PageView');
+</script>
+<noscript><img height="1" width="1" style="display:none" src="https://www.facebook.com/tr?id=1984837125752911&ev=PageView&noscript=1"/></noscript>
+<!-- Google tag (gtag.js) — Google Ads AW-18227143328 -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=AW-18227143328"></script>
+<script>
+window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'AW-18227143328');
+</script>
+<style>
+:root{--gold:#e8b94a;--navy:#0b1d2a;--navy2:#11293a;--text:#e9eef2;--muted:#9fb3c0}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--navy);color:var(--text);line-height:1.6}
+.wrap{max-width:920px;margin:0 auto;padding:0 20px}
+header{text-align:center;padding:48px 0 24px}
+header img{width:140px;height:auto}
+h1{font-size:2rem;margin:16px 0 8px;color:var(--gold)}
+.sub{color:var(--muted);font-size:1.1rem;max-width:560px;margin:0 auto}
+.badges{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin:20px 0}
+.badge{border:1px solid var(--gold);color:var(--gold);border-radius:999px;padding:6px 16px;font-weight:700;font-size:.85rem;letter-spacing:.5px}
+.cta{display:inline-block;background:var(--gold);color:#16263a;font-weight:800;font-size:1.15rem;padding:14px 44px;border-radius:999px;text-decoration:none;margin:12px 0 4px}
+.cta:hover{filter:brightness(1.08)}
+.disclaimer-strip{background:var(--navy2);border:1px solid #1f3b50;border-radius:12px;padding:16px 20px;margin:28px auto;font-size:.92rem;color:var(--text);text-align:center}
+.disclaimer-strip strong{color:var(--gold)}
+section{padding:34px 0}
+h2{color:var(--gold);font-size:1.35rem;margin-bottom:16px;text-align:center}
+.features{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:14px}
+.feature{background:var(--navy2);border-radius:12px;padding:18px}
+.feature h3{font-size:1rem;color:var(--gold);margin-bottom:6px}
+.feature p{font-size:.9rem;color:var(--muted)}
+.shots{display:flex;gap:14px;justify-content:center;flex-wrap:wrap}
+.shots img{width:230px;max-width:44vw;border-radius:16px;border:1px solid #1f3b50}
+.compliance{background:var(--navy2);border-radius:12px;padding:24px 28px}
+.compliance ul{list-style:none}
+.compliance li{padding:9px 0 9px 30px;position:relative;border-bottom:1px solid #1a3144;font-size:.95rem}
+.compliance li:last-child{border-bottom:none}
+.compliance li::before{content:'✓';position:absolute;left:4px;color:var(--gold);font-weight:800}
+.rg{text-align:center;color:var(--muted);font-size:.9rem;max-width:640px;margin:0 auto}
+.rg a{color:var(--gold)}
+footer{border-top:1px solid #1a3144;padding:26px 0 40px;text-align:center;color:var(--muted);font-size:.82rem}
+footer a{color:var(--gold);text-decoration:none;margin:0 8px}
+</style>
+</head><body>
+<div class="wrap">
+<header>
+  <img src="/lp-assets/logo.png" alt="Poker Monkey logo">
+  <h1>Free 1v1 Texas Hold'em. No Real Money. Ever.</h1>
+  <p class="sub">Queue up, get matched, and battle heads-up poker for virtual chips and ELO rating — chess.com style. 100% free.</p>
+  <div class="badges"><span class="badge">18+</span><span class="badge">NO REAL MONEY</span><span class="badge">NO IN-APP PURCHASES</span><span class="badge">FREE TO PLAY</span></div>
+  <a class="cta" href="/?utm_source=${source}&utm_medium=paid&utm_campaign=social_casino">PLAY FREE NOW</a>
+</header>
+
+<div class="disclaimer-strip">
+  <strong>Poker Monkey is a free social poker game intended for adults aged 18 and over.</strong>
+  It does not offer real money gambling or an opportunity to win real money or prizes.
+  Practice or success at social casino gaming does not imply future success at real money gambling.
+</div>
+
+<section>
+  <h2>What You Get</h2>
+  <div class="features">
+    <div class="feature"><h3>♠ Heads-Up Hold'em</h3><p>Fast 1v1 No-Limit Texas Hold'em matches against real players or practice bots.</p></div>
+    <div class="feature"><h3>📈 ELO Rating</h3><p>Every match is rated. Climb the leaderboard and prove your skill.</p></div>
+    <div class="feature"><h3>🎬 Hand Replays</h3><p>Step through every hand you've played, action by action.</p></div>
+    <div class="feature"><h3>🏝 Pirate Vibes</h3><p>Moonlit beach tables, monkey avatars, and zero pressure — just play.</p></div>
+  </div>
+</section>
+
+<section>
+  <h2>See It In Action</h2>
+  <div class="shots">
+    <img src="/lp-assets/lobby.jpg" alt="Poker Monkey lobby screen">
+    <img src="/lp-assets/gameplay-preflop.jpg" alt="Poker Monkey gameplay — preflop decision">
+    <img src="/lp-assets/gameplay-turn-board.jpg" alt="Poker Monkey gameplay — turn betting">
+  </div>
+</section>
+
+<section>
+  <h2>Our Social Gaming Commitment</h2>
+  <div class="compliance">
+    <ul>
+      <li><strong>No real money gambling.</strong> Poker Monkey never accepts wagers, deposits, or payments of any kind.</li>
+      <li><strong>Nothing of real-world value can be won.</strong> Chips are virtual game tokens with no monetary value. They cannot be purchased, sold, traded, transferred between players, or redeemed for money or prizes.</li>
+      <li><strong>Completely free — no in-app purchases.</strong> There is nothing to buy in Poker Monkey.</li>
+      <li><strong>Adults only.</strong> The game is intended exclusively for users aged 18 or over (or the legal gambling age in your jurisdiction, if higher). We do not market to or knowingly allow minors.</li>
+      <li><strong>Not affiliated with real-money gambling.</strong> Poker Monkey has no connection to any real-money gambling operator, and contains no links to real-money gambling services.</li>
+      <li><strong>Simulated play only.</strong> Practice or success at social casino gaming does not imply future success at real money gambling.</li>
+    </ul>
+  </div>
+</section>
+
+<section>
+  <p class="rg"><strong>Play responsibly.</strong> Even free games should stay fun. If you or someone you know has a gambling problem, confidential help is available 24/7: call or text <strong>1-800-GAMBLER</strong>, or visit <a href="https://www.ncpgambling.org" rel="noopener">ncpgambling.org</a>.</p>
+</section>
+
+<footer>
+  <a href="/terms">Terms of Service</a> · <a href="/privacy-policy">Privacy Policy</a> · <a href="mailto:brian.danilo@gmail.com">Contact</a>
+  <p style="margin-top:12px">© ${new Date().getFullYear()} Poker Monkey. Free social poker for adults 18+. No real money gambling. No prizes of real-world value.</p>
+</footer>
+</div>
+</body></html>`;
+
+app.get('/lp/google', (_, res) => res.send(LANDING_PAGE('google')));
+app.get('/lp/meta', (_, res) => res.send(LANDING_PAGE('facebook')));
+app.get('/lp', (_, res) => res.send(LANDING_PAGE('direct')));
 
 // ── Web client (SPA) ──────────────────────────────────────────────────────────
 const distDir = path.join(__dirname, '..', 'client', 'dist');
