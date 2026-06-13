@@ -119,3 +119,6 @@ and log [START] / [DONE] entries for every task. See global CLAUDE.md for protoc
 [16:47 UTC] [START] admin/players: checkbox multi-select + delete accounts (with cascade + live socket kick + confirm dialog) — branch feature/ad-landing-pages
 [16:52 UTC] [DONE] v5.166: admin/players multi-select delete (cascade + socket kick + confirm dialog) + country flags — pushed f8dcb3b to main (Railway deploy)
 [17:05 UTC] [DONE] v5.167: bots show 🤖 badge instead of country flag — AvatarBadge isBot prop, LobbyScreen + OpponentCard updated, BOTS country:null, bot match-found includes isBot+avatarId — pushed e68a3f1 to main
+[17:07 UTC] [DONE] v5.168: radar pulse CSS keyframes on web, Animated on native (MatchFlowOverlays.jsx)
+
+[17:08 UTC] [START] leaderboard redesign — inline lobby card + full screen hero/neighborhood/tabs per UPDATE_leaderboard.md — branch feature/leaderboard-redesign

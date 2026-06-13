@@ -1,11 +1,12 @@
-import React, { useContext, useEffect, useRef, useState } from 'react';
-import { View, Text, Pressable, ScrollView, StyleSheet, Platform, Share } from 'react-native';
+import React, { useCallback, useContext, useEffect, useRef, useState } from 'react';
+import { View, Text, Pressable, ScrollView, StyleSheet, Platform, Share, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { GameContext } from '../context/GameContext';
 import { LobbyContext } from '../context/LobbyContext';
 import { colors } from '../theme';
-import { VERSION_DISPLAY } from '../config';
+import { VERSION_DISPLAY, SERVER_URL } from '../config';
 import { track } from '../utils/analytics';
+import { flagEmoji } from '../utils/flag';
 import { AvatarBadge } from '../components/MatchFlowOverlays';
 import SoundButton from '../components/SoundButton';
 
@@ -79,6 +80,7 @@ export default function LobbyScreen({ navigation }) {
 
   const [menuOpen, setMenuOpen] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
+  const [lbData, setLbData] = useState(null);
   const copiedTimer = useRef(null);
 
   const myPlayerId = playerInfo?.playerId;
@@ -105,6 +107,20 @@ export default function LobbyScreen({ navigation }) {
     } catch {} // dismissed share sheet — not an error
   };
   useEffect(() => () => clearTimeout(copiedTimer.current), []);
+
+  // Fetch leaderboard preview on focus
+  const fetchLb = useCallback(() => {
+    const url = myPlayerId
+      ? `${SERVER_URL}/api/leaderboard?playerId=${encodeURIComponent(myPlayerId)}`
+      : `${SERVER_URL}/api/leaderboard`;
+    fetch(url).then(r => r.json()).then(setLbData).catch(() => {});
+  }, [myPlayerId]);
+  useEffect(() => {
+    fetchLb();
+    const unsub = navigation.addListener('focus', fetchLb);
+    return unsub;
+  }, [fetchLb, navigation]);
+
   const humans = (onlinePlayers || []).filter(p => !p.isBot);
 
   // Everyone online is implicitly looking to play — challengeable unless in a
@@ -249,6 +265,40 @@ export default function LobbyScreen({ navigation }) {
                     <View style={s.watch}><Text style={s.watchTxt}>WATCH</Text></View>
                   </Pressable>
                 ))}
+              </>
+            )}
+
+            {/* Leaderboard preview card */}
+            {lbData && (
+              <>
+                <View style={s.sec}>
+                  <Text style={s.secIcGold}>🏆</Text>
+                  <Text style={[s.secTitle, s.secTitleGold]}>Leaderboard</Text>
+                </View>
+                <Pressable style={s.lbCard} onPress={() => navigation.navigate('Leaderboard')}>
+                  {(lbData.entries || []).slice(0, 3).map((p, i) => (
+                    <View key={p.playerId} style={s.lbRow}>
+                      <Text style={s.lbMedal}>{['🥇','🥈','🥉'][i]}</Text>
+                      <Text style={s.lbName} numberOfLines={1}>{p.displayName}</Text>
+                      <Text style={s.lbFlag}>{p.isBot ? '🤖' : flagEmoji(p.country)}</Text>
+                      <Text style={s.lbElo}>{p.elo}</Text>
+                    </View>
+                  ))}
+                  {lbData.myStats && (
+                    <>
+                      <View style={s.lbSep} />
+                      <View style={[s.lbRow, s.lbRowMe]}>
+                        <Text style={s.lbRank}>#{lbData.myStats.rank}</Text>
+                        <Text style={[s.lbName, s.lbNameMe]} numberOfLines={1}>{playerInfo?.name}</Text>
+                        <Text style={s.lbFlag}>{flagEmoji(playerInfo?.country)}</Text>
+                        <Text style={[s.lbElo, s.lbEloMe]}>{lbData.myStats.elo}</Text>
+                      </View>
+                    </>
+                  )}
+                  <View style={s.lbSeeAll}>
+                    <Text style={s.lbSeeAllTxt}>See full leaderboard ›</Text>
+                  </View>
+                </Pressable>
               </>
             )}
 
@@ -400,6 +450,26 @@ const s = StyleSheet.create({
   liveX: { color: '#5b6a7d', fontSize: 11 },
   watch: { borderWidth: 1, borderColor: 'rgba(255,255,255,0.16)', borderRadius: 9, paddingVertical: 7, paddingHorizontal: 10 },
   watchTxt: { color: '#8a98aa', fontSize: 11, fontWeight: '900' },
+
+  lbCard: {
+    backgroundColor: '#0f1c2e', borderRadius: 18, borderWidth: 1,
+    borderColor: 'rgba(240,192,64,0.2)', overflow: 'hidden', marginBottom: 8,
+  },
+  lbRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 14, paddingVertical: 10 },
+  lbRowMe: { backgroundColor: 'rgba(240,192,64,0.1)' },
+  lbMedal:  { fontSize: 18, width: 28, textAlign: 'center' },
+  lbRank:   { color: colors.goldLight, fontSize: 13, fontWeight: '900', width: 28, textAlign: 'center' },
+  lbName:   { flex: 1, color: colors.white, fontSize: 14, fontWeight: '800' },
+  lbNameMe: { color: colors.goldLight },
+  lbFlag:   { fontSize: 15 },
+  lbElo:    { color: '#8a98aa', fontSize: 13, fontWeight: '800', minWidth: 36, textAlign: 'right' },
+  lbEloMe:  { color: colors.goldLight },
+  lbSep:    { height: 1, backgroundColor: 'rgba(255,255,255,0.07)', marginHorizontal: 14 },
+  lbSeeAll: {
+    borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.07)',
+    paddingVertical: 12, alignItems: 'center',
+  },
+  lbSeeAllTxt: { color: colors.goldLight, fontSize: 13, fontWeight: '800' },
 
   version: { color: 'rgba(255,255,255,0.25)', fontSize: 11, fontWeight: '600', textAlign: 'center', marginTop: 24 },
 });

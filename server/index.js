@@ -1358,6 +1358,8 @@ app.get('/api/rooms', (_, res) => res.json([]));
 // Leaderboard — all players ranked by ELO
 app.get('/api/leaderboard', async (req, res) => {
   try {
+    const { playerId } = req.query;
+    // Fetch all ranked players (no guest bots excluded — bots count as competition)
     const { rows } = await db.query(
       `SELECT p.id, p.display_name, p.avatar_id, p.is_guest, p.country,
               COALESCE(ps.elo, 1200) AS elo,
@@ -1366,9 +1368,10 @@ app.get('/api/leaderboard', async (req, res) => {
        FROM players p
        LEFT JOIN player_stats ps ON ps.player_id = p.id
        ORDER BY elo DESC, matches_played DESC
-       LIMIT 100`
+       LIMIT 200`
     );
-    res.json(rows.map((r, i) => ({
+    const total = rows.length;
+    const entries = rows.map((r, i) => ({
       rank:          i + 1,
       playerId:      r.id,
       displayName:   r.display_name,
@@ -1380,7 +1383,31 @@ app.get('/api/leaderboard', async (req, res) => {
       wins:          r.matches_won,
       losses:        r.matches_played - r.matches_won,
       matchesPlayed: r.matches_played,
-    })));
+      winRate:       r.matches_played > 0 ? r.matches_won / r.matches_played : 0,
+    }));
+
+    if (!playerId) return res.json({ entries, total });
+
+    const myIdx = entries.findIndex(e => e.playerId === playerId);
+    let myStats = null;
+    let neighborhood = [];
+    if (myIdx !== -1) {
+      const me = entries[myIdx];
+      const above = myIdx > 0 ? entries[myIdx - 1] : null;
+      myStats = {
+        rank:        me.rank,
+        elo:         me.elo,
+        wins:        me.wins,
+        losses:      me.losses,
+        winRate:     me.winRate,
+        topPercent:  Math.ceil((me.rank / total) * 100),
+        nextTarget:  above ? { displayName: above.displayName, rank: above.rank, eloDiff: above.elo - me.elo } : null,
+      };
+      const start = Math.max(0, myIdx - 3);
+      const end   = Math.min(entries.length, myIdx + 4);
+      neighborhood = entries.slice(start, end);
+    }
+    res.json({ entries, total, myStats, neighborhood });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
