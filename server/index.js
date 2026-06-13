@@ -47,6 +47,67 @@ const eloCache = {};
 // `${fromId}:${toId}` → { timer } — pending direct challenges
 const challenges = new Map();
 
+// ── Analytics helpers ─────────────────────────────────────────────────────────
+
+function isBot(playerId) { return playerId && playerId.startsWith('bot_'); }
+
+async function loadMatchAnalytics(m) {
+  const playerIds = [m.p1, m.p2].map(p => p.playerId).filter(id => !isBot(id));
+  m.analyticsCache = {};
+  if (!playerIds.length) return;
+  try {
+    const { rows } = await db.query(
+      'SELECT player_id, first_match_begun, first_match_complete FROM analytics WHERE player_id = ANY($1)',
+      [playerIds]
+    );
+    for (const id of playerIds) {
+      const row = rows.find(r => r.player_id === id);
+      m.analyticsCache[id] = row
+        ? { firstMatchBegun: row.first_match_begun, firstMatchComplete: row.first_match_complete }
+        : { firstMatchBegun: false, firstMatchComplete: false };
+    }
+  } catch (e) {
+    console.error('[analytics] load failed:', e.message);
+  }
+}
+
+function fireAnalyticsEvent(eventName, playerId) {
+  // TODO: wire Meta Conversions API
+  console.log(`[analytics] ${eventName} — player: ${playerId}`);
+}
+
+async function markAnalytics(playerId, field) {
+  try {
+    await db.query(
+      `INSERT INTO analytics (player_id, ${field}) VALUES ($1, true)
+       ON CONFLICT (player_id) DO UPDATE SET ${field} = true`,
+      [playerId]
+    );
+  } catch (e) {
+    console.error(`[analytics] mark ${field} failed:`, e.message);
+  }
+}
+
+function checkAndFireBegun(m, playerId) {
+  if (isBot(playerId)) return;
+  const cache = m.analyticsCache?.[playerId];
+  if (!cache || cache.firstMatchBegun) return;
+  cache.firstMatchBegun = true;
+  fireAnalyticsEvent('FirstMatchBegun', playerId);
+  markAnalytics(playerId, 'first_match_begun').catch(() => {});
+}
+
+function checkAndFireComplete(m) {
+  for (const p of matchPlayers(m)) {
+    if (isBot(p.playerId)) continue;
+    const cache = m.analyticsCache?.[p.playerId];
+    if (!cache || cache.firstMatchComplete) continue;
+    cache.firstMatchComplete = true;
+    fireAnalyticsEvent('FirstMatchComplete', p.playerId);
+    markAnalytics(p.playerId, 'first_match_complete').catch(() => {});
+  }
+}
+
 // Quick Match funnel: how long a searcher waits before dropping into a bot game
 const QUICK_MATCH_WAIT_MS = 5000;
 
@@ -390,6 +451,7 @@ function scheduleNextHand(m, delay = 5000) {
       m.game.phase   = 'waiting';
       m.game.gameOver = true;
       broadcastMatchState(m);
+      checkAndFireComplete(m);
       await endMatch(m, winnerId);
       return;
     }
@@ -458,6 +520,7 @@ function startHumanMatch(p1, p2) {
   voidChallengesFor(p2.playerId);
 
   const m = createMatch(p1, p2);
+  loadMatchAnalytics(m).catch(e => console.error('[analytics] startHumanMatch load:', e.message));
   const sp1 = socketPlayers.get(p1.socketId);
   const sp2 = socketPlayers.get(p2.socketId);
   if (sp1) sp1.matchId = m.id;
@@ -883,6 +946,7 @@ io.on('connection', (socket) => {
     // Bot gets a fake socketId — io.to() on an empty room is a harmless no-op
     const p2 = { playerId: botId, playerName: bot.name, avatarId: bot.avatarId, socketId: `bot:${randomUUID()}` };
     const m = createMatch(p1, p2);
+    loadMatchAnalytics(m).catch(e => console.error('[analytics] startBotMatch load:', e.message));
     m.isBotMatch = true;
     m.botId = botId;
     m.botProfile = bot.profile;
@@ -954,6 +1018,7 @@ io.on('connection', (socket) => {
         .catch(e => console.error('[hand] logAction:', e.message));
       emitHandEvents(m, rows);
       broadcastMatchState(m);
+      checkAndFireBegun(m, sp.playerId);
       if (m.game.phase === 'showdown') scheduleNextHand(m, cfg.inter_hand_delay_ms);
     } catch (err) {
       socket.emit('error', { message: err.message });
@@ -991,6 +1056,7 @@ io.on('connection', (socket) => {
         const { randomUUID } = require('crypto');
         const newMatchId = randomUUID();
         const newMatch = createMatch(m.p1, m.p2);
+        loadMatchAnalytics(newMatch).catch(e => console.error('[analytics] rematch load:', e.message));
         // Override the UUID to our new one and tag the previous match
         matches.delete(newMatch.id);
         newMatch.id = newMatchId;

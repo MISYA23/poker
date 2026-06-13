@@ -172,7 +172,6 @@ export default function App() {
       setOpponentDisconnected(null);
       setMeantime(false);
       if (data.newElo != null) setMyElo(data.newElo);
-      track('FinishMatch');
     },
     'rematch-pending': ({ from })    => {
       setMatchOver(prev => prev ? { ...prev, opponentWantsRematch: from } : prev);
