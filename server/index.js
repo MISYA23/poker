@@ -1583,7 +1583,7 @@ app.post('/admin/reset', (_, res) => { doReset(); res.json({ ok: true }); });
 app.get('/api/admin/players', async (_, res) => {
   try {
     const { rows } = await db.query(`
-      SELECT p.id, p.display_name, p.avatar_id, p.is_guest,
+      SELECT p.id, p.display_name, p.avatar_id, p.is_guest, p.country,
              p.created_at, p.last_seen_at,
              ps.elo, ps.matches_played, ps.matches_won
       FROM players p
@@ -1591,6 +1591,49 @@ app.get('/api/admin/players', async (_, res) => {
       ORDER BY p.created_at DESC
     `);
     res.json(rows);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.delete('/api/admin/players', async (req, res) => {
+  const { ids } = req.body || {};
+  if (!Array.isArray(ids) || ids.length === 0) return res.status(400).json({ error: 'ids required' });
+  try {
+    // Kick any live sockets for these players first
+    for (const [, sp] of socketPlayers) {
+      if (ids.includes(sp.playerId)) {
+        const sock = io.sockets.sockets.get(sp.socketId);
+        if (sock) { sock.emit('reset'); sock.disconnect(true); }
+      }
+    }
+    // Cascade delete in FK order
+    await db.query(`
+      DELETE FROM hand_events
+      WHERE hand_id IN (
+        SELECT h.id FROM hands h
+        JOIN matches m ON m.id = h.match_id
+        WHERE m.player1_id = ANY($1) OR m.player2_id = ANY($1)
+      ) OR player_id = ANY($1)
+    `, [ids]);
+    await db.query(`
+      DELETE FROM hands
+      WHERE match_id IN (
+        SELECT id FROM matches WHERE player1_id = ANY($1) OR player2_id = ANY($1)
+      )
+    `, [ids]);
+    await db.query(`
+      UPDATE matches SET previous_match_id = NULL
+      WHERE previous_match_id IN (
+        SELECT id FROM matches WHERE player1_id = ANY($1) OR player2_id = ANY($1)
+      )
+    `, [ids]);
+    await db.query(`DELETE FROM matches WHERE player1_id = ANY($1) OR player2_id = ANY($1)`, [ids]);
+    await db.query(`DELETE FROM player_stats WHERE player_id = ANY($1)`, [ids]);
+    await db.query(`DELETE FROM friendships WHERE requester_id = ANY($1) OR addressee_id = ANY($1)`, [ids]);
+    await db.query(`DELETE FROM feedback WHERE player_id = ANY($1)`, [ids]);
+    await db.query(`DELETE FROM players WHERE id = ANY($1)`, [ids]);
+    res.json({ ok: true, deleted: ids.length });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -1666,6 +1709,24 @@ app.get('/admin/players', (_, res) => {
     td.name { color: #e6edf3; }
     td.date { color: #8b949e; font-size: 0.8rem; }
     tr:hover td { background: #1c2128; }
+    td.cb-col, th.cb-col { width: 36px; text-align: center; padding: 9px 8px; }
+    input[type=checkbox] { width: 15px; height: 15px; accent-color: #f0c040; cursor: pointer; }
+    tr.selected td { background: #1f2a1a !important; }
+    #del-btn { background: #b91c1c; color: #fff; border: none; border-radius: 6px; font-weight: 700; font-size: 0.9rem; padding: 7px 16px; cursor: pointer; display: none; }
+    #del-btn:hover { background: #dc2626; }
+    #modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 100; align-items: center; justify-content: center; }
+    #modal-overlay.show { display: flex; }
+    #modal { background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 28px 32px; max-width: 480px; width: 90%; }
+    #modal h2 { font-size: 1.1rem; color: #f85149; margin-bottom: 12px; }
+    #modal p { color: #8b949e; font-size: 0.88rem; margin-bottom: 8px; }
+    #modal ul { color: #e6edf3; font-size: 0.85rem; margin: 8px 0 20px 18px; max-height: 200px; overflow-y: auto; }
+    #modal ul li { margin-bottom: 4px; }
+    #modal .btns { display: flex; gap: 10px; justify-content: flex-end; }
+    #modal .btns button { border: none; border-radius: 6px; font-weight: 700; font-size: 0.9rem; padding: 9px 20px; cursor: pointer; }
+    #modal .btns .cancel { background: #21262d; color: #e6edf3; }
+    #modal .btns .cancel:hover { background: #30363d; }
+    #modal .btns .confirm { background: #b91c1c; color: #fff; }
+    #modal .btns .confirm:hover { background: #dc2626; }
   </style>
 </head>
 <body>
@@ -1683,6 +1744,7 @@ app.get('/admin/players', (_, res) => {
     <div class="toolbar">
       <input type="text" id="search" placeholder="Search name or ID…" oninput="render()" />
       <span class="count" id="count"></span>
+      <button id="del-btn" onclick="showConfirm()">Delete Selected (<span id="sel-count">0</span>)</button>
     </div>
     <div class="wrap"><table>
       <thead>
@@ -1692,10 +1754,27 @@ app.get('/admin/players', (_, res) => {
     </table></div>
   </div>
 
+  <div id="modal-overlay">
+    <div id="modal">
+      <h2>Delete accounts?</h2>
+      <p>This permanently deletes these players and all their match history. This cannot be undone.</p>
+      <ul id="modal-list"></ul>
+      <div class="btns">
+        <button class="cancel" onclick="closeConfirm()">Cancel</button>
+        <button class="confirm" id="confirm-btn" onclick="doDelete()">Delete</button>
+      </div>
+    </div>
+  </div>
+
   <script>
     const PASSWORD = '1111';
+    function flag(cc) {
+      if (!cc || cc.length !== 2) return '';
+      return String.fromCodePoint(...[...cc.toUpperCase()].map(c => 0x1F1E6 + c.charCodeAt(0) - 65)) + ' ';
+    }
+
     const COLS = [
-      { key: 'display_name', label: 'Name',     fmt: v => v ?? '—' },
+      { key: 'display_name', label: 'Name',     fmt: (v, row) => flag(row.country) + (v ?? '—') },
       { key: 'id',           label: 'ID',        fmt: v => v,         cls: 'id' },
       { key: 'is_guest',     label: 'Type',      fmt: v => v ? 'guest' : 'registered', cls: 'guest' },
       { key: 'elo',          label: 'ELO',       fmt: v => v ?? '—',  cls: 'elo' },
@@ -1706,6 +1785,7 @@ app.get('/admin/players', (_, res) => {
     ];
 
     let allRows = [], sortCol = 'created_at', sortDir = 'desc';
+    const checked = new Set();
 
     document.getElementById('pw').addEventListener('keydown', e => { if (e.key === 'Enter') login(); });
 
@@ -1719,9 +1799,29 @@ app.get('/admin/players', (_, res) => {
       }
     }
 
-    function buildHeader() {
+    function updateDelBtn() {
+      const n = checked.size;
+      document.getElementById('sel-count').textContent = n;
+      document.getElementById('del-btn').style.display = n > 0 ? 'block' : 'none';
+    }
+
+    function buildHeader(visibleRows) {
       const tr = document.getElementById('thead');
       tr.innerHTML = '';
+      // Select-all checkbox
+      const thCb = document.createElement('th');
+      thCb.className = 'cb-col';
+      const cbAll = document.createElement('input');
+      cbAll.type = 'checkbox';
+      cbAll.title = 'Select all visible';
+      cbAll.onchange = () => {
+        visibleRows.forEach(r => cbAll.checked ? checked.add(r.id) : checked.delete(r.id));
+        updateDelBtn();
+        render();
+      };
+      thCb.appendChild(cbAll);
+      tr.appendChild(thCb);
+
       COLS.forEach(col => {
         const th = document.createElement('th');
         th.textContent = col.label;
@@ -1729,7 +1829,6 @@ app.get('/admin/players', (_, res) => {
         th.onclick = () => {
           if (sortCol === col.key) sortDir = sortDir === 'asc' ? 'desc' : 'asc';
           else { sortCol = col.key; sortDir = 'asc'; }
-          buildHeader();
           render();
         };
         tr.appendChild(th);
@@ -1755,23 +1854,78 @@ app.get('/admin/players', (_, res) => {
         return sortDir === 'asc' ? cmp : -cmp;
       });
       document.getElementById('count').textContent = rows.length + ' players';
+      buildHeader(rows);
       const tbody = document.getElementById('tbody');
       tbody.innerHTML = '';
       rows.forEach(row => {
         const tr = document.createElement('tr');
+        if (checked.has(row.id)) tr.className = 'selected';
+        // Checkbox cell
+        const tdCb = document.createElement('td');
+        tdCb.className = 'cb-col';
+        const cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.checked = checked.has(row.id);
+        cb.onchange = () => {
+          cb.checked ? checked.add(row.id) : checked.delete(row.id);
+          tr.className = cb.checked ? 'selected' : '';
+          updateDelBtn();
+        };
+        tdCb.appendChild(cb);
+        tr.appendChild(tdCb);
+        // Data cells
         COLS.forEach(col => {
           const td = document.createElement('td');
           if (col.cls) td.className = col.cls;
-          td.textContent = col.fmt(row[col.key]);
+          td.textContent = col.fmt(row[col.key], row);
           tr.appendChild(td);
         });
         tbody.appendChild(tr);
       });
     }
 
+    function showConfirm() {
+      const ids = [...checked];
+      const names = ids.map(id => {
+        const r = allRows.find(x => x.id === id);
+        return r ? (r.display_name || '(no name)') + ' — ' + id : id;
+      });
+      const ul = document.getElementById('modal-list');
+      ul.innerHTML = names.map(n => '<li>' + n.replace(/</g, '&lt;') + '</li>').join('');
+      document.getElementById('modal-overlay').classList.add('show');
+    }
+
+    function closeConfirm() {
+      document.getElementById('modal-overlay').classList.remove('show');
+    }
+
+    async function doDelete() {
+      const ids = [...checked];
+      const btn = document.getElementById('confirm-btn');
+      btn.disabled = true;
+      btn.textContent = 'Deleting…';
+      try {
+        const r = await fetch('/api/admin/players', {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ids }),
+        });
+        const j = await r.json();
+        if (!r.ok) throw new Error(j.error || 'Delete failed');
+        ids.forEach(id => checked.delete(id));
+        closeConfirm();
+        updateDelBtn();
+        await load();
+      } catch (e) {
+        alert('Error: ' + e.message);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Delete';
+      }
+    }
+
     async function load() {
       allRows = await fetch('/api/admin/players').then(r => r.json());
-      buildHeader();
       render();
     }
   </script>

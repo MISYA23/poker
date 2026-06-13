@@ -114,3 +114,6 @@ and log [START] / [DONE] entries for every task. See global CLAUDE.md for protoc
 [21:19 UTC] [START] social casino ad policy research + compliance landing pages (Google/Meta) — no code branch yet
 
 [16:40 UTC] [DONE] removed UI Debug from nav menus (lobby + game screen) + version number from game screen top-left — changed: client/src/screens/LobbyScreen.jsx, client/src/screens/GameScreen.jsx
+
+[16:43 UTC] [DONE] v5.165 merged feature/ad-landing-pages → main + pushed (Railway deploy 2a20140); branch deleted
+[16:47 UTC] [START] admin/players: checkbox multi-select + delete accounts (with cascade + live socket kick + confirm dialog) — branch feature/ad-landing-pages
