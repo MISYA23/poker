@@ -1884,6 +1884,8 @@ app.get('/admin/players', (_, res) => {
 
   <script>
     const PASSWORD = '1111';
+    const OWNER_IDS = new Set(['g_105630664827310545181']);
+
     function flag(cc) {
       if (!cc || cc.length !== 2) return '';
       return String.fromCodePoint(...[...cc.toUpperCase()].map(c => 0x1F1E6 + c.charCodeAt(0) - 65)) + ' ';
@@ -1909,6 +1911,19 @@ app.get('/admin/players', (_, res) => {
     const checked = new Set();
 
     document.getElementById('pw').addEventListener('keydown', e => { if (e.key === 'Enter') login(); });
+
+    (function autoLogin() {
+      try {
+        const stored = localStorage.getItem('poker_user');
+        if (!stored) return;
+        const { playerId } = JSON.parse(stored) || {};
+        if (playerId && OWNER_IDS.has(playerId)) {
+          document.getElementById('auth').style.display = 'none';
+          document.getElementById('main').style.display = 'block';
+          load();
+        }
+      } catch {}
+    })();
 
     function login() {
       if (document.getElementById('pw').value === PASSWORD) {
