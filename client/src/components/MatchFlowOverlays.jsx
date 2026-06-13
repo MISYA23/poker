@@ -1,6 +1,12 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, Pressable, StyleSheet, Image, Animated, Easing } from 'react-native';
+import { View, Text, Pressable, StyleSheet, Image, Animated, Easing, Platform } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
+
+if (Platform.OS === 'web') {
+  const s = document.createElement('style');
+  s.textContent = '@keyframes radarPulse{0%{transform:scale(0.55);opacity:0.7}70%{opacity:0.25}100%{transform:scale(1.25);opacity:0}}';
+  document.head.appendChild(s);
+}
 import { colors } from '../theme';
 import { flagEmoji } from '../utils/flag';
 
@@ -32,8 +38,7 @@ export function AvatarBadge({ avatarId, country, isBot = false, size = 74 }) {
   );
 }
 
-// Pulsing-ring radar with the monkey in the middle (core Animated — no reanimated)
-function Radar() {
+function RadarNative() {
   const pulse = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     const loop = Animated.loop(Animated.timing(pulse, {
@@ -52,6 +57,21 @@ function Radar() {
     </View>
   );
 }
+
+function RadarWeb() {
+  return (
+    <View style={ov.radar}>
+      <View style={[ov.radarRing, {
+        animationName: 'radarPulse', animationDuration: '1.6s',
+        animationTimingFunction: 'ease-out', animationIterationCount: 'infinite',
+      }]} />
+      <View style={[ov.radarRing, { transform: [{ scale: 0.62 }], opacity: 0.25 }]} />
+      <Text style={ov.radarMonkey}>🐵</Text>
+    </View>
+  );
+}
+
+const Radar = Platform.OS === 'web' ? RadarWeb : RadarNative;
 
 function OpponentCard({ name, avatarId, country, elo, isBot }) {
   return (
