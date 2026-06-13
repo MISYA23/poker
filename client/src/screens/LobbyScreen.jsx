@@ -30,7 +30,7 @@ function PlayerRow({ p, incoming, issued, onChallenge, onCancelChallenge, onAcce
   const green = incoming || issued;
   return (
     <View style={[s.row, green && s.rowGreen]}>
-      <AvatarBadge avatarId={p.avatarId} country={p.country} size={46} />
+      <AvatarBadge avatarId={p.avatarId} country={p.country} isBot={!!p.isBot} size={46} />
       <View style={s.rowWho}>
         <Text style={s.rowName} numberOfLines={1}>{p.name}</Text>
         <View style={s.rowMeta}>

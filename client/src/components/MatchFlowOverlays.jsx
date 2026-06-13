@@ -19,7 +19,7 @@ const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 
 // Rounded-square avatar with a big flag badge in the corner (design spec:
 // flags are the main at-a-glance identifier, keep them prominent)
-export function AvatarBadge({ avatarId, country, size = 74 }) {
+export function AvatarBadge({ avatarId, country, isBot = false, size = 74 }) {
   return (
     <View style={{ width: size, height: size }}>
       <Image
@@ -27,7 +27,7 @@ export function AvatarBadge({ avatarId, country, size = 74 }) {
         style={{ width: size, height: size, borderRadius: size * 0.26, backgroundColor: '#1b2a3b' }}
         resizeMode="cover"
       />
-      <Text style={[ov.flagBadge, { fontSize: size * 0.38 }]}>{flagEmoji(country)}</Text>
+      <Text style={[ov.flagBadge, { fontSize: size * 0.38 }]}>{isBot ? '🤖' : flagEmoji(country)}</Text>
     </View>
   );
 }
@@ -53,10 +53,10 @@ function Radar() {
   );
 }
 
-function OpponentCard({ name, avatarId, country, elo }) {
+function OpponentCard({ name, avatarId, country, elo, isBot }) {
   return (
     <View style={ov.oppRow}>
-      <AvatarBadge avatarId={avatarId} country={country} />
+      <AvatarBadge avatarId={avatarId} country={country} isBot={isBot} />
       <View>
         <Text style={ov.oppName} numberOfLines={1}>{name}</Text>
         <Text style={ov.oppMeta}>ELO <Text style={ov.oppElo}>{elo ?? 1200}</Text></Text>

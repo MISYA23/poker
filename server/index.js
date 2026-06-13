@@ -95,9 +95,9 @@ async function lookupCountry(ip) {
 // Always shown online in the lobby. Each has a fixed personality profile.
 
 const BOTS = {
-  bot_rickdeckard: { name: 'Rick Deckard', avatarId: 'cigar', country: 'US', profile: getProfile('tag') },     // tight-aggressive pro
-  bot_hal:         { name: 'HAL 9000',     avatarId: 'queen', country: 'US', profile: getProfile('nit') },     // cold, patient, only moves with the goods
-  bot_johnny5:     { name: 'Johnny 5',     avatarId: 'cigar', country: 'US', profile: getProfile('maniac') },  // any two cards, max pressure
+  bot_rickdeckard: { name: 'Rick Deckard', avatarId: 'cigar', country: null, isBot: true, profile: getProfile('tag') },
+  bot_hal:         { name: 'HAL 9000',     avatarId: 'queen', country: null, isBot: true, profile: getProfile('nit') },
+  bot_johnny5:     { name: 'Johnny 5',     avatarId: 'cigar', country: null, isBot: true, profile: getProfile('maniac') },
 };
 
 function botInMatch(botId) {
@@ -480,6 +480,7 @@ function opponentInfo(p) {
     name: p.playerName, avatarId: p.avatarId,
     elo: eloCache[p.playerId] || 1200,
     country: socketPlayers.get(p.socketId)?.country || null,
+    isBot: false,
   };
 }
 
@@ -896,7 +897,7 @@ io.on('connection', (socket) => {
     m.game.addPlayer(p1.playerId, p1.playerName, p1.avatarId);
     m.game.addPlayer(p2.playerId, p2.playerName, p2.avatarId);
 
-    socket.emit('match-found', { matchId: m.id, opponent: { name: bot.name }, fallback });
+    socket.emit('match-found', { matchId: m.id, opponent: { name: bot.name, avatarId: bot.avatarId, isBot: true }, fallback });
     broadcastMatchState(m);
     broadcastMatchList();
     // Other searchers re-ask this player in their new in-game (15s) context
