@@ -81,7 +81,7 @@ function fireAnalyticsEvent(eventName, playerId) {
     data: [{
       event_name:    eventName,
       event_time:    Math.floor(Date.now() / 1000),
-      action_source: 'app',
+      action_source: 'website',
       user_data:     { external_id: externalId },
     }],
   });
