@@ -1,0 +1,202 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<style>
+@import url('../fonts/fonts.css');
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:1080px;height:1920px;overflow:hidden;background:#000;font-family:'Archivo Black',system-ui}
+#stage{position:relative;width:1080px;height:1920px;overflow:hidden;
+  background:radial-gradient(120% 80% at 50% 30%, #1a6b3a 0%, #0a3d1f 55%, #051a0f 100%)}
+.bg{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:.22}
+.layer{position:absolute;inset:0;will-change:transform,opacity}
+.c{position:absolute;left:50%;transform:translateX(-50%);text-align:center;width:100%}
+.anton{font-family:'Anton'}
+
+/* PLAY button */
+#play{top:760px;width:520px;left:280px;background:linear-gradient(180deg,#f0c040,#d4a017);
+  color:#16261a;font-family:'Anton';font-size:120px;padding:40px 0;border-radius:36px;
+  box-shadow:0 20px 0 #8a6500,0 30px 50px rgba(0,0,0,.6)}
+#ripple{position:absolute;top:880px;left:540px;width:40px;height:40px;border-radius:50%;
+  border:10px solid #fff;transform:translate(-50%,-50%)}
+
+/* queue */
+#queue{top:820px}
+#spin{width:160px;height:160px;border-radius:50%;border:16px solid rgba(255,255,255,.18);
+  border-top-color:#f0c040;margin:0 auto}
+#queue .t{font-family:'Anton';color:#fff;font-size:64px;margin-top:46px;letter-spacing:3px}
+
+/* match found */
+#match{top:560px}
+#match .big{font-family:'Anton';color:#f0c040;font-size:150px;line-height:.9;
+  text-shadow:0 8px 0 #7a5300,0 14px 30px rgba(0,0,0,.7)}
+#match .ava{width:300px;height:300px;border-radius:50%;border:10px solid #fff;
+  object-fit:cover;margin:50px auto 0;display:block;box-shadow:0 16px 40px rgba(0,0,0,.6);background:#062414}
+
+/* table */
+#table .felt{position:absolute;top:560px;left:90px;width:900px;height:800px;border-radius:400px/360px;
+  background:radial-gradient(circle at 50% 40%,#22883f,#0c4423);border:18px solid #5b3a1a;
+  box-shadow:inset 0 0 80px rgba(0,0,0,.45),0 30px 60px rgba(0,0,0,.5)}
+#table .rival{top:480px;width:200px;height:200px;border-radius:50%;border:8px solid #f0c040;object-fit:cover;background:#062414}
+#table .you{top:1380px;width:200px;height:200px;border-radius:50%;border:8px solid #fff;object-fit:cover;background:#062414}
+.card{position:absolute;width:130px;height:182px;border-radius:14px;background:#fff;
+  box-shadow:0 10px 20px rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;
+  font-family:'Anton';font-size:84px;color:#16261a}
+.card.red{color:#c0392b}
+.pot{position:absolute;top:980px;left:50%;transform:translateX(-50%);font-family:'Anton';
+  color:#f0c040;font-size:70px;text-shadow:0 4px 14px rgba(0,0,0,.7)}
+.chip{position:absolute;width:90px}
+#allin{top:980px;font-family:'Anton';color:#fff;font-size:160px;
+  -webkit-text-stroke:8px #c0392b;text-shadow:0 0 40px rgba(192,57,43,.9)}
+
+/* win */
+#win{top:720px}
+#win .big{font-family:'Anton';font-size:200px;color:#f0c040;line-height:.85;
+  text-shadow:0 10px 0 #7a5300,0 18px 40px rgba(0,0,0,.8)}
+#win .sub{font-family:'Anton';color:#fff;font-size:70px;margin-top:20px;letter-spacing:4px}
+.burst{position:absolute;top:980px;left:50%;width:14px;height:14px;background:#f0c040;border-radius:50%}
+
+/* elo */
+#elo{top:780px}
+#elo .lbl{font-family:'Anton';color:#9fe0b3;font-size:54px;letter-spacing:4px}
+#elo .num{font-family:'Anton';color:#f0c040;font-size:280px;line-height:.9;
+  text-shadow:0 10px 0 #7a5300,0 18px 40px rgba(0,0,0,.7)}
+#elo .top{font-family:'Anton';color:#fff;font-size:72px;margin-top:10px}
+#elo .top b{color:#2ecc71}
+
+/* cta */
+#cta{top:0;height:1920px;background:linear-gradient(180deg,rgba(5,20,12,.4),rgba(5,20,12,.92))}
+#cta .flag{position:absolute;top:300px;left:50%;transform:translateX(-50%);width:760px;
+  filter:drop-shadow(0 18px 30px rgba(0,0,0,.6))}
+#cta .btn{position:absolute;top:1180px;left:50%;transform:translateX(-50%);
+  background:linear-gradient(180deg,#f0c040,#d4a017);color:#16261a;font-family:'Anton';
+  font-size:88px;padding:36px 90px;border-radius:28px;letter-spacing:2px;white-space:nowrap;
+  box-shadow:0 16px 0 #8a6500,0 26px 46px rgba(0,0,0,.6)}
+#cta .url{position:absolute;top:1380px;left:0;right:0;text-align:center;font-family:'Anton';
+  color:#fff;font-size:64px;letter-spacing:3px}
+#cta .url .d{color:#f0c040}
+.monkey{position:absolute;bottom:-30px;right:-120px;height:1000px}
+</style></head>
+<body>
+<div id="stage">
+  <img class="bg" src="../assets/login-island.jpg">
+
+  <div class="layer" id="play"><div style="text-align:center">PLAY</div></div>
+  <div class="layer"><div id="ripple"></div></div>
+
+  <div class="layer" id="queue"><div class="c"><div id="spin"></div><div class="t">FINDING OPPONENT…</div></div></div>
+
+  <div class="layer" id="match"><div class="c"><div class="big">MATCH<br>FOUND!</div><img class="ava" src="../assets/queen.png"></div></div>
+
+  <div class="layer" id="table">
+    <div class="felt"></div>
+    <img class="rival c" src="../assets/queen.png">
+    <img class="you c" src="../assets/captain.png">
+    <div class="card" id="cc1">A<span style="font-size:48px">♠</span></div>
+    <div class="card red" id="cc2">K<span style="font-size:48px">♥</span></div>
+    <div class="card" id="cc3">A<span style="font-size:48px">♣</span></div>
+    <div class="pot" id="pot">POT 0</div>
+    <img class="chip" id="ch1" src="../assets/chip-red.png">
+    <img class="chip" id="ch2" src="../assets/chip-blue.png">
+    <div class="c anton" id="allin">ALL IN</div>
+  </div>
+
+  <div class="layer" id="win"><div class="c"><div class="big">YOU<br>WIN</div><div class="sub">+ POT · + ELO</div></div></div>
+
+  <div class="layer" id="elo"><div class="c"><div class="lbl">YOUR ELO</div><div class="num" id="elonum">1240</div><div class="top">▲ <b>TOP 8%</b> OF MONKEYS</div></div></div>
+
+  <div class="layer" id="cta">
+    <img class="flag" src="../assets/flag-logo.png">
+    <img class="monkey" src="../assets/login-monkey.png">
+    <div class="btn">PLAY FREE</div>
+    <div class="url">pokermonkey<span class="d">.</span>app</div>
+  </div>
+</div>
+
+<script>
+const T = 7.2; // total seconds, loops
+const clamp=(x,a=0,b=1)=>Math.max(a,Math.min(b,x));
+const lerp=(a,b,t)=>a+(b-a)*t;
+const ease=t=>t<.5?2*t*t:1-Math.pow(-2*t+2,2)/2; // easeInOutQuad
+const back=t=>{const c=2.2;return 1+ (--t)*t*((c+1)*t+c);}; // overshoot
+// progress within [s,e]; returns 0..1 (clamped)
+const seg=(now,s,e)=>clamp((now-s)/(e-s));
+// visibility pulse: fade in over fi, hold, fade out over fo
+function vis(now,s,e,fi=.15,fo=.2){if(now<s||now>e)return 0;const a=clamp((now-s)/fi);const b=clamp((e-now)/fo);return Math.min(a,b);}
+const set=(el,o,extra='')=>{el.style.opacity=o;if(extra)el.style.transform=extra;};
+const $=id=>document.getElementById(id);
+
+function frame(now){
+  // ---- Scene A: PLAY + tap (0.0 – 1.0) ----
+  const playV = vis(now,0,1.05,.2,.12);
+  const pulse = 1+0.05*Math.sin(now*10);
+  set($('play'), playV, `scale(${pulse})`);
+  // ripple on tap ~0.85
+  const rp = seg(now,.8,1.05);
+  $('ripple').style.opacity = rp>0&&rp<1?(1-rp):0;
+  $('ripple').style.width=$('ripple').style.height=(40+rp*420)+'px';
+
+  // ---- Scene B1: queue (1.0 – 2.0) ----
+  $('queue').style.opacity = vis(now,1.0,2.05,.15,.15);
+  $('spin').style.transform = `rotate(${now*540}deg)`;
+
+  // ---- Scene B2: match found (2.05 – 3.0) ----
+  const mV = vis(now,2.05,3.0,.12,.18);
+  $('match').style.opacity = mV;
+  const mIn = back(clamp((now-2.05)/.4));
+  $('match').querySelector('.big').style.transform = `scale(${0.6+0.4*mIn})`;
+
+  // ---- Scene C: table (3.0 – 5.0) ----
+  const tV = vis(now,3.0,5.05,.2,.2);
+  $('table').style.opacity = tV;
+  // deal community cards staggered
+  const dealY=-40;
+  const c1=back(clamp((now-3.2)/.35)), c2=back(clamp((now-3.45)/.35)), c3=back(clamp((now-3.7)/.35));
+  place($('cc1'), 700, 329, c1);
+  place($('cc2'), 700, 475, c2);
+  place($('cc3'), 700, 621, c3);
+  // pot counts up
+  const potP=seg(now,3.3,4.4);
+  $('pot').textContent='POT '+Math.round(lerp(0,2400,ease(potP)));
+  // chips slide to pot
+  const chP=ease(seg(now,3.9,4.4));
+  $('ch1').style.opacity=$('ch2').style.opacity= now>3.9&&now<5?1:0;
+  $('ch1').style.left=lerp(180,455,chP)+'px'; $('ch1').style.top=lerp(1320,975,chP)+'px';
+  $('ch2').style.left=lerp(820,560,chP)+'px'; $('ch2').style.top=lerp(540,975,chP)+'px';
+  // ALL IN stamp
+  const aiV=vis(now,4.3,5.0,.08,.15);
+  $('allin').style.opacity=aiV;
+  const aiS=back(clamp((now-4.3)/.25));
+  $('allin').style.transform=`translateX(-50%) rotate(-10deg) scale(${1.6-0.6*aiS})`;
+
+  // ---- Scene D: win (5.0 – 5.9) ----
+  const wV=vis(now,5.0,5.9,.1,.2);
+  $('win').style.opacity=wV;
+  const wS=back(clamp((now-5.0)/.35));
+  $('win').querySelector('.big').style.transform=`scale(${0.5+0.5*wS})`;
+
+  // ---- Scene E: elo (5.85 – 6.7) ----
+  const eV=vis(now,5.85,6.7,.12,.18);
+  $('elo').style.opacity=eV;
+  const eP=ease(seg(now,5.9,6.5));
+  $('elonum').textContent=Math.round(lerp(1240,1305,eP));
+
+  // ---- Scene F: CTA (6.5 – 7.2, holds) ----
+  const fV=clamp((now-6.5)/.4);
+  $('cta').style.opacity=fV;
+}
+function place(el,top,left,p){ // p:0..1 deal-in (slide up + fade)
+  el.style.opacity=clamp(p);
+  el.style.top=top+'px'; el.style.left=left+'px';
+  el.style.transform=`translateY(${(1-clamp(p))*-50}px)`;
+}
+
+// ---- drive: ?t=seconds for deterministic capture, else real-time loop ----
+const params=new URLSearchParams(location.search);
+if(params.has('t')){
+  frame(parseFloat(params.get('t'))%T);
+}else{
+  let start=null;
+  function loop(ts){if(start===null)start=ts;frame(((ts-start)/1000)%T);requestAnimationFrame(loop);}
+  requestAnimationFrame(loop);
+}
+</script>
+</body></html>

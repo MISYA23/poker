@@ -87,6 +87,7 @@ export default function LobbyScreen({ navigation }) {
   const [linkCopied, setLinkCopied] = useState(false);
   const [lbData, setLbData] = useState(null);
   const [achievements, setAchievements] = useState(() => mergeAchievements([]));
+  const [lbTab, setLbTab]   = useState('global');   // 'global' | 'country'
   const copiedTimer = useRef(null);
 
   const myPlayerId = playerInfo?.playerId;
@@ -142,6 +143,17 @@ export default function LobbyScreen({ navigation }) {
   }, [fetchLb, navigation]);
 
   const humans = (onlinePlayers || []).filter(p => !p.isBot);
+
+  // Leaderboard card — Global vs My-country tabs, derived client-side from the full list
+  const lbEntries = lbData?.entries || [];
+  const myLbEntry = lbEntries.find(e => e.playerId === myPlayerId);
+  const myCountry = myLbEntry?.country || playerInfo?.country || null;
+  const lbCountry = myCountry ? lbEntries.filter(e => e.country === myCountry).map((e, i) => ({ ...e, rank: i + 1 })) : [];
+  const lbActive  = (lbTab === 'country' && myCountry) ? lbCountry : lbEntries;
+  const lbTop5    = lbActive.slice(0, 5);
+  const lbMyRow   = lbActive.find(e => e.playerId === myPlayerId);
+  const lbMeInTop = lbTop5.some(p => p.playerId === myPlayerId);
+  const lbAhead   = lbMyRow ? lbActive.find(e => e.rank === lbMyRow.rank - 1) : null;  // the player just above me
 
   // Everyone online is implicitly looking to play — challengeable unless in a
   // human match. Bot-game players stay listed (15s to answer a challenge).
@@ -298,30 +310,56 @@ export default function LobbyScreen({ navigation }) {
                   <Text style={s.secIcGold}>🏆</Text>
                   <Text style={[s.secTitle, s.secTitleGold]}>Leaderboard</Text>
                 </View>
-                <Pressable style={s.lbCard} onPress={() => navigation.navigate('Leaderboard')}>
-                  {(lbData.entries || []).slice(0, 3).map((p, i) => (
-                    <View key={p.playerId} style={s.lbRow}>
-                      <Text style={s.lbRank}>{i + 1}</Text>
-                      <Text style={s.lbFlag}>{p.isBot ? '🤖' : flagEmoji(p.country)}</Text>
-                      <Text style={s.lbName} numberOfLines={1}>{p.displayName}</Text>
-                      <Text style={s.lbElo}>{p.elo}</Text>
-                    </View>
-                  ))}
-                  {lbData.myStats && (
+                <View style={s.lbCard}>
+                  {/* Global vs My-country tabs */}
+                  <View style={s.lbTabs}>
+                    <Pressable style={[s.lbTab, lbTab === 'global' && s.lbTabOn]} onPress={() => setLbTab('global')}>
+                      <Text style={[s.lbTabTxt, lbTab === 'global' && s.lbTabTxtOn]}>🌍 Global</Text>
+                    </Pressable>
+                    {myCountry && (
+                      <Pressable style={[s.lbTab, lbTab === 'country' && s.lbTabOn]} onPress={() => setLbTab('country')}>
+                        <Text style={[s.lbTabTxt, lbTab === 'country' && s.lbTabTxtOn]}>{flagEmoji(myCountry)} {myCountry}</Text>
+                      </Pressable>
+                    )}
+                  </View>
+
+                  {lbTop5.map(p => {
+                    const me = p.playerId === myPlayerId;
+                    return (
+                      <View key={p.playerId} style={[s.lbRow, me && s.lbRowMe]}>
+                        <Text style={s.lbRank}>{p.rank}</Text>
+                        <Text style={s.lbFlag}>{p.isBot ? '🤖' : flagEmoji(p.country)}</Text>
+                        <Text style={[s.lbName, me && s.lbNameMe]} numberOfLines={1}>{me ? 'You' : p.displayName}</Text>
+                        <Text style={[s.lbElo, me && s.lbEloMe]}>{p.elo}</Text>
+                      </View>
+                    );
+                  })}
+
+                  {/* My position + the player just ahead (when not already in the top 5) */}
+                  {lbMyRow && !lbMeInTop && (
                     <>
                       <View style={s.lbSep} />
+                      {lbAhead && (
+                        <View style={s.lbRow}>
+                          <Text style={s.lbRank}>{lbAhead.rank}</Text>
+                          <Text style={s.lbFlag}>{lbAhead.isBot ? '🤖' : flagEmoji(lbAhead.country)}</Text>
+                          <Text style={s.lbName} numberOfLines={1}>{lbAhead.displayName}</Text>
+                          <Text style={s.lbElo}>{lbAhead.elo}</Text>
+                        </View>
+                      )}
                       <View style={[s.lbRow, s.lbRowMe]}>
-                        <Text style={s.lbRank}>#{lbData.myStats.rank}</Text>
-                        <Text style={s.lbFlag}>{flagEmoji(playerInfo?.country)}</Text>
-                        <Text style={[s.lbName, s.lbNameMe]} numberOfLines={1}>{playerInfo?.name}</Text>
-                        <Text style={[s.lbElo, s.lbEloMe]}>{lbData.myStats.elo}</Text>
+                        <Text style={s.lbRank}>#{lbMyRow.rank}</Text>
+                        <Text style={s.lbFlag}>{flagEmoji(lbMyRow.country)}</Text>
+                        <Text style={[s.lbName, s.lbNameMe]} numberOfLines={1}>You</Text>
+                        <Text style={[s.lbElo, s.lbEloMe]}>{lbMyRow.elo}</Text>
                       </View>
                     </>
                   )}
-                  <View style={s.lbSeeAll}>
+
+                  <Pressable style={s.lbSeeAll} onPress={() => navigation.navigate('Leaderboard')}>
                     <Text style={s.lbSeeAllTxt}>See full leaderboard ›</Text>
-                  </View>
-                </Pressable>
+                  </Pressable>
+                </View>
               </>
             )}
 
@@ -478,6 +516,11 @@ const s = StyleSheet.create({
     backgroundColor: '#0f1c2e', borderRadius: 18, borderWidth: 1,
     borderColor: 'rgba(240,192,64,0.2)', overflow: 'hidden', marginBottom: 8,
   },
+  lbTabs:    { flexDirection: 'row', gap: 8, padding: 10, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.07)' },
+  lbTab:     { flex: 1, paddingVertical: 7, borderRadius: 10, alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.04)' },
+  lbTabOn:   { backgroundColor: 'rgba(240,192,64,0.16)' },
+  lbTabTxt:  { color: '#8a98aa', fontSize: 13, fontWeight: '800' },
+  lbTabTxtOn:{ color: colors.goldLight },
   lbRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 14, paddingVertical: 10 },
   lbRowMe: { backgroundColor: 'rgba(240,192,64,0.1)' },
   lbRank:   { color: colors.goldLight, fontSize: 13, fontWeight: '900', width: 28, textAlign: 'center' },

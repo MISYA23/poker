@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useContext } from 'react';
+import React, { useState, useEffect, useCallback, useContext, useMemo, useRef } from 'react';
 import {
   View, Text, Pressable, ScrollView, StyleSheet,
   ActivityIndicator, Image, Platform,
@@ -20,6 +20,12 @@ const AVATAR_IMAGES = {
   parrot:  require('../../assets/parrot.png'),
 };
 
+// Compact, locale-safe "DD/MM HH:MM" (Hermes Intl support is patchy)
+const fmtUpdated = (d) => {
+  const p = (n) => String(n).padStart(2, '0');
+  return `${p(d.getDate())}/${p(d.getMonth() + 1)} ${p(d.getHours())}:${p(d.getMinutes())}`;
+};
+
 function PlayerRow({ p, isMe }) {
   return (
     <View style={[s.row, isMe && s.rowMe]}>
@@ -32,7 +38,7 @@ function PlayerRow({ p, isMe }) {
         <Text style={s.flagOverlay}>{p.isBot ? '🤖' : flagEmoji(p.country)}</Text>
       </View>
       <Text style={[s.name, isMe && s.nameMe]} numberOfLines={1}>
-        {isMe ? 'You' : p.displayName}
+        {isMe ? `${p.displayName} (You)` : p.displayName}
       </Text>
       <Text style={[s.eloTxt, isMe && s.eloMe]}>{p.elo}</Text>
     </View>
@@ -49,8 +55,9 @@ export default function LeaderboardScreen({ navigation }) {
     }
   }, []);
 
-  const [data,    setData]    = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [data,      setData]      = useState(null);
+  const [loading,   setLoading]   = useState(true);
+  const [fetchedAt, setFetchedAt] = useState(null);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -59,7 +66,7 @@ export default function LeaderboardScreen({ navigation }) {
       : `${SERVER_URL}/api/leaderboard`;
     fetch(url)
       .then(r => r.json())
-      .then(setData)
+      .then(d => { setData(d); setFetchedAt(new Date()); })
       .catch(() => setData(null))
       .finally(() => setLoading(false));
   }, [myId]);
@@ -68,13 +75,42 @@ export default function LeaderboardScreen({ navigation }) {
 
   const entries      = data?.entries      || [];
   const myStats      = data?.myStats      || null;
-  const neighborhood = data?.neighborhood || [];
+
+  // Country filter (null = global). Options derived from the full ranked list.
+  const [country, setCountry] = useState(null);
+  const countryOpts = useMemo(() => {
+    const counts = {};
+    for (const e of entries) {
+      if (!e.country || e.isBot) continue;
+      counts[e.country] = (counts[e.country] || 0) + 1;
+    }
+    return Object.entries(counts).sort((a, b) => b[1] - a[1]).map(([cc, n]) => ({ cc, n }));
+  }, [entries]);
+
+  // When a country is picked, show only that country, re-ranked 1..N.
+  const rankedList = useMemo(() => {
+    if (!country) return entries;
+    return entries.filter(e => e.country === country).map((e, i) => ({ ...e, rank: i + 1 }));
+  }, [entries, country]);
+
+  // "Jump to my rank" — only when my row is actually shown in the current list.
+  const shownList = rankedList.slice(0, 50);
+  const myRow     = shownList.find(p => p.playerId === myId);
+  const scrollRef = useRef(null);
+  const meRowRef  = useRef(null);
+  const jumpToMe = () => {
+    const sv = scrollRef.current, row = meRowRef.current;
+    if (!sv || !row) return;
+    const node = sv.getInnerViewNode ? sv.getInnerViewNode() : sv;
+    try { row.measureLayout(node, (x, y) => sv.scrollTo({ y: Math.max(0, y - 90), animated: true }), () => {}); } catch (_) {}
+  };
 
   const winPct      = myStats ? Math.round(myStats.winRate * 100) : 0;
   const eloFloor    = myStats ? Math.floor(myStats.elo / 100) * 100 : 1200;
   const eloProgress = myStats ? (myStats.elo - eloFloor) / 100 : 0;
 
   return (
+   <View style={s.root}>
     <SafeAreaView style={s.safe}>
       {/* Nav — back only, no reload button */}
       <View style={s.nav}>
@@ -88,7 +124,7 @@ export default function LeaderboardScreen({ navigation }) {
       {loading ? (
         <View style={s.center}><ActivityIndicator color={colors.goldLight} size="large" /></View>
       ) : (
-        <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
+        <ScrollView ref={scrollRef} style={s.scrollV} contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
           <View style={s.col}>
 
             {/* ── Your standing hero ── */}
@@ -126,46 +162,74 @@ export default function LeaderboardScreen({ navigation }) {
               </>
             )}
 
+            {/* ── Country filter chips ── */}
+            {countryOpts.length > 0 && (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false}
+                style={s.chipScroll} contentContainerStyle={s.chipRow}>
+                <Pressable style={[s.chip, !country && s.chipOn]} onPress={() => setCountry(null)}>
+                  <Text style={[s.chipTxt, !country && s.chipTxtOn]}>🌍 All</Text>
+                </Pressable>
+                {countryOpts.map(({ cc, n }) => (
+                  <Pressable key={cc} style={[s.chip, country === cc && s.chipOn]} onPress={() => setCountry(cc)}>
+                    <Text style={[s.chipTxt, country === cc && s.chipTxtOn]}>
+                      {flagEmoji(cc)} {cc} <Text style={s.chipCount}>{n}</Text>
+                    </Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
+            )}
+
             {/* ── Ranked list ── */}
+            {country && (
+              <Text style={s.listLabel}>{flagEmoji(country)} {country} · {rankedList.length} player{rankedList.length === 1 ? '' : 's'}</Text>
+            )}
+            {myRow && (
+              <Pressable style={s.jumpLink} onPress={jumpToMe} hitSlop={8}>
+                <Text style={s.jumpLinkTxt}>Jump to my rank (#{myRow.rank}) ↓</Text>
+              </Pressable>
+            )}
             <View style={s.list}>
-              {entries.slice(0, 50).map((p, i) => (
-                <View key={p.playerId}>
-                  {i > 0 && <View style={s.sep} />}
-                  <PlayerRow p={p} isMe={p.playerId === myId} />
-                </View>
-              ))}
+              {shownList.map((p, i) => {
+                const isMe = p.playerId === myId;
+                return (
+                  <View key={p.playerId} ref={isMe ? meRowRef : undefined}>
+                    {i > 0 && <View style={s.sep} />}
+                    <PlayerRow p={p} isMe={isMe} />
+                  </View>
+                );
+              })}
+              {rankedList.length === 0 && (
+                <Text style={s.emptyTxt}>No ranked players from this country yet.</Text>
+              )}
             </View>
 
-            {/* ── Your neighborhood ── */}
-            {neighborhood.length > 0 && myStats && myStats.rank > 10 && (
-              <>
-                <View style={s.divider}>
-                  <View style={s.dividerLine} />
-                  <Text style={s.dividerTxt}>your neighborhood</Text>
-                  <View style={s.dividerLine} />
-                </View>
-                <View style={s.list}>
-                  {neighborhood.map((p, i) => (
-                    <View key={p.playerId}>
-                      {i > 0 && <View style={s.sep} />}
-                      <PlayerRow p={p} isMe={p.playerId === myId} />
-                    </View>
-                  ))}
-                </View>
-              </>
-            )}
+            {/* ── Footer: count + last updated ── */}
+            <View style={s.footer}>
+              <Text style={s.footerCount}>
+                {rankedList.length > 50
+                  ? `Showing 50 of ${rankedList.length} players`
+                  : `${rankedList.length} player${rankedList.length === 1 ? '' : 's'}`}
+                {country ? ` · ${country}` : ' · Global'}
+              </Text>
+              {fetchedAt && <Text style={s.footerTime}>Updated {fmtUpdated(fetchedAt)}</Text>}
+            </View>
 
             <View style={{ height: 40 }} />
           </View>
         </ScrollView>
       )}
     </SafeAreaView>
+   </View>
   );
 }
 
 const s = StyleSheet.create({
-  safe:   { flex: 1, backgroundColor: '#0b1420' },
+  root:   { flex: 1, backgroundColor: '#0b1420' },
+  safe:   { flex: 1 },
+  jumpLink:    { alignSelf: 'flex-end', marginTop: 14, marginBottom: -6, paddingVertical: 4, paddingHorizontal: 4 },
+  jumpLinkTxt: { color: colors.goldLight, fontSize: 12, fontWeight: '700', opacity: 0.9 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 80 },
+  scrollV: { flex: 1, minHeight: 0 },   // bounds the scroll area so it scrolls on web
   scroll: { flexGrow: 1 },
   col:    { width: '100%', maxWidth: 500, alignSelf: 'center', paddingHorizontal: 16, paddingBottom: 32 },
 
@@ -202,9 +266,23 @@ const s = StyleSheet.create({
   targetTxt: { color: '#8a98aa', fontSize: 12, fontWeight: '700' },
   targetElo: { color: '#4ade80', fontWeight: '900' },
 
+  // Country filter chips
+  chipScroll: { marginTop: 18, marginHorizontal: -16 },
+  chipRow:    { paddingHorizontal: 16, gap: 8, alignItems: 'center' },
+  chip: {
+    paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20,
+    backgroundColor: '#111c2d', borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)',
+  },
+  chipOn:    { backgroundColor: 'rgba(240,192,64,0.16)', borderColor: 'rgba(240,192,64,0.5)' },
+  chipTxt:   { color: '#8a98aa', fontSize: 13, fontWeight: '800' },
+  chipTxtOn: { color: colors.goldLight },
+  chipCount: { color: '#5b6a7d', fontSize: 11, fontWeight: '700' },
+  listLabel: { color: colors.goldLight, fontSize: 13, fontWeight: '800', marginTop: 16, marginLeft: 4 },
+  emptyTxt:  { color: '#8a98aa', fontSize: 13, textAlign: 'center', padding: 24, fontStyle: 'italic' },
+
   // Ranked list
   list: {
-    marginTop: 20,
+    marginTop: 12,
     backgroundColor: '#111c2d', borderRadius: 18,
     borderWidth: 1, borderColor: 'rgba(255,255,255,0.07)', overflow: 'hidden',
   },
@@ -234,4 +312,8 @@ const s = StyleSheet.create({
   divider:     { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 24, marginBottom: 4 },
   dividerLine: { flex: 1, height: 1, backgroundColor: 'rgba(255,255,255,0.08)' },
   dividerTxt:  { color: '#5b6a7d', fontSize: 11, fontWeight: '700', letterSpacing: 0.5 },
+
+  footer:      { marginTop: 20, alignItems: 'center', gap: 3 },
+  footerCount: { color: '#8a98aa', fontSize: 12, fontWeight: '700' },
+  footerTime:  { color: '#5b6a7d', fontSize: 11, fontWeight: '600' },
 });

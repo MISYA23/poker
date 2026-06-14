@@ -1,0 +1,51 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<style>
+@import url('../fonts/fonts.css');
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:1080px;height:1920px;overflow:hidden;font-family:'Archivo Black',system-ui}
+.stage{position:relative;width:1080px;height:1920px;overflow:hidden;
+  background:radial-gradient(120% 70% at 70% 20%, #143e6e 0%, #0a3d1f 55%, #051a0f 100%)}
+.monkey{position:absolute;bottom:-20px;right:-90px;height:1020px;opacity:.96;
+  filter:drop-shadow(0 0 60px rgba(0,0,0,.6))}
+.top{position:absolute;top:110px;left:64px;right:64px}
+.kicker{font-family:'Anton';color:#f0c040;font-size:48px;letter-spacing:5px;text-transform:uppercase}
+.head{font-family:'Anton';color:#fff;font-size:118px;line-height:.9;margin-top:16px;text-transform:uppercase;
+  text-shadow:0 6px 0 #c0392b,0 12px 30px rgba(0,0,0,.7)}
+.meter{position:absolute;top:560px;left:64px;right:64px;background:rgba(6,24,16,.82);
+  border:3px solid rgba(240,192,64,.5);border-radius:30px;padding:48px}
+.row{display:flex;justify-content:space-between;align-items:baseline}
+.row .lbl{font-family:system-ui;font-weight:800;color:#9fe0b3;font-size:40px}
+.from{font-family:'Anton';color:#9aa7b3;font-size:90px}
+.to{font-family:'Anton';color:#f0c040;font-size:150px;line-height:.9;
+  text-shadow:0 6px 0 #7a5300,0 10px 26px rgba(0,0,0,.6)}
+.bar{margin-top:30px;height:46px;border-radius:30px;background:#0b2a1a;overflow:hidden;border:2px solid #1a6b3a}
+.fill{height:100%;width:78%;border-radius:30px;background:linear-gradient(90deg,#22883f,#f0c040)}
+.tag{margin-top:26px;font-family:'Anton';color:#fff;font-size:54px;text-align:center;letter-spacing:1px}
+.tag .up{color:#2ecc71}
+.bottom{position:absolute;bottom:120px;left:0;right:0;text-align:center}
+.cta{display:inline-block;background:linear-gradient(180deg,#f0c040,#d4a017);color:#1a1a2e;
+  font-family:'Anton';font-size:70px;padding:30px 70px;border-radius:24px;letter-spacing:2px;
+  box-shadow:0 14px 0 #8a6500,0 24px 40px rgba(0,0,0,.6);text-transform:uppercase}
+.sub{margin-top:30px;color:#fff;font-family:'Anton';font-size:50px;letter-spacing:3px}
+.sub .d{color:#f0c040}
+</style></head>
+<body>
+<div class="stage">
+  <img class="monkey" src="../assets/login-monkey.png">
+  <div class="top">
+    <div class="kicker">Climb the global leaderboard</div>
+    <div class="head">EVERY WIN<br>RAISES YOUR<br>RANK</div>
+  </div>
+  <div class="meter">
+    <div class="row"><span class="lbl">YOUR ELO</span><span class="lbl">+65 THIS WEEK</span></div>
+    <div class="row"><span class="from">1240 →</span><span class="to">1305</span></div>
+    <div class="bar"><div class="fill"></div></div>
+    <div class="tag"><span class="up">▲</span> TOP 8% OF MONKEYS</div>
+  </div>
+  <div class="bottom">
+    <div class="cta">START CLIMBING</div>
+    <div class="sub">pokermonkey<span class="d">.</span>app</div>
+  </div>
+</div>
+</body></html>

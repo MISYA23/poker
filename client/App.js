@@ -613,7 +613,7 @@ function App() {
           <NavigationContainer ref={navigationRef} linking={linking}
             onReady={() => { const r = navigationRef.getCurrentRoute()?.name; setRoute(r || 'Login'); setMusicContext(r === 'Game' ? 'game' : 'menu'); trackScreen(r || 'Login'); }}
             onStateChange={() => { const r = navigationRef.getCurrentRoute()?.name; setRoute(r || 'Login'); setMusicContext(r === 'Game' ? 'game' : 'menu'); trackScreen(r || 'Login'); }}>
-            <Stack.Navigator screenOptions={{ headerShown: false, animation: 'fade' }}>
+            <Stack.Navigator screenOptions={{ headerShown: false, animation: 'fade', cardStyle: { flex: 1 } }}>
               <Stack.Screen name="Login" component={LoginScreen} />
               <Stack.Screen name="Lobby"   component={LobbyScreen} />
               <Stack.Screen name="Game"    component={GameScreen} />

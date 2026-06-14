@@ -1,0 +1,51 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<style>
+@import url('../fonts/fonts.css');
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:1080px;height:1920px;overflow:hidden;font-family:'Archivo Black',system-ui}
+.stage{position:relative;width:1080px;height:1920px;overflow:hidden;
+  background:radial-gradient(130% 60% at 50% 38%, #22883f 0%, #0a3d1f 50%, #051a0f 100%)}
+.top{position:absolute;top:96px;left:0;right:0;text-align:center;padding:0 60px}
+.kicker{font-family:'Anton';color:#f0c040;font-size:50px;letter-spacing:6px;text-transform:uppercase}
+.head{font-family:'Anton';color:#fff;font-size:128px;line-height:.92;margin-top:14px;text-transform:uppercase;
+  text-shadow:0 6px 0 #c0392b,0 12px 30px rgba(0,0,0,.7)}
+.head .x{color:#f0c040}
+.versus{position:absolute;top:640px;left:0;right:0;display:flex;align-items:center;justify-content:center;gap:30px}
+.fighter{display:flex;flex-direction:column;align-items:center;width:380px}
+.ring{width:330px;height:330px;border-radius:50%;border:10px solid #f0c040;overflow:hidden;
+  background:#062414;box-shadow:0 16px 40px rgba(0,0,0,.5)}
+.ring img{width:100%;height:100%;object-fit:cover}
+.name{font-family:'Anton';color:#fff;font-size:52px;margin-top:22px;text-transform:uppercase}
+.elo{color:#9fe0b3;font-family:'Anton';font-size:40px;letter-spacing:2px}
+.vs{font-family:'Anton';color:#c0392b;font-size:130px;
+  -webkit-text-stroke:6px #f0c040;text-shadow:0 8px 26px rgba(0,0,0,.7)}
+.banner{position:absolute;top:1130px;left:60px;right:60px;text-align:center;
+  background:rgba(7,28,17,.78);border:3px solid rgba(240,192,64,.5);border-radius:28px;padding:40px}
+.banner b{font-family:'Anton';color:#f0c040;font-size:74px;text-transform:uppercase;display:block;line-height:1}
+.banner span{color:#e9f7ee;font-size:42px;font-family:system-ui;font-weight:800}
+.bottom{position:absolute;bottom:120px;left:0;right:0;text-align:center}
+.cta{display:inline-block;background:linear-gradient(180deg,#f0c040,#d4a017);color:#1a1a2e;
+  font-family:'Anton';font-size:70px;padding:30px 70px;border-radius:24px;letter-spacing:2px;
+  box-shadow:0 14px 0 #8a6500,0 24px 40px rgba(0,0,0,.6);text-transform:uppercase}
+.sub{margin-top:30px;color:#fff;font-family:'Anton';font-size:50px;letter-spacing:3px}
+.sub .d{color:#f0c040}
+</style></head>
+<body>
+<div class="stage">
+  <div class="top">
+    <div class="kicker">No bots. No fake chips.</div>
+    <div class="head">REAL PLAYERS<br>REAL <span class="x">STAKES</span></div>
+  </div>
+  <div class="versus">
+    <div class="fighter"><div class="ring"><img src="../assets/captain.png"></div><div class="name">YOU</div><div class="elo">ELO 1240</div></div>
+    <div class="vs">VS</div>
+    <div class="fighter"><div class="ring"><img src="../assets/queen.png"></div><div class="name">RIVAL</div><div class="elo">ELO 1305</div></div>
+  </div>
+  <div class="banner"><b>Heads-up. Winner takes ELO.</b><span>Every match counts toward your global rank</span></div>
+  <div class="bottom">
+    <div class="cta">FIND A MATCH</div>
+    <div class="sub">pokermonkey<span class="d">.</span>app</div>
+  </div>
+</div>
+</body></html>

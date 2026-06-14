@@ -1,0 +1,65 @@
+@import url("../fonts/fonts.css");
+
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{background:#0a1628}
+
+/* Each page sets --w/--h to the source image's exact pixel size */
+.stage{
+  position:relative; overflow:hidden;
+  width:var(--w); height:var(--h);
+  font-family:'Archivo Black',sans-serif;
+}
+.bg{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+
+/* Legibility scrims — soft, never a hard box */
+.scrim-top{position:absolute;left:0;right:0;top:0;height:46%;
+  background:linear-gradient(180deg,rgba(6,14,26,.82) 0%,rgba(6,14,26,.5) 48%,rgba(6,14,26,0) 100%)}
+.scrim-bot{position:absolute;left:0;right:0;bottom:0;height:34%;
+  background:linear-gradient(0deg,rgba(6,14,26,.92) 0%,rgba(6,14,26,.55) 52%,rgba(6,14,26,0) 100%)}
+.scrim-center{position:absolute;inset:0;
+  background:radial-gradient(120% 80% at 50% 42%,rgba(6,14,26,.74) 0%,rgba(6,14,26,.34) 46%,rgba(6,14,26,0) 72%)}
+
+/* Brand flag mark */
+.logo{position:absolute;left:50%;transform:translateX(-50%);
+  filter:drop-shadow(0 10px 22px rgba(0,0,0,.6))}
+
+/* The lockup */
+.lock{position:absolute;left:0;right:0;text-align:center;z-index:3;padding:0 6%}
+
+.eyebrow{font-family:'Archivo Black';letter-spacing:.32em;text-transform:uppercase;
+  color:#e9d9ad;opacity:.9;text-shadow:0 2px 10px rgba(0,0,0,.8)}
+
+.title{font-family:'Anton';line-height:.92;text-transform:uppercase;
+  color:#f4e3b8;letter-spacing:.01em;
+  text-shadow:0 4px 2px rgba(0,0,0,.45),0 14px 30px rgba(0,0,0,.75)}
+.title .gold{color:#f0c040}
+
+/* Free-to-play pill */
+.pill{display:inline-flex;align-items:center;gap:.5em;
+  font-family:'Anton';text-transform:uppercase;letter-spacing:.04em;
+  color:#10240f;background:linear-gradient(180deg,#f7d56a 0%,#e0b23c 100%);
+  border-radius:999px;box-shadow:0 8px 22px rgba(0,0,0,.55),inset 0 1px 0 rgba(255,255,255,.55);
+  border:2px solid rgba(255,255,255,.35)}
+.pill .dot{width:.42em;height:.42em;border-radius:50%;background:#10240f;opacity:.55}
+
+/* Thin gold rule */
+.rule{height:2px;margin:0 auto;width:42%;
+  background:linear-gradient(90deg,transparent,rgba(222,184,110,.85) 22%,rgba(222,184,110,.85) 78%,transparent)}
+
+/* ELO line */
+.elo{font-family:'Anton';text-transform:uppercase;letter-spacing:.06em;color:#f4e3b8;
+  text-shadow:0 3px 14px rgba(0,0,0,.8)}
+.elo .gold{color:#f0c040}
+
+/* Compliance fine-print — lives inside the top lockup so the login card never hides it */
+.fineprint{font-family:'Archivo Black';text-transform:uppercase;
+  color:#cdd7e2;text-shadow:0 2px 8px rgba(0,0,0,.9)}
+.fineprint .sep{color:#f0c040;opacity:.85;margin:0 .5em}
+
+/* legibility band behind the lower part of the lockup */
+.band{position:absolute;left:0;right:0;z-index:1;
+  background:linear-gradient(180deg,rgba(6,14,26,0),rgba(6,14,26,.7) 26%,rgba(6,14,26,.7) 74%,rgba(6,14,26,0))}
+
+.url{font-family:'Anton';letter-spacing:.05em;color:#fff;
+  text-shadow:0 3px 12px rgba(0,0,0,.85)}
+.url .d{color:#f0c040}

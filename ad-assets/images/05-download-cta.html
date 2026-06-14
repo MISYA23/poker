@@ -1,0 +1,44 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<style>
+@import url('../fonts/fonts.css');
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:1080px;height:1920px;overflow:hidden;font-family:'Archivo Black',system-ui}
+.stage{position:relative;width:1080px;height:1920px;overflow:hidden;background:#0a3d1f}
+.bg{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.vgrad{position:absolute;inset:0;background:
+  linear-gradient(180deg, rgba(5,20,12,.55) 0%, rgba(5,20,12,.2) 30%, rgba(5,20,12,.9) 78%, rgba(5,20,12,.98) 100%)}
+.flag{position:absolute;top:120px;left:50%;transform:translateX(-50%);width:760px;
+  filter:drop-shadow(0 18px 30px rgba(0,0,0,.6))}
+.icon{position:absolute;top:560px;left:50%;transform:translateX(-50%);width:300px;height:300px;
+  border-radius:64px;box-shadow:0 22px 50px rgba(0,0,0,.7);border:6px solid rgba(240,192,64,.85);
+  object-fit:cover;background:radial-gradient(circle at 50% 30%, #1a6b3a, #0a3d1f)}
+.title{position:absolute;top:910px;left:0;right:0;text-align:center;font-family:'Anton';
+  color:#fff;font-size:120px;text-transform:uppercase;line-height:.92;
+  text-shadow:0 6px 0 #c0392b,0 12px 30px rgba(0,0,0,.8)}
+.title .g{color:#f0c040}
+.feats{position:absolute;top:1180px;left:0;right:0;text-align:center}
+.feats span{display:inline-block;color:#e9f7ee;font-family:'Anton';font-size:46px;
+  letter-spacing:1px;margin:0 6px}
+.feats .d{color:#f0c040}
+.bottom{position:absolute;bottom:130px;left:0;right:0;text-align:center}
+.cta{display:inline-block;background:linear-gradient(180deg,#f0c040,#d4a017);color:#1a1a2e;
+  font-family:'Anton';font-size:78px;padding:34px 80px;border-radius:26px;letter-spacing:2px;
+  box-shadow:0 14px 0 #8a6500,0 24px 44px rgba(0,0,0,.6);text-transform:uppercase}
+.sub{margin-top:34px;color:#fff;font-family:'Anton';font-size:56px;letter-spacing:3px}
+.sub .d{color:#f0c040}
+</style></head>
+<body>
+<div class="stage">
+  <img class="bg" src="../assets/login-island.jpg">
+  <div class="vgrad"></div>
+  <img class="flag" src="../assets/flag-logo.png">
+  <img class="icon" src="../assets/captain.png">
+  <div class="title">PLAY <span class="g">FREE</span><br>RIGHT NOW</div>
+  <div class="feats"><span>INSTANT MATCHES</span><span class="d">•</span><span>REAL PLAYERS</span><span class="d">•</span><span>NO ADS MID-HAND</span></div>
+  <div class="bottom">
+    <div class="cta">PLAY IN BROWSER</div>
+    <div class="sub">pokermonkey<span class="d">.</span>app</div>
+  </div>
+</div>
+</body></html>
