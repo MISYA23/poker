@@ -66,6 +66,7 @@ function App() {
   const [searchOverlay, setSearchOverlay] = useState(null); // null | {status:'searching'} | {status:'found', opponent}
   const [meantime, setMeantime]           = useState(false); // "play a bot while we keep searching" dialog
   const [preMatch, setPreMatch]           = useState(null);  // null | { opponent } — vs countdown before first hand
+  const [bustReveal, setBustReveal]       = useState(null);  // null | { winnerId } — bust chip-flight + winner badge window
 
   const navigationRef = useNavigationContainerRef();
   const matchIdRef    = useRef(null);
@@ -130,6 +131,8 @@ function App() {
       setOpponentDisconnected(null);
       setSearch(null);
       setMeantime(false);
+      setBustReveal(null);
+      if (matchOverTimerRef.current) { clearTimeout(matchOverTimerRef.current); matchOverTimerRef.current = null; }
       // Starting any match voids all challenges (server does the same)
       setIncomingChallenges([]);
       setOutgoingChallenges([]);
@@ -174,12 +177,23 @@ function App() {
       setOpponentDisconnected(null);
       setMeantime(false);
       if (data.newElo != null) setMyElo(data.newElo);
-      // Hold on the final table state for 2.5s so the player can see what happened
       if (matchOverTimerRef.current) clearTimeout(matchOverTimerRef.current);
-      matchOverTimerRef.current = setTimeout(() => {
-        matchOverTimerRef.current = null;
-        setMatchOver({ ...data, myVote: null, opponentWantsRematch: null });
-      }, 2500);
+      if (data.bust) {
+        // Natural bust: chip-flight animation (1s) + winner badge hold (2s) before modal
+        setBustReveal({ winnerId: data.winnerId });
+        matchOverTimerRef.current = setTimeout(() => {
+          matchOverTimerRef.current = null;
+          setBustReveal(null);
+          setMatchOver({ ...data, myVote: null, opponentWantsRematch: null });
+        }, 3000);
+      } else {
+        // Forfeit / disconnect: brief pause, no chip animation
+        setBustReveal(null);
+        matchOverTimerRef.current = setTimeout(() => {
+          matchOverTimerRef.current = null;
+          setMatchOver({ ...data, myVote: null, opponentWantsRematch: null });
+        }, 1000);
+      }
     },
     'rematch-pending': ({ from })    => {
       setMatchOver(prev => prev ? { ...prev, opponentWantsRematch: from } : prev);
@@ -348,10 +362,10 @@ function App() {
   // lobby broadcasts (match-list, challenges) don't re-render mid-game screens.
   const gameValue = useMemo(() => ({
     gameState, myId, matchOver, opponentDisconnected, handEventsRef,
-    playerInfo, deckStyle, setDeckStyle, uiConfig,
+    playerInfo, deckStyle, setDeckStyle, uiConfig, bustReveal,
     emit, onLogin, onLogout, onUpdateProfile,
     onAction, onLeave, onRematch, navigationRef,
-  }), [gameState, myId, matchOver, opponentDisconnected, playerInfo, deckStyle, uiConfig,
+  }), [gameState, myId, matchOver, opponentDisconnected, playerInfo, deckStyle, uiConfig, bustReveal,
        emit, onLogin, onLogout, onUpdateProfile, onAction, onLeave, onRematch]);
 
   // Lobby context — fast-churning lobby data + lobby-only actions

@@ -327,11 +327,11 @@ function DisconnectBanner({ deadline }) {
 }
 
 // ─── PlayerPod — avatar + nameplate only (hole cards are now separate) ────────
-function PlayerPod({ player, isMe, observing, turnDeadline, lastAction, win, displayChips, deckStyle, avatarOverride, sittingOut }) {
+function PlayerPod({ player, isMe, observing, turnDeadline, lastAction, win, displayChips, deckStyle, avatarOverride, sittingOut, suppressAllIn }) {
   const actionLbl = useActionFlash(player, lastAction);
   const present   = !!player;
   const isActive  = present && !!player.isCurrentPlayer;
-  const allIn     = present && !!player.allIn;
+  const allIn     = present && !!player.allIn && !suppressAllIn;
   const displayName = present ? player.name : (isMe && !observing ? 'You' : 'Waiting…');
   const chipLabel = !present ? '—'
     : (win ? '🏆 Winner!' : (actionLbl || (displayChips ?? player.chips).toLocaleString()));
@@ -732,7 +732,8 @@ export default function GameScreen({ navigation }) {
           <View style={s.oppPodSlot}>
             <PlayerPod player={opponent} isMe={false}
               turnDeadline={oppDeadline} lastAction={gameState?.lastAction}
-              win={opponent ? activeWinners[opponent.id] : null}
+              win={bustWinId ? opponent?.id === bustWinId : (opponent ? activeWinners[opponent.id] : null)}
+              suppressAllIn={!!bustReveal}
               displayChips={opponent ? chipsFor(opponent) : 0}
               deckStyle={deckStyle} sittingOut={oppSittingOut} />
           </View>
@@ -811,7 +812,8 @@ export default function GameScreen({ navigation }) {
           <View style={s.myPodSlot}>
             <PlayerPod player={me} isMe={true} observing={observing}
               turnDeadline={myDeadline} lastAction={gameState?.lastAction}
-              win={me ? activeWinners[me.id] : null}
+              win={bustWinId ? me?.id === bustWinId : (me ? activeWinners[me.id] : null)}
+              suppressAllIn={!!bustReveal}
               displayChips={me ? chipsFor(me) : 0}
               avatarOverride={observing ? undefined : playerInfo?.avatarId}
               deckStyle={deckStyle} sittingOut={meSittingOut} />
