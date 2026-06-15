@@ -314,18 +314,6 @@ function useActionFlash(player, lastAction) {
   return label;
 }
 
-// ─── DisconnectBanner ─────────────────────────────────────────────────────────
-function DisconnectBanner({ deadline }) {
-  const secsLeft = useCountdown(deadline);
-  return (
-    <View style={s.disconnectBanner}>
-      <Text style={s.disconnectTxt}>
-        Opponent disconnected — {secsLeft !== null ? `wins in ${secsLeft}s unless they return` : 'waiting…'}
-      </Text>
-    </View>
-  );
-}
-
 // ─── PlayerPod — avatar + nameplate only (hole cards are now separate) ────────
 function PlayerPod({ player, isMe, observing, turnDeadline, lastAction, win, displayChips, deckStyle, avatarOverride, sittingOut, suppressAllIn }) {
   const actionLbl = useActionFlash(player, lastAction);
@@ -397,7 +385,7 @@ function PlayerPod({ player, isMe, observing, turnDeadline, lastAction, win, dis
 export default function GameScreen({ navigation }) {
   const {
     gameState, myId, onAction, onLeave, onRematch, onLogout,
-    matchOver, navigationRef, deckStyle, opponentDisconnected, playerInfo,
+    matchOver, navigationRef, deckStyle, playerInfo,
     handEventsRef, bustReveal = null,
   } = useContext(GameContext);
 
@@ -865,13 +853,6 @@ export default function GameScreen({ navigation }) {
         {observing && (
           <View style={s.observingBanner} pointerEvents="none">
             <Text style={s.observingTxt}>👁 Spectating</Text>
-          </View>
-        )}
-
-        {/* Disconnect banner — opponent vacated their seat, grace running */}
-        {opponentDisconnected && (
-          <View pointerEvents="none">
-            <DisconnectBanner deadline={opponentDisconnected} />
           </View>
         )}
 

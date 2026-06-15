@@ -55,7 +55,6 @@ function App() {
   const [deckStyle, setDeckStyle]           = useState('regular');
   const [matchOver, setMatchOver]           = useState(null);
   const [myRecentMatches, setMyRecentMatches] = useState([]);
-  const [opponentDisconnected, setOpponentDisconnected] = useState(null); // grace deadline ts
   const [playerInfo, setPlayerInfo] = useState(null);
   const [incomingChallenges, setIncomingChallenges] = useState([]); // [{ fromId, fromName, fromAvatarId }]
   const [outgoingChallenges, setOutgoingChallenges] = useState([]); // [{ toId, toName }]
@@ -129,7 +128,6 @@ function App() {
       setInQueue(false);
       matchIdRef.current = matchId;
       setMatchOver(null);
-      setOpponentDisconnected(null);
       setSearch(null);
       setMeantime(false);
       setBustReveal(null);
@@ -177,7 +175,6 @@ function App() {
       setError('That match just ended');
     },
     'match-over':  (data)            => {
-      setOpponentDisconnected(null);
       setMeantime(false);
       if (data.newElo != null) setMyElo(data.newElo);
       if (matchOverTimerRef.current) clearTimeout(matchOverTimerRef.current);
@@ -204,8 +201,6 @@ function App() {
     'rematch-pending': ({ from })    => {
       setMatchOver(prev => prev ? { ...prev, opponentWantsRematch: from } : prev);
     },
-    'opponent-disconnected':  ({ deadline }) => setOpponentDisconnected(deadline),
-    'opponent-reconnected':   ()             => setOpponentDisconnected(null),
     'challenge-received':     (data)         => setIncomingChallenges(list => [...list.filter(c => c.fromId !== data.fromId), data]),
     'challenge-sent':         (data)         => setOutgoingChallenges(list => [...list.filter(c => c.toId !== data.toId), data]),
     'challenge-declined':     ({ byId })     => setOutgoingChallenges(list => list.filter(c => c.toId !== byId)),
@@ -222,7 +217,6 @@ function App() {
       bustRevealRef.current = null;
       setGameState(null);
       setInQueue(false); setMatchOver(null);
-      setOpponentDisconnected(null);
       setSearch(null); setMeantime(false);
       matchIdRef.current = null;
       isObserverRef.current = false;
@@ -368,11 +362,11 @@ function App() {
   // Game/session context — game state, identity, and stable actions. Memoized so
   // lobby broadcasts (match-list, challenges) don't re-render mid-game screens.
   const gameValue = useMemo(() => ({
-    gameState, myId, matchOver, opponentDisconnected, handEventsRef,
+    gameState, myId, matchOver, handEventsRef,
     playerInfo, deckStyle, setDeckStyle, uiConfig, bustReveal,
     emit, onLogin, onLogout, onUpdateProfile,
     onAction, onLeave, onRematch, navigationRef,
-  }), [gameState, myId, matchOver, opponentDisconnected, playerInfo, deckStyle, uiConfig, bustReveal,
+  }), [gameState, myId, matchOver, playerInfo, deckStyle, uiConfig, bustReveal,
        emit, onLogin, onLogout, onUpdateProfile, onAction, onLeave, onRematch]);
 
   // Lobby context — fast-churning lobby data + lobby-only actions

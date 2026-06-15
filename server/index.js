@@ -203,7 +203,7 @@ function createMatch(p1, p2) {
     ended: false,
     autoStartTimer: null, nextHandTimer: null,
     turnTimer: null, timerPlayerId: null, turnDeadline: null,
-    botTimer: null, isBotMatch: false, botId: null, graceTimer: null,
+    botTimer: null, isBotMatch: false, botId: null,
     handCount: 0, handEventSeq: 0, currentHandUuid: null,
     maxPlayers: 2, name: `match:${id.slice(0, 8)}`, emoji: '♠',
   };
@@ -230,23 +230,6 @@ function resetRoom(m) {
 
 // ── Turn timer ────────────────────────────────────────────────────────────────
 
-function sitOutAutoAction(m, pid) {
-  m.timerPlayerId = null;
-  m.turnDeadline  = null;
-  try {
-    const pre    = preActionState(m.game, pid);
-    const player = m.game.players.find(p => p.id === pid);
-    const canCheck = player && m.game.currentBet <= (player.roundBet || 0);
-    m.game.handleAction(pid, canCheck ? 'check' : 'fold');
-    const rows = buildActionRows(m, m.game, pre);
-    writeHandRows(m, m.game, m.currentHandUuid, rows)
-      .catch(e => console.error('[sit-out] logAction:', e.message));
-    emitHandEvents(m, rows);
-    broadcastMatchState(m);
-    if (m.game.phase === 'showdown') scheduleNextHand(m, cfg.inter_hand_delay_ms);
-  } catch (e) {}
-}
-
 function startTurnTimer(m) {
   const pid = m.game.currentPlayerId;
   if (pid === m.timerPlayerId) return;
@@ -255,28 +238,18 @@ function startTurnTimer(m) {
   m.turnDeadline  = null;
   if (!pid || m.game.phase === 'waiting' || m.game.phase === 'showdown') return;
 
-  // If the player whose turn it is has disconnected, act immediately.
-  const seat = matchPlayers(m).find(p => p.playerId === pid);
-  if (seat?.vacant) { sitOutAutoAction(m, pid); return; }
-
   m.turnDeadline = Date.now() + cfg.turn_seconds * 1000;
   m.turnTimer = setTimeout(() => {
     m.turnTimer = null;
-    if (m.game.currentPlayerId !== pid) return;
+    if (m.ended || m.game.currentPlayerId !== pid) return;
     m.timerPlayerId = null;
     m.turnDeadline  = null;
-    try {
-      const pre = preActionState(m.game, pid);
-      const player   = m.game.players.find(p => p.id === pid);
-      const canCheck = player && m.game.currentBet <= (player.roundBet || 0);
-      m.game.handleAction(pid, canCheck ? 'check' : 'fold');
-      const rows = buildActionRows(m, m.game, pre);
-      writeHandRows(m, m.game, m.currentHandUuid, rows)
-        .catch(e => console.error('[timer] logAction:', e.message));
-      emitHandEvents(m, rows);
-      broadcastMatchState(m);
-      if (m.game.phase === 'showdown') scheduleNextHand(m, cfg.inter_hand_delay_ms);
-    } catch (e) {}
+    // Timer expired = forfeit. Bot matches use a separate timer and always act
+    // well within the window, so this only fires for humans.
+    if (!m.isBotMatch) {
+      const opponent = matchPlayers(m).find(p => p.playerId !== pid);
+      endMatch(m, opponent?.playerId ?? pid);
+    }
   }, cfg.turn_seconds * 1000);
 }
 
@@ -535,8 +508,8 @@ function voidMatch(m) {
   m.ended = true;
   clearTimeout(m.autoStartTimer); clearTimeout(m.nextHandTimer);
   clearTimeout(m.turnTimer);      clearTimeout(m.botTimer);
-  clearTimeout(m.graceTimer);     clearTimeout(m.cleanupTimer);
-  m.autoStartTimer = m.nextHandTimer = m.turnTimer = m.botTimer = m.graceTimer = null;
+  clearTimeout(m.cleanupTimer);
+  m.autoStartTimer = m.nextHandTimer = m.turnTimer = m.botTimer = null;
   m.timerPlayerId = null;
   m.turnDeadline  = null;
   matches.delete(m.id);
@@ -695,7 +668,6 @@ async function endMatch(m, winnerId, bust = false) {
   clearTimeout(m.nextHandTimer);  m.nextHandTimer  = null;
   clearTimeout(m.turnTimer);      m.turnTimer      = null;
   clearTimeout(m.botTimer);       m.botTimer       = null;
-  clearTimeout(m.graceTimer);     m.graceTimer     = null;
   m.timerPlayerId = null;
   m.turnDeadline  = null;
   m.game.gameOver = true; // every end path counts as game over, not just busts
@@ -847,10 +819,8 @@ async function bindIdentity(socket, playerId) {
 }
 
 // If a live match is holding a vacant seat for this identity, re-seat this socket
-// at the table, reap the grace timer, and pull the player back to the game.
-// Returns the match if reclaimed, else null. This is the server reconciling a
-// reconnect to its authoritative position — the player owns where they sit, the
-// client only re-announces that it is back.
+// at the table and pull the player back to the game.
+// Returns the match if reclaimed, else null.
 function reclaimSeat(socket, playerId) {
   for (const m of matches.values()) {
     if (m.ended) continue;
@@ -860,9 +830,7 @@ function reclaimSeat(socket, playerId) {
     seat.socketId = socket.id;
     const sp = socketPlayers.get(socket.id);
     if (sp) sp.matchId = m.id;
-    if (!matchPlayers(m).some(p => p.vacant)) { clearTimeout(m.graceTimer); m.graceTimer = null; }
     const other = matchPlayers(m).find(p => p.playerId !== playerId);
-    if (other) io.to(other.socketId).emit('opponent-reconnected');
     io.to(socket.id).emit('match-found', { matchId: m.id, opponent: { name: other?.playerName || '' }, reconnect: true });
     broadcastMatchState(m);
     broadcastMatchList();
@@ -1162,30 +1130,15 @@ io.on('connection', (socket) => {
     voidChallengesFor(sp.playerId);
     console.log('[server] disconnected:', sp.playerName || socket.id);
 
-    // A dropped connection vacates the seat but doesn't end the match: the
-    // player has one grace window (per disconnect) to come back via
-    // enter-lobby, which re-seats them. The grace timer lives on the match, so
-    // endMatch reaps it along with every other timer.
+    // A dropped connection vacates the seat — the turn timer is the only
+    // enforcement: if it's this player's turn and they don't reconnect in time,
+    // they forfeit. Otherwise the match keeps running until they return.
     const m = liveMatchOf(sp);
     if (m) {
-      const seat  = matchPlayers(m).find(p => p.playerId === sp.playerId);
-      const other = matchPlayers(m).find(p => p.playerId !== sp.playerId);
-      if (other?.vacant) {
-        // Both seats empty — nobody is at the table, close it now.
-        // The player who stayed longer (this one) takes the win.
-        endMatch(m, sp.playerId);
-      } else if (seat) {
+      const seat = matchPlayers(m).find(p => p.playerId === sp.playerId);
+      if (seat) {
         seat.vacant = true;
-        const graceMs = parseInt(process.env.DISCONNECT_GRACE_MS, 10) || cfg.disconnect_grace_ms || 20000;
-        if (other) io.to(other.socketId).emit('opponent-disconnected', { deadline: Date.now() + graceMs });
-        m.graceTimer = setTimeout(() => {
-          m.graceTimer = null;
-          if (m.ended) return;
-          const present = matchPlayers(m).find(p => !p.vacant);
-          endMatch(m, present?.playerId ?? sp.playerId);
-        }, graceMs);
-        console.log(`[match] ${sp.playerName} vacated seat at ${m.id.slice(0, 8)} — ${graceMs / 1000}s grace`);
-        // Update game state to show sitting-out label and auto-act if it's their turn.
+        console.log(`[match] ${sp.playerName} vacated seat at ${m.id.slice(0, 8)}`);
         broadcastMatchState(m);
       }
     }
