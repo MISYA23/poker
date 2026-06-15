@@ -398,7 +398,7 @@ export default function GameScreen({ navigation }) {
   const {
     gameState, myId, onAction, onLeave, onRematch, onLogout,
     matchOver, navigationRef, deckStyle, opponentDisconnected, playerInfo,
-    handEventsRef,
+    handEventsRef, bustReveal = null,
   } = useContext(GameContext);
 
   useEffect(() => {
@@ -584,6 +584,7 @@ export default function GameScreen({ navigation }) {
   }, [revealedCC, targetCC, isShowdown]);
 
   const activeWinners = showWinners ? winnerMap : {};
+  const bustWinId = bustReveal?.winnerId ?? null;
 
   // Deal sound — when a new hand begins (hand number advances)
   const dealSeen = useRef(0);
