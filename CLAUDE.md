@@ -24,6 +24,7 @@ Do not skip this. Do not assume who is working or what branch without asking fir
 
 **Working style:**
 - **ALL work on feature branches — never commit directly to `main`.** If on main, stop and warn the user before doing anything. Branch → work → merge to main → delete branch.
+- **Thibault: never push to `main` directly.** Create a feature branch, do your work there, then open a PR against `main` and request a review from `briandanilo`. Do not merge any PR yourself — wait for Brian's approval.
 - Always prod server — no local/prod split until scale demands it
 - Bump `VERSION` in `client/src/config.js` on every single commit
 - Push to GitHub after every change — Railway auto-deploys from `main`
