@@ -34,7 +34,13 @@
       "expo-web-browser",
       "./plugins/withNoRequiredFeatures",
       "expo-audio",
-      "@sentry/react-native"
+      [
+        "@sentry/react-native",
+        {
+          "autoUploadNativeSymbols": false,
+          "autoUploadProguardMapping": false
+        }
+      ]
     ]
   }
 }
