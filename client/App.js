@@ -142,14 +142,14 @@ function App() {
         navigationRef.navigate('Game');
         return;
       }
-      // Show vs countdown for all new matches (human and bot). foundDelayRef blocks
-      // any game-state from navigating us in early during the 3s window.
+      // Navigate to the table immediately so the countdown appears over the felt.
+      // foundDelayRef blocks game-state from re-navigating during the 3s window.
       setPreMatch({ opponent });
       foundDelayRef.current = true;
+      navigationRef.navigate('Game');
       setTimeout(() => {
         foundDelayRef.current = false;
         setPreMatch(null);
-        navigationRef.navigate('Game');
       }, 3000);
     },
     'match-list':  ({ matches, onlinePlayers: op }) => { setMatchList(matches || []); setOnlinePlayers(op || []); },
