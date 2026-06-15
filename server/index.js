@@ -488,13 +488,12 @@ function scheduleNextHand(m, delay = 5000) {
     const active    = m.game.players.filter(p => p.isActive);
 
     if (active.length >= 2 && withChips.length === 1) {
-      // One player is bust — match over
+      // One player is bust — match over. Skip broadcastMatchState so the client
+      // stays in showdown (preserving the pot-flight animation) until match-over fires.
       const winnerId = withChips[0].id;
       m.game.phase   = 'waiting';
-      m.game.gameOver = true;
-      broadcastMatchState(m);
       checkAndFireComplete(m);
-      await endMatch(m, winnerId);
+      await endMatch(m, winnerId, true);
       return;
     }
     if (withChips.length >= 2 && m.game.canStart()) {
@@ -687,7 +686,7 @@ function markHumanRefused(sp) {
 
 // ── Match end + ELO ───────────────────────────────────────────────────────────
 
-async function endMatch(m, winnerId) {
+async function endMatch(m, winnerId, bust = false) {
   if (m.ended) return;
   m.ended = true;
   // Kill every pending timer — a leftover nextHandTimer would deal a zombie
@@ -747,6 +746,7 @@ async function endMatch(m, winnerId) {
       winnerId, winnerName: winner.playerName,
       eloChange: isWin ? +winnerGain : -loserLoss,
       newElo:    isWin ? wNewElo : lNewElo,
+      bust,
     });
   }
   // Observers get the result too — without it they'd sit on a frozen table forever

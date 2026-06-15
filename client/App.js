@@ -78,6 +78,7 @@ function App() {
   const searchRef        = useRef(null);
   const foundDelayRef    = useRef(false); // mid pre-match countdown — hold navigation
   const matchOverTimerRef = useRef(null); // pending match-over reveal delay
+  const bustRevealRef     = useRef(null); // mirrors bustReveal for socket-bound handlers
   const [route, setRoute] = useState('Login');   // current screen (gates music start)
 
   const setSearch = useCallback((v) => { searchRef.current = v; setSearchOverlay(v); }, []);
@@ -133,6 +134,7 @@ function App() {
       setMeantime(false);
       setBustReveal(null);
       if (matchOverTimerRef.current) { clearTimeout(matchOverTimerRef.current); matchOverTimerRef.current = null; }
+      bustRevealRef.current = null;
       // Starting any match voids all challenges (server does the same)
       setIncomingChallenges([]);
       setOutgoingChallenges([]);
@@ -155,6 +157,7 @@ function App() {
     'match-list':  ({ matches, onlinePlayers: op }) => { setMatchList(matches || []); setOnlinePlayers(op || []); },
     'hand-events': (batch)           => { handEventsRef.current = batch; },
     'game-state':  (state)           => {
+      if (bustRevealRef.current) return; // preserve showdown during bust animation
       setGameState(state);
       if (state.atTable && !state.gameOver) setMatchOver(null);
       const belongsToUs = state.matchId === matchIdRef.current;
@@ -179,15 +182,18 @@ function App() {
       if (data.newElo != null) setMyElo(data.newElo);
       if (matchOverTimerRef.current) clearTimeout(matchOverTimerRef.current);
       if (data.bust) {
-        // Natural bust: chip-flight animation (1s) + winner badge hold (2s) before modal
+        // Natural bust: freeze showdown state, show winner badge for 3s, then modal
+        bustRevealRef.current = { winnerId: data.winnerId };
         setBustReveal({ winnerId: data.winnerId });
         matchOverTimerRef.current = setTimeout(() => {
           matchOverTimerRef.current = null;
+          bustRevealRef.current = null;
           setBustReveal(null);
           setMatchOver({ ...data, myVote: null, opponentWantsRematch: null });
         }, 3000);
       } else {
         // Forfeit / disconnect: brief pause, no chip animation
+        bustRevealRef.current = null;
         setBustReveal(null);
         matchOverTimerRef.current = setTimeout(() => {
           matchOverTimerRef.current = null;
@@ -213,6 +219,7 @@ function App() {
     error:         ({ message })     => { setError(message); setSearch(null); },
     reset:         ()                => {
       if (isObserverRef.current) emit('unobserve', { matchId: matchIdRef.current });
+      bustRevealRef.current = null;
       setGameState(null);
       setInQueue(false); setMatchOver(null);
       setOpponentDisconnected(null);
