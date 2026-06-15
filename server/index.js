@@ -12,6 +12,9 @@ const { enqueue, dequeue, tryPair, calcElo } = require('./matchmaker');
 const { decideAction, stateFromGame } = require('./bot/botBrain');
 const { getProfile } = require('./bot/profiles');
 const { DEFAULT_FORMAT, parseLevels, serializeLevels, levelForHand, blindsForHand } = require('./matchFormat');
+const { initAchievements } = require('./achievements');
+
+let achiever = null; // set in start() after io + socketPlayers are ready
 
 const path = require('path');
 
@@ -453,7 +456,7 @@ function scheduleNextHand(m, delay = 5000) {
   m.nextHandTimer = setTimeout(async () => {
     m.nextHandTimer = null;
     // flushHandToDb captures currentHandUuid synchronously before its first await — safe to clear immediately after
-    flushHandToDb(m, m.game).catch(e => console.error('[hand] flush:', e.message));
+    flushHandToDb(m, m.game, achiever?.checkHandAchievement).catch(e => console.error('[hand] flush:', e.message));
     m.currentHandUuid = null;
     m.handEventSeq    = 0;
 
@@ -774,6 +777,11 @@ async function persistMatchResult(m, winner, loser, wEloBefore, lEloBefore, wElo
       [m.id, winner.playerId, loser.playerId, winnerId, wEloBefore, lEloBefore, wEloAfter, lEloAfter]
     ),
   ]);
+
+  if (achiever) {
+    achiever.checkMatchAchievements(winnerId, m.isBotMatch)
+      .catch(e => console.error('[achievement] match check failed:', e.message));
+  }
 }
 
 // ── Identity & placement ──────────────────────────────────────────────────────
@@ -869,9 +877,10 @@ io.on('connection', (socket) => {
     refreshBroadcasts();
   });
 
-  socket.on('enter-lobby', async ({ playerId } = {}) => {
+  socket.on('enter-lobby', async ({ playerId, timezone } = {}) => {
     if (playerId) {
       await bindIdentity(socket, playerId);
+      if (timezone) db.query('UPDATE players SET timezone=$1 WHERE id=$2', [timezone, playerId]).catch(() => {});
 
       // Safety reconciliation for navigation races (e.g. a web refresh that boots
       // straight into the Lobby) where enter-lobby fires while this identity still
@@ -1329,12 +1338,11 @@ app.get('/api/player/:playerId/profile', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// Player achievements — returns earned list with optional progress.
-// Award logic is a placeholder: always returns empty until achievements are finalised.
 app.get('/api/player/:playerId/achievements', async (req, res) => {
   try {
-    // TODO: query player_achievements table + compute progress per achievement
-    res.json({ earned: [] });
+    if (!achiever) return res.json({ achievements: [] });
+    const list = await achiever.getPlayerAchievements(req.params.playerId);
+    res.json({ achievements: list });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -3033,6 +3041,24 @@ async function initMusicTracks() {
   }
 }
 
+async function runAchievementsMigration() {
+  try {
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS achievements (
+        id              SERIAL PRIMARY KEY,
+        player_id       TEXT NOT NULL REFERENCES players(id),
+        achievement_key TEXT NOT NULL,
+        earned_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        UNIQUE(player_id, achievement_key)
+      )
+    `);
+    await db.query(`ALTER TABLE players ADD COLUMN IF NOT EXISTS timezone TEXT`);
+    console.log('[achievements] migration ok');
+  } catch (e) {
+    console.error('[achievements] migration failed:', e.message);
+  }
+}
+
 async function start() {
   await redis.connect().catch(e => console.error('[redis] connect failed:', e.message));
   await ensureFeedbackTable();
@@ -3042,6 +3068,8 @@ async function start() {
   uiCfg = await loadUiConfig();
   validAvatars = await initAvatars();
   await initBots();
+  await runAchievementsMigration();
+  achiever = initAchievements(db, io, socketPlayers);
   server.listen(PORT, () => console.log(`Poker server on port ${PORT}`));
 }
 

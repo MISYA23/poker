@@ -119,7 +119,7 @@ export default function LobbyScreen({ navigation }) {
     if (!myPlayerId) return;
     fetch(`${SERVER_URL}/api/player/${encodeURIComponent(myPlayerId)}/achievements`)
       .then(r => r.json())
-      .then(data => setAchievements(mergeAchievements(data.earned || [])))
+      .then(data => setAchievements(mergeAchievements(data.achievements || [])))
       .catch(() => {});
   }, [myPlayerId]);
   useEffect(() => {

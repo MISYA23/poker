@@ -227,6 +227,11 @@ function App() {
     },
     'friend-request':         ()             => setPendingFriendRequests(n => n + 1),
     'friend-accepted':        ()             => {},
+    'achievement-earned': ({ key, isFirst }) => {
+      track('AchievementEarned', { achievement: key });
+      if (isFirst) track('FirstAchievementEarned');
+      if (key === 'back_to_back') track('BackToBackWinningDays');
+    },
     error:         ({ message })     => { setError(message); setSearch(null); },
     reset:         ()                => {
       if (isObserverRef.current) emit('unobserve', { matchId: matchIdRef.current });

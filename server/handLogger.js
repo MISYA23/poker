@@ -223,7 +223,8 @@ const EVENT_TYPES = [
 ];
 
 // Called when hand ends — flush Redis log → Postgres.
-async function flushHandToDb(room, game) {
+// checkHandAchievement(winnerId, handName) is optional — passed from index.js.
+async function flushHandToDb(room, game, checkHandAchievement = null) {
   const handUuid = room.currentHandUuid;
   if (!handUuid) return;
 
@@ -278,6 +279,10 @@ async function flushHandToDb(room, game) {
 
     await clearHandEvents(room.id, handUuid);
     console.log(`[hand] flushed ${events.length} events → DB (hand ${handUuid.slice(0, 8)})`);
+
+    if (checkHandAchievement && summary.winnerId && summary.winningHand) {
+      checkHandAchievement(summary.winnerId, summary.winningHand);
+    }
   } catch (err) {
     console.error('[hand] flush failed:', err.message, err.stack?.split('\n')[1]);
   }
