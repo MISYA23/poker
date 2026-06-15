@@ -327,7 +327,7 @@ function DisconnectBanner({ deadline }) {
 }
 
 // ─── PlayerPod — avatar + nameplate only (hole cards are now separate) ────────
-function PlayerPod({ player, isMe, observing, turnDeadline, lastAction, win, displayChips, deckStyle, avatarOverride }) {
+function PlayerPod({ player, isMe, observing, turnDeadline, lastAction, win, displayChips, deckStyle, avatarOverride, sittingOut }) {
   const actionLbl = useActionFlash(player, lastAction);
   const present   = !!player;
   const isActive  = present && !!player.isCurrentPlayer;
@@ -368,11 +368,13 @@ function PlayerPod({ player, isMe, observing, turnDeadline, lastAction, win, dis
       allIn   && s.nameplateAllIn,
       present && player.folded && s.nameplateFolded,
       !present && s.nameplateWaiting,
+      sittingOut && s.nameplateSittingOut,
     ]}>
       <View style={s.nameRow}>
         <Text style={[s.podName, present && player.folded && s.podTextFolded]} numberOfLines={1}>{displayName}</Text>
         {present && player.isSmallBlind && <Text style={[s.badge, s.badgeSB]}>SB</Text>}
         {present && player.isBigBlind   && <Text style={[s.badge, s.badgeBB]}>BB</Text>}
+        {sittingOut && <Text style={[s.badge, s.badgeSitOut]}>Sitting Out</Text>}
       </View>
       <View style={s.chipsRow}>
         <Text style={[s.podChips, win && s.podChipsWin, !!actionLbl && s.podChipsAction,
@@ -477,6 +479,10 @@ export default function GameScreen({ navigation }) {
   if (gameState?.phase === 'showdown' && gameState?.winners) {
     for (const w of gameState.winners) winnerMap[w.playerId] = w;
   }
+  const sittingOutIds = new Set(gameState?.sittingOut || []);
+  const meSittingOut  = me ? sittingOutIds.has(me.id) : false;
+  const oppSittingOut = opponent ? sittingOutIds.has(opponent.id) : false;
+
   const isMyTurn    = !observing && gameState?.currentPlayerId === myId && !['waiting','showdown'].includes(gameState?.phase);
   const myDeadline  = (observing ? me?.isCurrentPlayer : isMyTurn) ? gameState?.turnDeadline : null;
   const oppDeadline = opponent?.isCurrentPlayer ? gameState?.turnDeadline : null;
@@ -701,7 +707,7 @@ export default function GameScreen({ navigation }) {
               turnDeadline={oppDeadline} lastAction={gameState?.lastAction}
               win={opponent ? activeWinners[opponent.id] : null}
               displayChips={opponent ? chipsFor(opponent) : 0}
-              deckStyle={deckStyle} />
+              deckStyle={deckStyle} sittingOut={oppSittingOut} />
           </View>
 
           {/* Opponent hole cards — spec §5 opponentCards: (0.50, 0.305) */}
@@ -781,7 +787,7 @@ export default function GameScreen({ navigation }) {
               win={me ? activeWinners[me.id] : null}
               displayChips={me ? chipsFor(me) : 0}
               avatarOverride={observing ? undefined : playerInfo?.avatarId}
-              deckStyle={deckStyle} />
+              deckStyle={deckStyle} sittingOut={meSittingOut} />
           </View>
 
         </View>
@@ -1115,11 +1121,12 @@ const s = StyleSheet.create({
     shadowColor: '#000', shadowOpacity: 0.45, shadowRadius: 6,
     shadowOffset: { width: 0, height: 3 }, overflow: 'hidden',
   },
-  nameplateActive:  { borderColor: colors.gold, shadowColor: colors.gold, shadowOpacity: 0.4, shadowRadius: 10, elevation: 6 },
-  nameplateAllIn:   { borderColor: '#ef4444', shadowColor: '#ef4444', shadowOpacity: 0.8, shadowRadius: 14, shadowOffset: { width: 0, height: 0 }, elevation: 8 },
-  nameplateFolded:  { backgroundColor: '#191920', borderColor: 'rgba(255,255,255,0.08)' },  // greyed but fully opaque
-  podTextFolded:    { color: 'rgba(255,255,255,0.42)' },
-  nameplateWaiting: {},
+  nameplateActive:     { borderColor: colors.gold, shadowColor: colors.gold, shadowOpacity: 0.4, shadowRadius: 10, elevation: 6 },
+  nameplateAllIn:      { borderColor: '#ef4444', shadowColor: '#ef4444', shadowOpacity: 0.8, shadowRadius: 14, shadowOffset: { width: 0, height: 0 }, elevation: 8 },
+  nameplateFolded:     { backgroundColor: '#191920', borderColor: 'rgba(255,255,255,0.08)' },  // greyed but fully opaque
+  nameplateSittingOut: { backgroundColor: '#1a1a2e', borderColor: 'rgba(255,255,255,0.12)' },
+  podTextFolded:       { color: 'rgba(255,255,255,0.42)' },
+  nameplateWaiting:    {},
 
   // Turn-timer gauge — a clip box that mirrors the nameplate's shape exactly
   // (same width + corner radii); the bar sits at its bottom so its ends follow
@@ -1148,8 +1155,9 @@ const s = StyleSheet.create({
   podChipsWin:    { color: '#4ade80' },
   podChipsAction: { color: colors.orange, fontSize: 14, fontWeight: '800' },
   badge:   { fontSize: 10, color: '#fff', backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 4, paddingHorizontal: 5, paddingVertical: 1, fontWeight: '700' },
-  badgeSB: { backgroundColor: '#2563eb' },
-  badgeBB: { backgroundColor: '#7c3aed' },
+  badgeSB:     { backgroundColor: '#2563eb' },
+  badgeBB:     { backgroundColor: '#7c3aed' },
+  badgeSitOut: { backgroundColor: '#6b7280' },
 
   // Hole cards — absolutely placed in canvas coords (spec §5)
   holeCardsPair: { position: 'absolute', flexDirection: 'row', gap: 6, zIndex: 3 },

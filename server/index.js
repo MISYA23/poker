@@ -230,6 +230,23 @@ function resetRoom(m) {
 
 // ── Turn timer ────────────────────────────────────────────────────────────────
 
+function sitOutAutoAction(m, pid) {
+  m.timerPlayerId = null;
+  m.turnDeadline  = null;
+  try {
+    const pre    = preActionState(m.game, pid);
+    const player = m.game.players.find(p => p.id === pid);
+    const canCheck = player && m.game.currentBet <= (player.roundBet || 0);
+    m.game.handleAction(pid, canCheck ? 'check' : 'fold');
+    const rows = buildActionRows(m, m.game, pre);
+    writeHandRows(m, m.game, m.currentHandUuid, rows)
+      .catch(e => console.error('[sit-out] logAction:', e.message));
+    emitHandEvents(m, rows);
+    broadcastMatchState(m);
+    if (m.game.phase === 'showdown') scheduleNextHand(m, cfg.inter_hand_delay_ms);
+  } catch (e) {}
+}
+
 function startTurnTimer(m) {
   const pid = m.game.currentPlayerId;
   if (pid === m.timerPlayerId) return;
@@ -237,6 +254,11 @@ function startTurnTimer(m) {
   m.timerPlayerId = pid;
   m.turnDeadline  = null;
   if (!pid || m.game.phase === 'waiting' || m.game.phase === 'showdown') return;
+
+  // If the player whose turn it is has disconnected, act immediately.
+  const seat = matchPlayers(m).find(p => p.playerId === pid);
+  if (seat?.vacant) { sitOutAutoAction(m, pid); return; }
+
   m.turnDeadline = Date.now() + cfg.turn_seconds * 1000;
   m.turnTimer = setTimeout(() => {
     m.turnTimer = null;
@@ -245,8 +267,6 @@ function startTurnTimer(m) {
     m.turnDeadline  = null;
     try {
       const pre = preActionState(m.game, pid);
-      // Auto-action on timeout: only fold when actually facing a bet; otherwise
-      // check (no reason to surrender the hand when checking is free).
       const player   = m.game.players.find(p => p.id === pid);
       const canCheck = player && m.game.currentBet <= (player.roundBet || 0);
       m.game.handleAction(pid, canCheck ? 'check' : 'fold');
@@ -324,6 +344,7 @@ function emitHandEvents(m, rows) {
 function broadcastMatchState(m) {
   startTurnTimer(m);
   maybeScheduleBotAction(m);
+  const sittingOut = matchPlayers(m).filter(p => p.vacant).map(p => p.playerId);
   for (const p of matchPlayers(m)) {
     const sp = socketPlayers.get(p.socketId);
     if (!sp) continue;
@@ -335,6 +356,7 @@ function broadcastMatchState(m) {
       gameOver: m.game.gameOver || false,
       turnDeadline: m.turnDeadline,
       handNumber: m.handCount,
+      sittingOut,
     });
   }
   // Observers see face-down cards
@@ -344,6 +366,7 @@ function broadcastMatchState(m) {
       atTable: false, observing: true,
       matchId: m.id, turnDeadline: m.turnDeadline,
       handNumber: m.handCount,
+      sittingOut,
     });
   }
 }
@@ -1162,6 +1185,8 @@ io.on('connection', (socket) => {
           endMatch(m, present?.playerId ?? sp.playerId);
         }, graceMs);
         console.log(`[match] ${sp.playerName} vacated seat at ${m.id.slice(0, 8)} — ${graceMs / 1000}s grace`);
+        // Update game state to show sitting-out label and auto-act if it's their turn.
+        broadcastMatchState(m);
       }
     }
     broadcastMatchList();
