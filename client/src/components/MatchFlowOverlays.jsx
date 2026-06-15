@@ -85,6 +85,48 @@ function OpponentCard({ name, avatarId, country, elo, isBot }) {
   );
 }
 
+// Pre-match vs card with 3-2-1 countdown. Shown for exactly 3s (matching the
+// server's auto_start_delay_ms) so the hand deals right as we land on the table.
+function PreMatchCountdown({ opponent, playerInfo, myElo }) {
+  const [count, setCount] = useState(3);
+  const scaleAnim = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    Animated.sequence([
+      Animated.timing(scaleAnim, { toValue: 1.5, duration: 100, useNativeDriver: true }),
+      Animated.timing(scaleAnim, { toValue: 1,   duration: 250, useNativeDriver: true }),
+    ]).start();
+  }, [count]);
+
+  useEffect(() => {
+    if (count <= 0) return;
+    const t = setTimeout(() => setCount(c => c - 1), 1000);
+    return () => clearTimeout(t);
+  }, [count]);
+
+  return (
+    <Scrim onPress={() => {}}>
+      <Text style={ov.vsHeading}>Match Starting</Text>
+      <View style={ov.vsRow}>
+        <View style={ov.vsPlayer}>
+          <AvatarBadge avatarId={playerInfo?.avatarId} size={74} />
+          <Text style={ov.vsName} numberOfLines={1}>{playerInfo?.name || 'You'}</Text>
+          <Text style={ov.vsElo}>{myElo ?? 1200}</Text>
+        </View>
+        <Text style={ov.vsVs}>VS</Text>
+        <View style={ov.vsPlayer}>
+          <AvatarBadge avatarId={opponent?.avatarId} country={opponent?.country} isBot={!!opponent?.isBot} size={74} />
+          <Text style={ov.vsName} numberOfLines={1}>{opponent?.name || '…'}</Text>
+          <Text style={ov.vsElo}>{opponent?.elo ?? 1200}</Text>
+        </View>
+      </View>
+      <Animated.Text style={[ov.countdown, { transform: [{ scale: scaleAnim }] }]}>
+        {count > 0 ? count : 'GO!'}
+      </Animated.Text>
+    </Scrim>
+  );
+}
+
 // 15s ring that drains around the challenger's avatar (in-game challenges)
 function CountdownAvatar({ avatarId, country, seconds }) {
   const C = 2 * Math.PI * 46;
@@ -125,7 +167,7 @@ function Scrim({ onPress, children }) {
 // All Quick-Match-funnel + challenge dialogs, rendered above every screen.
 // Copy convention: opponents are "humans", bots are "🤖 bot" (never "human").
 export default function MatchFlowOverlays({
-  searchOverlay, meantime, incomingChallenges,
+  searchOverlay, meantime, preMatch, playerInfo, myElo, incomingChallenges,
   onCancelSearch, onDismissMeantime,
   onAcceptChallenge, onDeclineChallenge,
 }) {
@@ -146,13 +188,18 @@ export default function MatchFlowOverlays({
   // Short-fuse challenges (target is mid-bot-game) get the countdown ring
   const inGameChallenge = challenge && challenge.expiresIn != null && challenge.expiresIn <= 30;
 
-  if (!searchOverlay && !meantime && !challenge) return null;
+  if (!searchOverlay && !meantime && !preMatch && !challenge) return null;
 
   return (
     <View style={ov.root} pointerEvents="box-none">
 
+      {/* Pre-match vs countdown */}
+      {preMatch && !challenge && (
+        <PreMatchCountdown opponent={preMatch.opponent} playerInfo={playerInfo} myElo={myElo} />
+      )}
+
       {/* Searching… / Human found! */}
-      {searchOverlay && (
+      {!preMatch && searchOverlay && (
         <Scrim onPress={() => {}}>
           <Radar />
           {searchOverlay.status === 'found' ? (
@@ -173,7 +220,7 @@ export default function MatchFlowOverlays({
       )}
 
       {/* Bot game in the meantime (yields to an incoming challenge) */}
-      {!searchOverlay && meantime && !challenge && (
+      {!preMatch && !searchOverlay && meantime && !challenge && (
         <Scrim onPress={onDismissMeantime}>
           <Radar />
           <Text style={ov.title}>Waiting for <Text style={ov.gold}>humans…</Text></Text>
@@ -251,6 +298,14 @@ const ov = StyleSheet.create({
   oppMeta: { color: '#8a98aa', fontSize: 12.5, fontWeight: '700', marginTop: 4 },
   oppElo: { color: colors.goldLight, fontWeight: '900' },
   flagBadge: { position: 'absolute', bottom: -6, right: -7, textShadowColor: 'rgba(0,0,0,0.5)', textShadowRadius: 2 },
+
+  vsHeading: { color: '#8a98aa', fontSize: 13, fontWeight: '800', letterSpacing: 1.2, textTransform: 'uppercase', marginBottom: 20 },
+  vsRow:     { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 12, marginBottom: 24 },
+  vsPlayer:  { alignItems: 'center', gap: 8, width: 100 },
+  vsName:    { color: colors.white, fontSize: 15, fontWeight: '800', textAlign: 'center' },
+  vsElo:     { color: colors.goldLight, fontSize: 13, fontWeight: '700' },
+  vsVs:      { color: colors.goldLight, fontSize: 22, fontWeight: '900' },
+  countdown: { color: colors.white, fontSize: 64, fontWeight: '900', lineHeight: 72 },
 
   ringWrap: { width: 92, height: 92, alignItems: 'center', justifyContent: 'center' },
   ringSvg: { position: 'absolute' },

@@ -427,6 +427,33 @@ export default function GameScreen({ navigation }) {
     if (a?.t && a.t !== sfxSeen.current) { sfxSeen.current = a.t; playSfx(a.action); }
   }, [gameState?.lastAction?.t]);
 
+  // Match-over modal reveal animation — staggered fade-in of each section
+  const moScrim   = useRef(new Animated.Value(0)).current;
+  const moCard    = useRef(new Animated.Value(0)).current;
+  const moTitle   = useRef(new Animated.Value(0)).current;
+  const moAvatar  = useRef(new Animated.Value(0)).current;
+  const moElo     = useRef(new Animated.Value(0)).current;
+  const moBtns    = useRef(new Animated.Value(0)).current;
+  const moSlide   = useRef(new Animated.Value(30)).current;
+  useEffect(() => {
+    if (!matchOver) {
+      [moScrim, moCard, moTitle, moAvatar, moElo, moBtns].forEach(a => a.setValue(0));
+      moSlide.setValue(30);
+      return;
+    }
+    Animated.sequence([
+      Animated.parallel([
+        Animated.timing(moScrim,  { toValue: 1, duration: 280, useNativeDriver: true }),
+        Animated.timing(moCard,   { toValue: 1, duration: 280, useNativeDriver: true }),
+        Animated.timing(moSlide,  { toValue: 0, duration: 320, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+      ]),
+      Animated.timing(moTitle,  { toValue: 1, duration: 220, useNativeDriver: true }),
+      Animated.timing(moAvatar, { toValue: 1, duration: 220, useNativeDriver: true }),
+      Animated.timing(moElo,    { toValue: 1, duration: 260, useNativeDriver: true }),
+      Animated.timing(moBtns,   { toValue: 1, duration: 220, useNativeDriver: true }),
+    ]).start();
+  }, [matchOver]);
+
   // In-game feedback
   const [feedbackOpen,   setFeedbackOpen]   = useState(false);
   const [feedbackType,   setFeedbackType]   = useState('bug');
@@ -982,70 +1009,72 @@ export default function GameScreen({ navigation }) {
 
       {/* Match over modal — root-level overlay, not scaled */}
       {matchOver && (
-        <View style={s.modalOverlay}>
-          <View style={s.modal}>
-            <Text style={s.modalTitle}>
+        <Animated.View style={[s.modalOverlay, { opacity: moScrim }]}>
+          <Animated.View style={[s.modal, { opacity: moCard, transform: [{ translateY: moSlide }] }]}>
+            <Animated.Text style={[s.modalTitle, { opacity: moTitle }]}>
               {matchOver.winnerId === myId ? '🎉 You Won!' : `${matchOver.winnerName} Won!`}
-            </Text>
+            </Animated.Text>
 
-            <View style={s.winnerWrap}>
+            <Animated.View style={[s.winnerWrap, { opacity: moAvatar }]}>
               <Avatar size={104} avatarId={winnerAvatarId} />
-            </View>
+            </Animated.View>
 
             {matchOver.eloChange != null && (
-              <View style={s.eloRow}>
+              <Animated.View style={[s.eloRow, { opacity: moElo }]}>
                 <Text style={[s.eloChange, matchOver.eloChange >= 0 ? s.eloPos : s.eloNeg]}>
                   {matchOver.eloChange >= 0 ? '+' : ''}{matchOver.eloChange} ELO
                 </Text>
                 <Text style={s.eloNew}>→ {matchOver.newElo}</Text>
-              </View>
+              </Animated.View>
             )}
 
-            {matchOver.observer ? (
-              <View style={s.modalBtns}>
-                <Pressable style={[s.modalBtn, s.modalBtnYes]} onPress={onLeave}>
-                  <Text style={s.modalBtnTxt}>Back to Lobby</Text>
-                </Pressable>
-              </View>
-            ) : matchOver.myVote ? (
-              <>
-                <Text style={s.modalWaiting}>
-                  {matchOver.opponentWantsRematch ? 'Starting rematch…' : 'Waiting for opponent…'}
-                </Text>
+            <Animated.View style={{ opacity: moBtns, alignSelf: 'stretch' }}>
+              {matchOver.observer ? (
                 <View style={s.modalBtns}>
                   <Pressable style={[s.modalBtn, s.modalBtnYes]} onPress={onLeave}>
                     <Text style={s.modalBtnTxt}>Back to Lobby</Text>
                   </Pressable>
                 </View>
-              </>
-            ) : matchOver.opponentWantsRematch ? (
-              <>
-                <Text style={s.modalSub}>{matchOver.opponentWantsRematch} wants a rematch!</Text>
-                <View style={s.modalBtns}>
-                  <Pressable style={[s.modalBtn, s.modalBtnNo]} onPress={() => onRematch(false)}>
-                    <Text style={s.modalBtnTxt}>Decline</Text>
-                  </Pressable>
-                  <Pressable style={[s.modalBtn, s.modalBtnYes]} onPress={() => onRematch(true)}>
-                    <Text style={s.modalBtnTxt}>Accept</Text>
-                  </Pressable>
-                </View>
-              </>
-            ) : (
-              <>
-                <Text style={s.modalSub}>One more for the road?</Text>
-                <View style={s.modalBtns}>
-                  <Pressable style={[s.modalBtn, s.modalBtnNo]} onPress={() => onRematch(false)}>
-                    <Text style={s.modalBtnTxt}>Leave</Text>
-                  </Pressable>
-                  <Pressable style={[s.modalBtn, s.modalBtnYes]} onPress={() => onRematch(true)}>
-                    <Text style={s.modalBtnTxt} numberOfLines={1}
-                      adjustsFontSizeToFit minimumFontScale={0.8}>Play Again</Text>
-                  </Pressable>
-                </View>
-              </>
-            )}
-          </View>
-        </View>
+              ) : matchOver.myVote ? (
+                <>
+                  <Text style={s.modalWaiting}>
+                    {matchOver.opponentWantsRematch ? 'Starting rematch…' : 'Waiting for opponent…'}
+                  </Text>
+                  <View style={s.modalBtns}>
+                    <Pressable style={[s.modalBtn, s.modalBtnYes]} onPress={onLeave}>
+                      <Text style={s.modalBtnTxt}>Back to Lobby</Text>
+                    </Pressable>
+                  </View>
+                </>
+              ) : matchOver.opponentWantsRematch ? (
+                <>
+                  <Text style={s.modalSub}>{matchOver.opponentWantsRematch} wants a rematch!</Text>
+                  <View style={s.modalBtns}>
+                    <Pressable style={[s.modalBtn, s.modalBtnNo]} onPress={() => onRematch(false)}>
+                      <Text style={s.modalBtnTxt}>Decline</Text>
+                    </Pressable>
+                    <Pressable style={[s.modalBtn, s.modalBtnYes]} onPress={() => onRematch(true)}>
+                      <Text style={s.modalBtnTxt}>Accept</Text>
+                    </Pressable>
+                  </View>
+                </>
+              ) : (
+                <>
+                  <Text style={s.modalSub}>One more for the road?</Text>
+                  <View style={s.modalBtns}>
+                    <Pressable style={[s.modalBtn, s.modalBtnNo]} onPress={() => onRematch(false)}>
+                      <Text style={s.modalBtnTxt}>Leave</Text>
+                    </Pressable>
+                    <Pressable style={[s.modalBtn, s.modalBtnYes]} onPress={() => onRematch(true)}>
+                      <Text style={s.modalBtnTxt} numberOfLines={1}
+                        adjustsFontSizeToFit minimumFontScale={0.8}>Play Again</Text>
+                    </Pressable>
+                  </View>
+                </>
+              )}
+            </Animated.View>
+          </Animated.View>
+        </Animated.View>
       )}
 
     </View>

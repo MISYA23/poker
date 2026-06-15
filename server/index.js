@@ -863,7 +863,7 @@ function reclaimSeat(socket, playerId) {
     if (!matchPlayers(m).some(p => p.vacant)) { clearTimeout(m.graceTimer); m.graceTimer = null; }
     const other = matchPlayers(m).find(p => p.playerId !== playerId);
     if (other) io.to(other.socketId).emit('opponent-reconnected');
-    io.to(socket.id).emit('match-found', { matchId: m.id, opponent: { name: other?.playerName || '' } });
+    io.to(socket.id).emit('match-found', { matchId: m.id, opponent: { name: other?.playerName || '' }, reconnect: true });
     broadcastMatchState(m);
     broadcastMatchList();
     console.log(`[match] ${sp?.playerName || playerId} re-seated at ${m.id.slice(0, 8)} after reconnect`);
@@ -1003,7 +1003,7 @@ io.on('connection', (socket) => {
     m.game.addPlayer(p1.playerId, p1.playerName, p1.avatarId);
     m.game.addPlayer(p2.playerId, p2.playerName, p2.avatarId);
 
-    socket.emit('match-found', { matchId: m.id, opponent: { name: bot.name, avatarId: bot.avatarId, isBot: true }, fallback });
+    socket.emit('match-found', { matchId: m.id, opponent: { name: bot.name, avatarId: bot.avatarId, isBot: true, elo: eloCache[m.botId] || 1200 }, fallback });
     broadcastMatchState(m);
     broadcastMatchList();
     // Other searchers re-ask this player in their new in-game (15s) context
