@@ -65,6 +65,7 @@ function App() {
   // Quick Match funnel overlays (see MatchFlowOverlays)
   const [searchOverlay, setSearchOverlay] = useState(null); // null | {status:'searching'} | {status:'found', opponent}
   const [meantime, setMeantime]           = useState(false); // "play a bot while we keep searching" dialog
+  const [preMatch, setPreMatch]           = useState(null);  // null | { opponent } — vs countdown before first hand
 
   const navigationRef = useNavigationContainerRef();
   const matchIdRef    = useRef(null);
@@ -73,8 +74,9 @@ function App() {
   const playerIdRef   = useRef(null);
   // Socket handlers are bound once at mount (useSocket) — they must read these
   // refs, never the overlay state above.
-  const searchRef     = useRef(null);
-  const foundDelayRef = useRef(false); // mid "Human found!" beat — hold navigation
+  const searchRef        = useRef(null);
+  const foundDelayRef    = useRef(false); // mid pre-match countdown — hold navigation
+  const matchOverTimerRef = useRef(null); // pending match-over reveal delay
   const [route, setRoute] = useState('Login');   // current screen (gates music start)
 
   const setSearch = useCallback((v) => { searchRef.current = v; setSearchOverlay(v); }, []);
@@ -116,7 +118,7 @@ function App() {
     connect:           ()            => { if (playerIdRef.current) emit('session', { playerId: playerIdRef.current }); },
     'in-queue':        ()            => { setInQueue(true); setError(null); },
     'queue-cancelled': ()            => { setInQueue(false); setSearch(null); },
-    'match-found':     ({ matchId, opponent, fallback }) => {
+    'match-found':     ({ matchId, opponent, fallback, reconnect }) => {
       if (isObserverRef.current) {
         emit('unobserve', { matchId: matchIdRef.current });
         isObserverRef.current = false;
@@ -126,29 +128,26 @@ function App() {
       matchIdRef.current = matchId;
       setMatchOver(null);
       setOpponentDisconnected(null);
+      setSearch(null);
+      setMeantime(false);
       // Starting any match voids all challenges (server does the same)
       setIncomingChallenges([]);
       setOutgoingChallenges([]);
       track('StartMatch');
-      if (fallback) {
-        // No human within the window — bot game with the meantime dialog over it
-        setSearch(null);
-        setMeantime(true);
+      if (reconnect) {
+        // Re-seated at a live match after disconnect — skip countdown, go straight in
         navigationRef.navigate('Game');
-      } else if (searchRef.current) {
-        // Real human found mid-search: show the "Human found!" beat, then drop in
-        setMeantime(false);
-        setSearch({ status: 'found', opponent });
-        foundDelayRef.current = true;
-        setTimeout(() => {
-          foundDelayRef.current = false;
-          setSearch(null);
-          navigationRef.navigate('Game');
-        }, 1200);
-      } else {
-        setMeantime(false);
-        navigationRef.navigate('Game');
+        return;
       }
+      // Show vs countdown for all new matches (human and bot). foundDelayRef blocks
+      // any game-state from navigating us in early during the 3s window.
+      setPreMatch({ opponent });
+      foundDelayRef.current = true;
+      setTimeout(() => {
+        foundDelayRef.current = false;
+        setPreMatch(null);
+        navigationRef.navigate('Game');
+      }, 3000);
     },
     'match-list':  ({ matches, onlinePlayers: op }) => { setMatchList(matches || []); setOnlinePlayers(op || []); },
     'hand-events': (batch)           => { handEventsRef.current = batch; },
@@ -172,10 +171,15 @@ function App() {
       setError('That match just ended');
     },
     'match-over':  (data)            => {
-      setMatchOver({ ...data, myVote: null, opponentWantsRematch: null });
       setOpponentDisconnected(null);
       setMeantime(false);
       if (data.newElo != null) setMyElo(data.newElo);
+      // Hold on the final table state for 2.5s so the player can see what happened
+      if (matchOverTimerRef.current) clearTimeout(matchOverTimerRef.current);
+      matchOverTimerRef.current = setTimeout(() => {
+        matchOverTimerRef.current = null;
+        setMatchOver({ ...data, myVote: null, opponentWantsRematch: null });
+      }, 2500);
     },
     'rematch-pending': ({ from })    => {
       setMatchOver(prev => prev ? { ...prev, opponentWantsRematch: from } : prev);
@@ -382,6 +386,9 @@ function App() {
           <MatchFlowOverlays
             searchOverlay={searchOverlay}
             meantime={meantime}
+            preMatch={preMatch}
+            playerInfo={playerInfo}
+            myElo={myElo}
             incomingChallenges={incomingChallenges}
             onCancelSearch={onCancelMatch}
             onDismissMeantime={onDismissMeantime}
