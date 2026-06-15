@@ -712,13 +712,17 @@ async function endMatch(m, winnerId, bust = false) {
   eloCache[loser.playerId]  = lNewElo;
 
   // Notify players immediately — no waiting for DB
+  const loserChips = m.game.players.find(p => p.id === loser.playerId)?.chips ?? 0;
   for (const p of matchPlayers(m)) {
     const isWin = p.playerId === winnerId;
     io.to(p.socketId).emit('match-over', {
       winnerId, winnerName: winner.playerName,
+      loserName: loser.playerName,
+      loserId: loser.playerId, loserChips,
       eloChange: isWin ? +winnerGain : -loserLoss,
       newElo:    isWin ? wNewElo : lNewElo,
       bust,
+      forfeit: !bust,
     });
   }
   // Observers get the result too — without it they'd sit on a frozen table forever
@@ -1322,6 +1326,15 @@ app.get('/api/player/:playerId/profile', async (req, res) => {
         myEloAfter:   r.my_elo_after,
       })),
     });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Player achievements — returns earned list with optional progress.
+// Award logic is a placeholder: always returns empty until achievements are finalised.
+app.get('/api/player/:playerId/achievements', async (req, res) => {
+  try {
+    // TODO: query player_achievements table + compute progress per achievement
+    res.json({ earned: [] });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

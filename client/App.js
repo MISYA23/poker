@@ -66,6 +66,7 @@ function App() {
   const [meantime, setMeantime]           = useState(false); // "play a bot while we keep searching" dialog
   const [preMatch, setPreMatch]           = useState(null);  // null | { opponent } — vs countdown before first hand
   const [bustReveal, setBustReveal]       = useState(null);  // null | { winnerId } — bust chip-flight + winner badge window
+  const [forfeitReveal, setForfeitReveal] = useState(null);  // null | { loserId, loserChips, loserName } — forfeit countdown animation window
 
   const navigationRef = useNavigationContainerRef();
   const matchIdRef    = useRef(null);
@@ -76,8 +77,9 @@ function App() {
   // refs, never the overlay state above.
   const searchRef        = useRef(null);
   const foundDelayRef    = useRef(false); // mid pre-match countdown — hold navigation
-  const matchOverTimerRef = useRef(null); // pending match-over reveal delay
-  const bustRevealRef     = useRef(null); // mirrors bustReveal for socket-bound handlers
+  const matchOverTimerRef  = useRef(null); // pending match-over reveal delay
+  const bustRevealRef      = useRef(null); // mirrors bustReveal for socket-bound handlers
+  const forfeitRevealRef   = useRef(null); // mirrors forfeitReveal for socket-bound handlers
   const [route, setRoute] = useState('Login');   // current screen (gates music start)
 
   const setSearch = useCallback((v) => { searchRef.current = v; setSearchOverlay(v); }, []);
@@ -133,6 +135,7 @@ function App() {
       setBustReveal(null);
       if (matchOverTimerRef.current) { clearTimeout(matchOverTimerRef.current); matchOverTimerRef.current = null; }
       bustRevealRef.current = null;
+      forfeitRevealRef.current = null;
       // Starting any match voids all challenges (server does the same)
       setIncomingChallenges([]);
       setOutgoingChallenges([]);
@@ -155,7 +158,7 @@ function App() {
     'match-list':  ({ matches, onlinePlayers: op }) => { setMatchList(matches || []); setOnlinePlayers(op || []); },
     'hand-events': (batch)           => { handEventsRef.current = batch; },
     'game-state':  (state)           => {
-      if (bustRevealRef.current) return; // preserve showdown during bust animation
+      if (bustRevealRef.current || forfeitRevealRef.current) return; // preserve state during end-of-match animation
       setGameState(state);
       if (state.atTable && !state.gameOver) setMatchOver(null);
       const belongsToUs = state.matchId === matchIdRef.current;
@@ -188,10 +191,23 @@ function App() {
           setBustReveal(null);
           setMatchOver({ ...data, myVote: null, opponentWantsRematch: null });
         }, 3000);
+      } else if (data.forfeit) {
+        // Forfeit: chip countdown + flight animation for 2.5s, then modal
+        const rev = { loserId: data.loserId, loserChips: data.loserChips, loserName: data.loserName };
+        forfeitRevealRef.current = rev;
+        setForfeitReveal(rev);
+        matchOverTimerRef.current = setTimeout(() => {
+          matchOverTimerRef.current = null;
+          forfeitRevealRef.current = null;
+          setForfeitReveal(null);
+          setMatchOver({ ...data, myVote: null, opponentWantsRematch: null });
+        }, 2500);
       } else {
-        // Forfeit / disconnect: brief pause, no chip animation
+        // Fallback: plain brief pause
         bustRevealRef.current = null;
         setBustReveal(null);
+        forfeitRevealRef.current = null;
+        setForfeitReveal(null);
         matchOverTimerRef.current = setTimeout(() => {
           matchOverTimerRef.current = null;
           setMatchOver({ ...data, myVote: null, opponentWantsRematch: null });
@@ -215,6 +231,7 @@ function App() {
     reset:         ()                => {
       if (isObserverRef.current) emit('unobserve', { matchId: matchIdRef.current });
       bustRevealRef.current = null;
+      forfeitRevealRef.current = null;
       setGameState(null);
       setInQueue(false); setMatchOver(null);
       setSearch(null); setMeantime(false);
@@ -363,10 +380,10 @@ function App() {
   // lobby broadcasts (match-list, challenges) don't re-render mid-game screens.
   const gameValue = useMemo(() => ({
     gameState, myId, matchOver, handEventsRef,
-    playerInfo, deckStyle, setDeckStyle, uiConfig, bustReveal,
+    playerInfo, deckStyle, setDeckStyle, uiConfig, bustReveal, forfeitReveal,
     emit, onLogin, onLogout, onUpdateProfile,
     onAction, onLeave, onRematch, navigationRef,
-  }), [gameState, myId, matchOver, playerInfo, deckStyle, uiConfig, bustReveal,
+  }), [gameState, myId, matchOver, playerInfo, deckStyle, uiConfig, bustReveal, forfeitReveal,
        emit, onLogin, onLogout, onUpdateProfile, onAction, onLeave, onRematch]);
 
   // Lobby context — fast-churning lobby data + lobby-only actions

@@ -380,7 +380,7 @@ export default function GameScreen({ navigation }) {
   const {
     gameState, myId, onAction, onLeave, onRematch, onLogout,
     matchOver, navigationRef, deckStyle, playerInfo,
-    handEventsRef, bustReveal = null, uiConfig = {},
+    handEventsRef, bustReveal = null, forfeitReveal = null, uiConfig = {},
   } = useContext(GameContext);
 
   useEffect(() => {
@@ -678,6 +678,52 @@ export default function GameScreen({ navigation }) {
     ]).start();
   }, [showWinners]);
 
+  // Forfeit animation — chip countdown + flight from loser to winner
+  const forfeitFlightY       = useRef(new Animated.Value(0)).current;
+  const forfeitFlightOpacity = useRef(new Animated.Value(0)).current;
+  const forfeitFlightScale   = useRef(new Animated.Value(1)).current;
+  const [forfeitChipDisplay, setForfeitChipDisplay] = useState(null);
+  useEffect(() => {
+    if (!forfeitReveal) {
+      setForfeitChipDisplay(null);
+      forfeitFlightOpacity.setValue(0);
+      return;
+    }
+    const { loserId, loserChips } = forfeitReveal;
+    const loserIsBottom = loserId === bottomId;
+    const travelY = loserIsBottom ? -(MY_POD_T - OPP_POD_T - POD_H) : (MY_POD_T - OPP_POD_T - POD_H);
+    // Number countdown
+    const startTime = Date.now();
+    const duration = 1500;
+    setForfeitChipDisplay(loserChips);
+    const countId = setInterval(() => {
+      const elapsed = Date.now() - startTime;
+      const t = Math.min(1, elapsed / duration);
+      const eased = t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t; // ease-in-out
+      setForfeitChipDisplay(Math.round(loserChips * (1 - eased)));
+      if (t >= 1) clearInterval(countId);
+    }, 16);
+    // Chip flight
+    forfeitFlightY.setValue(0);
+    forfeitFlightScale.setValue(1);
+    forfeitFlightOpacity.setValue(1);
+    Animated.parallel([
+      Animated.timing(forfeitFlightY, {
+        toValue: travelY, duration: 1500,
+        easing: Easing.bezier(0.25, 0.46, 0.45, 0.94), useNativeDriver: true,
+      }),
+      Animated.sequence([
+        Animated.timing(forfeitFlightScale, { toValue: 1.3, duration: 1000, useNativeDriver: true }),
+        Animated.timing(forfeitFlightScale, { toValue: 1,   duration: 500,  useNativeDriver: true }),
+      ]),
+      Animated.sequence([
+        Animated.delay(1200),
+        Animated.timing(forfeitFlightOpacity, { toValue: 0, duration: 300, useNativeDriver: true }),
+      ]),
+    ]).start();
+    return () => clearInterval(countId);
+  }, [forfeitReveal]);
+
   const currentBet   = gameState?.currentBet || 0;
   const myBet        = me?.roundBet || 0;
   const bigBlind     = gameState?.bigBlind || 20;
@@ -717,7 +763,7 @@ export default function GameScreen({ navigation }) {
             <PlayerPod player={opponent} isMe={false}
               turnDeadline={oppDeadline} lastAction={gameState?.lastAction}
               win={bustWinId ? opponent?.id === bustWinId : (opponent ? activeWinners[opponent.id] : null)}
-              displayChips={opponent ? chipsFor(opponent) : 0}
+              displayChips={forfeitReveal?.loserId === opponent?.id && forfeitChipDisplay != null ? forfeitChipDisplay : (opponent ? chipsFor(opponent) : 0)}
               deckStyle={deckStyle} sittingOut={oppSittingOut} />
           </View>
 
@@ -788,6 +834,17 @@ export default function GameScreen({ navigation }) {
             </Animated.View>
           )}
 
+          {/* Forfeit chip flight — loser's chips slide to winner */}
+          {forfeitReveal && (
+            <Animated.View pointerEvents="none" style={[s.winFlight, {
+              top: forfeitReveal.loserId === bottomId ? MY_POD_T + POD_H / 2 : OPP_POD_T + POD_H / 2,
+              opacity: forfeitFlightOpacity,
+              transform: [{ translateY: forfeitFlightY }, { scale: forfeitFlightScale }],
+            }]}>
+              <ChipStack amount={forfeitReveal.loserChips || 0} size={45} />
+            </Animated.View>
+          )}
+
           {/* Player hole cards — spec §5 playerCards: (0.43, 0.700) */}
           <HoleCards player={me} isMe={true} deckStyle={deckStyle} />
 
@@ -796,7 +853,7 @@ export default function GameScreen({ navigation }) {
             <PlayerPod player={me} isMe={true} observing={observing}
               turnDeadline={myDeadline} lastAction={gameState?.lastAction}
               win={bustWinId ? me?.id === bustWinId : (me ? activeWinners[me.id] : null)}
-              displayChips={me ? chipsFor(me) : 0}
+              displayChips={forfeitReveal?.loserId === me?.id && forfeitChipDisplay != null ? forfeitChipDisplay : (me ? chipsFor(me) : 0)}
               avatarOverride={observing ? undefined : playerInfo?.avatarId}
               deckStyle={deckStyle} sittingOut={meSittingOut} />
           </View>
@@ -989,8 +1046,16 @@ export default function GameScreen({ navigation }) {
         <Animated.View style={[s.modalOverlay, { opacity: moScrim }]}>
           <Animated.View style={[s.modal, { opacity: moCard, transform: [{ translateY: moSlide }] }]}>
             <Animated.Text style={[s.modalTitle, { opacity: moTitle }]}>
-              {matchOver.winnerId === myId ? '🎉 You Won!' : `${matchOver.winnerName} Won!`}
+              {matchOver.forfeit
+                ? (matchOver.winnerId === myId ? 'You Won By Forfeit' : 'You Lost By Forfeit')
+                : (matchOver.winnerId === myId ? '🎉 You Won!' : `${matchOver.winnerName} Won!`)}
             </Animated.Text>
+
+            {matchOver.forfeit && (
+              <Animated.Text style={[s.modalSub, { opacity: moTitle }]}>
+                {matchOver.loserName} timed out
+              </Animated.Text>
+            )}
 
             <Animated.View style={[s.winnerWrap, { opacity: moAvatar }]}>
               <Avatar size={104} avatarId={winnerAvatarId} />
@@ -1006,7 +1071,7 @@ export default function GameScreen({ navigation }) {
             )}
 
             <Animated.View style={{ opacity: moBtns, alignSelf: 'stretch' }}>
-              {matchOver.observer ? (
+              {matchOver.forfeit || matchOver.observer ? (
                 <View style={s.modalBtns}>
                   <Pressable style={[s.modalBtn, s.modalBtnYes]} onPress={onLeave}>
                     <Text style={s.modalBtnTxt}>Back to Lobby</Text>
