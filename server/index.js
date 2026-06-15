@@ -2880,6 +2880,7 @@ async function loadUiConfig() {
     ['card_deal_stagger_ms',      180, 'Stagger delay between card 1 and card 2'],
     ['action_flash_duration_ms', 2500, 'How long action label shows in nameplate'],
     ['center_action_duration_ms',3000, 'How long center action narration shows'],
+    ['allin_reveal_pause_ms',    1500, 'Pause after hole cards revealed before board runs out (ms)'],
     ['community_card_stagger_ms', 500, 'Delay between flop card reveals'],
     ['showdown_card_stagger_ms', 1000, 'Delay between turn/river reveals at showdown'],
     ['winner_reveal_delay_ms',   2000, 'Pause after last CC before winners highlighted'],

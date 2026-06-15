@@ -315,11 +315,10 @@ function useActionFlash(player, lastAction) {
 }
 
 // ─── PlayerPod — avatar + nameplate only (hole cards are now separate) ────────
-function PlayerPod({ player, isMe, observing, turnDeadline, lastAction, win, displayChips, deckStyle, avatarOverride, sittingOut, suppressAllIn }) {
+function PlayerPod({ player, isMe, observing, turnDeadline, lastAction, win, displayChips, deckStyle, avatarOverride, sittingOut }) {
   const actionLbl = useActionFlash(player, lastAction);
   const present   = !!player;
   const isActive  = present && !!player.isCurrentPlayer;
-  const allIn     = present && !!player.allIn && !suppressAllIn;
   const displayName = present ? player.name : (isMe && !observing ? 'You' : 'Waiting…');
   const chipLabel = !present ? '—'
     : (win ? '🏆 Winner!' : (actionLbl || (displayChips ?? player.chips).toLocaleString()));
@@ -332,10 +331,6 @@ function PlayerPod({ player, isMe, observing, turnDeadline, lastAction, win, dis
       !present && s.avatarPlaceholder,
     ]}>
       <Avatar size={AVATAR_SZ} avatarId={avatarOverride || player?.avatarId} />
-      {allIn && (
-        <View style={[s.avatarAllInGlow, { width: AVATAR_SZ, height: AVATAR_SZ, borderRadius: AVATAR_SZ / 2 }]}
-          pointerEvents="none" />
-      )}
     </View>
   );
 
@@ -353,7 +348,6 @@ function PlayerPod({ player, isMe, observing, turnDeadline, lastAction, win, dis
             borderTopRightRadius: NP_RADIUS, borderBottomRightRadius: NP_RADIUS,
             borderTopLeftRadius: 0, borderBottomLeftRadius: 0 },
       isActive && s.nameplateActive,
-      allIn   && s.nameplateAllIn,
       present && player.folded && s.nameplateFolded,
       !present && s.nameplateWaiting,
       sittingOut && s.nameplateSittingOut,
@@ -386,7 +380,7 @@ export default function GameScreen({ navigation }) {
   const {
     gameState, myId, onAction, onLeave, onRematch, onLogout,
     matchOver, navigationRef, deckStyle, playerInfo,
-    handEventsRef, bustReveal = null,
+    handEventsRef, bustReveal = null, uiConfig = {},
   } = useContext(GameContext);
 
   useEffect(() => {
@@ -551,7 +545,8 @@ export default function GameScreen({ navigation }) {
     if (collecting) return; // hold new cards until the bets finish sliding in
     if (revealedCC >= targetCC) return;
     const timers = [];
-    let acc = 0;
+    const anyAllIn = gameState?.players?.some(p => p.allIn) ?? false;
+    let acc = (isShowdown && anyAllIn) ? (uiConfig.allin_reveal_pause_ms ?? 1500) : 0;
     for (let i = revealedCC; i < targetCC; i++) {
       timers.push(setTimeout(() => setRevealedCC(i + 1), acc));
       const next = i + 1;
@@ -722,7 +717,6 @@ export default function GameScreen({ navigation }) {
             <PlayerPod player={opponent} isMe={false}
               turnDeadline={oppDeadline} lastAction={gameState?.lastAction}
               win={bustWinId ? opponent?.id === bustWinId : (opponent ? activeWinners[opponent.id] : null)}
-              suppressAllIn={!!bustReveal}
               displayChips={opponent ? chipsFor(opponent) : 0}
               deckStyle={deckStyle} sittingOut={oppSittingOut} />
           </View>
@@ -802,7 +796,6 @@ export default function GameScreen({ navigation }) {
             <PlayerPod player={me} isMe={true} observing={observing}
               turnDeadline={myDeadline} lastAction={gameState?.lastAction}
               win={bustWinId ? me?.id === bustWinId : (me ? activeWinners[me.id] : null)}
-              suppressAllIn={!!bustReveal}
               displayChips={me ? chipsFor(me) : 0}
               avatarOverride={observing ? undefined : playerInfo?.avatarId}
               deckStyle={deckStyle} sittingOut={meSittingOut} />
@@ -1114,12 +1107,6 @@ const s = StyleSheet.create({
   },
   avatarBlockMe:  { right: 0 },
   avatarBlockOpp: { left:  0 },
-  avatarAllInGlow: {
-    position: 'absolute', top: 0, left: 0,
-    borderWidth: 3, borderColor: '#ef4444',
-    shadowColor: '#ef4444', shadowOpacity: 0.85, shadowRadius: 16,
-    shadowOffset: { width: 0, height: 0 }, elevation: 10, zIndex: 55,
-  },
   ring: { position: 'absolute' },
   avatarPlaceholder: { opacity: 0.45 },
 
@@ -1135,7 +1122,6 @@ const s = StyleSheet.create({
     shadowOffset: { width: 0, height: 3 }, overflow: 'hidden',
   },
   nameplateActive:     { borderColor: colors.gold, shadowColor: colors.gold, shadowOpacity: 0.4, shadowRadius: 10, elevation: 6 },
-  nameplateAllIn:      { borderColor: '#ef4444', shadowColor: '#ef4444', shadowOpacity: 0.8, shadowRadius: 14, shadowOffset: { width: 0, height: 0 }, elevation: 8 },
   nameplateFolded:     { backgroundColor: '#191920', borderColor: 'rgba(255,255,255,0.08)' },  // greyed but fully opaque
   nameplateSittingOut: { backgroundColor: '#1a1a2e', borderColor: 'rgba(255,255,255,0.12)' },
   podTextFolded:       { color: 'rgba(255,255,255,0.42)' },
@@ -1237,7 +1223,7 @@ const s = StyleSheet.create({
 
   // Match over modal
   modalOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.75)', alignItems: 'center', justifyContent: 'center', zIndex: 100 },
-  modal:       { backgroundColor: '#111', borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)', borderRadius: 24, padding: 22, alignItems: 'center', gap: 14, width: '90%' },
+  modal:       { backgroundColor: '#111', borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)', borderRadius: 24, padding: 22, alignItems: 'center', gap: 14, width: '90%', maxWidth: 380 },
   modalTitle:  { color: colors.white, fontSize: 24, fontWeight: '900', textAlign: 'center' },
   winnerWrap:  { alignItems: 'center', justifyContent: 'center', marginTop: 2 },
   eloRow:      { flexDirection: 'row', alignItems: 'center', gap: 8 },
