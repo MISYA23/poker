@@ -33,7 +33,8 @@
     "plugins": [
       "expo-web-browser",
       "./plugins/withNoRequiredFeatures",
-      "expo-audio"
+      "expo-audio",
+      "@sentry/react-native"
     ]
   }
 }

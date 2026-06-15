@@ -1,4 +1,5 @@
 import 'react-native-gesture-handler';
+import { Sentry, initSentry } from './src/sentry';
 import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { NavigationContainer, useNavigationContainerRef } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
@@ -21,6 +22,9 @@ import ProfileScreen    from './src/screens/ProfileScreen';
 import HandReplayScreen   from './src/screens/HandReplayScreen';
 import LeaderboardScreen  from './src/screens/LeaderboardScreen';
 
+// Initialize crash reporting as early as possible, before any app code runs.
+initSentry();
+
 const Stack = createStackNavigator();
 
 const linking = {
@@ -37,7 +41,7 @@ const linking = {
   },
 };
 
-export default function App() {
+function App() {
   const [myId, setMyId]           = useState(null);
   const [gameState, setGameState] = useState(null);
   // Latest live hand-event batch — arrives just before the game-state that
@@ -390,3 +394,6 @@ export default function App() {
     </GameContext.Provider>
   );
 }
+
+// Wrap so Sentry captures render errors + attaches navigation/touch context.
+export default Sentry.wrap(App);
