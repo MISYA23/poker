@@ -9,6 +9,8 @@ import { track } from '../utils/analytics';
 import { flagEmoji } from '../utils/flag';
 import { AvatarBadge } from '../components/MatchFlowOverlays';
 import SoundButton from '../components/SoundButton';
+import AchievementGallery from '../components/AchievementGallery';
+import { ACHIEVEMENTS, mergeAchievements } from '../data/achievements';
 
 // Always share the public URL — anyone who taps it can play in the browser
 // immediately. ?via= is inert for now; reserved for attribution / a future
@@ -29,8 +31,11 @@ function PlayerRow({ p, incoming, issued, onChallenge, onCancelChallenge, onAcce
     p.isBot      ? 'Always ready 🤖'    :
     p.botRefused ? 'Playing a bot 🤖'   : 'Looking to play';
   const green = incoming || issued;
+  const onPress = incoming ? () => onAccept(p.id)
+                : issued   ? () => onCancelChallenge(p.id)
+                :             () => onChallenge(p.id);
   return (
-    <View style={[s.row, green && s.rowGreen]}>
+    <Pressable style={[s.row, green && s.rowGreen]} onPress={onPress}>
       <AvatarBadge avatarId={p.avatarId} country={p.country} isBot={!!p.isBot} size={46} />
       <View style={s.rowWho}>
         <Text style={s.rowName} numberOfLines={1}>{p.name}</Text>
@@ -41,19 +46,19 @@ function PlayerRow({ p, incoming, issued, onChallenge, onCancelChallenge, onAcce
         </View>
       </View>
       {incoming ? (
-        <Pressable style={[s.vsBtn, s.acceptBtn]} onPress={() => onAccept(p.id)}>
+        <View style={[s.vsBtn, s.acceptBtn]} pointerEvents="none">
           <Text style={s.acceptBtnTxt}>Accept</Text>
-        </Pressable>
+        </View>
       ) : issued ? (
-        <Pressable style={s.cancelBtn} onPress={() => onCancelChallenge(p.id)}>
+        <View style={s.cancelBtn} pointerEvents="none">
           <Text style={s.cancelBtnTxt}>Cancel</Text>
-        </Pressable>
+        </View>
       ) : (
-        <Pressable style={s.vsBtn} onPress={() => onChallenge(p.id)}>
+        <View style={s.vsBtn} pointerEvents="none">
           <Text style={s.vsBtnTxt}>VS</Text>
-        </Pressable>
+        </View>
       )}
-    </View>
+    </Pressable>
   );
 }
 
@@ -81,6 +86,7 @@ export default function LobbyScreen({ navigation }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
   const [lbData, setLbData] = useState(null);
+  const [achievements, setAchievements] = useState(() => mergeAchievements([]));
   const copiedTimer = useRef(null);
 
   const myPlayerId = playerInfo?.playerId;
@@ -107,6 +113,20 @@ export default function LobbyScreen({ navigation }) {
     } catch {} // dismissed share sheet — not an error
   };
   useEffect(() => () => clearTimeout(copiedTimer.current), []);
+
+  // Fetch achievements on focus
+  const fetchAchievements = useCallback(() => {
+    if (!myPlayerId) return;
+    fetch(`${SERVER_URL}/api/player/${encodeURIComponent(myPlayerId)}/achievements`)
+      .then(r => r.json())
+      .then(data => setAchievements(mergeAchievements(data.earned || [])))
+      .catch(() => {});
+  }, [myPlayerId]);
+  useEffect(() => {
+    fetchAchievements();
+    const unsub = navigation.addListener('focus', fetchAchievements);
+    return unsub;
+  }, [fetchAchievements, navigation]);
 
   // Fetch leaderboard preview on focus
   const fetchLb = useCallback(() => {
@@ -203,6 +223,9 @@ export default function LobbyScreen({ navigation }) {
               <Text style={s.heroChev}>›</Text>
             </Pressable>
 
+            {/* Achievements */}
+            <AchievementGallery achievements={achievements} />
+
             {/* Looking to play */}
             <View style={s.sec}>
               <Text style={s.secIcGold}>⚡</Text>
@@ -222,16 +245,16 @@ export default function LobbyScreen({ navigation }) {
                     onChallenge={onChallenge} />
                 )}
                 {/* Invite friends — action row, final slot of the list */}
-                <View style={s.inviteRow}>
+                <Pressable style={s.inviteRow} onPress={shareInvite}>
                   <View style={s.inviteTile}><Text style={s.inviteTileTxt}>＋</Text></View>
                   <View style={s.rowWho}>
                     <Text style={s.rowName}>Invite friends</Text>
                     <Text style={s.inviteSub}>Bring a human to play</Text>
                   </View>
-                  <Pressable style={s.inviteBtn} onPress={shareInvite}>
+                  <View style={s.inviteBtn} pointerEvents="none">
                     <Text style={s.inviteBtnTxt}>Invite</Text>
-                  </Pressable>
-                </View>
+                  </View>
+                </Pressable>
               </>
             ) : (
               <View style={s.emptyPool}>
