@@ -156,46 +156,79 @@ export default function LoginScreen() {
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={s.kav}>
         <View style={s.center}>
           <View style={s.card}>
-            <Pressable
-              style={[s.googleBtn, (googleLoading || !request) && s.dim]}
-              onPress={() => {
-                if (Platform.OS === 'web') {
-                  if (!request) return;
-                  sessionStorage.setItem('pkce_code_verifier', request.codeVerifier || '');
-                  window.location.href = request.url;
-                } else {
-                  setGoogleLoading(true);
-                  promptAsync({ createTask: false }).finally(() => setGoogleLoading(false));
-                }
-              }}
-              disabled={googleLoading || !request}
-            >
-              {googleLoading
-                ? <ActivityIndicator color="#444" size="small" />
-                : <><Text style={s.googleG}>G</Text><Text style={s.googleTxt}>Log in with Google</Text></>
-              }
-            </Pressable>
-            <View style={s.divider}>
-              <View style={s.divLine} /><Text style={s.divTxt}>or</Text><View style={s.divLine} />
+            <View style={s.complyGrid}>
+              <View style={s.complyCell}>
+                <View style={s.ageBadge}><Text style={s.ageBadgeText}>18+</Text></View>
+                <Text style={[s.cellLabel, s.goldLabel]}>ADULTS{'\n'}ONLY</Text>
+              </View>
+              <View style={[s.complyCell, s.cellLeft]}>
+                <Text style={s.cellIcon}>🎮</Text>
+                <Text style={s.cellLabel}>FREE TO{'\n'}PLAY</Text>
+              </View>
+              <View style={[s.complyCell, s.cellLeft]}>
+                <Text style={s.cellIcon}>{'🚫💵'}</Text>
+                <Text style={[s.cellLabel, s.goldLabel]}>NO REAL{'\n'}MONEY</Text>
+              </View>
+              <View style={[s.complyCell, s.cellLeft]}>
+                <Text style={s.cellIcon}>{'🚫🏆'}</Text>
+                <Text style={[s.cellLabel, s.goldLabel]}>NO{'\n'}PRIZES</Text>
+              </View>
             </View>
-            <Text style={s.sectionLabel}>Play as Guest</Text>
-            <TextInput
-              style={s.input}
-              placeholder="Enter your name"
-              placeholderTextColor={colors.gray}
-              value={name}
-              onChangeText={setName}
-              maxLength={20}
-              returnKeyType="done"
-              onSubmitEditing={handleGuestJoin}
-            />
-            <Pressable style={[s.joinBtn, !name.trim() && s.dim]} onPress={handleGuestJoin} disabled={!name.trim()}>
-              <Text style={s.joinTxt}>Play as Guest</Text>
-            </Pressable>
+            <View style={s.cardSep} />
+            <View style={s.cardContent}>
+              <Pressable
+                style={[s.googleBtn, (googleLoading || !request) && s.dim]}
+                onPress={() => {
+                  if (Platform.OS === 'web') {
+                    if (!request) return;
+                    sessionStorage.setItem('pkce_code_verifier', request.codeVerifier || '');
+                    window.location.href = request.url;
+                  } else {
+                    setGoogleLoading(true);
+                    promptAsync({ createTask: false }).finally(() => setGoogleLoading(false));
+                  }
+                }}
+                disabled={googleLoading || !request}
+              >
+                {googleLoading
+                  ? <ActivityIndicator color="#444" size="small" />
+                  : <><Text style={s.googleG}>G</Text><Text style={s.googleTxt}>Log in with Google</Text></>
+                }
+              </Pressable>
+              <View style={s.divider}>
+                <View style={s.divLine} /><Text style={s.divTxt}>or</Text><View style={s.divLine} />
+              </View>
+              <Text style={s.sectionLabel}>Play as Guest</Text>
+              <TextInput
+                style={s.input}
+                placeholder="Enter your name"
+                placeholderTextColor={colors.gray}
+                value={name}
+                onChangeText={setName}
+                maxLength={20}
+                returnKeyType="done"
+                onSubmitEditing={handleGuestJoin}
+              />
+              <Pressable style={[s.joinBtn, !name.trim() && s.dim]} onPress={handleGuestJoin} disabled={!name.trim()}>
+                <Text style={s.joinTxt}>Play as Guest</Text>
+              </Pressable>
+            </View>
           </View>
         </View>
       </KeyboardAvoidingView>
-      <Text style={s.versionSmall}>{VERSION_DISPLAY}</Text>
+
+      <View style={s.footer}>
+        <Text style={s.footerMain}>18+ · FOR ENTERTAINMENT PURPOSES ONLY · NO REAL-MONEY GAMBLING · NO CASH PRIZES · NO IN-APP PURCHASES</Text>
+        <View style={s.footerNav}>
+          <Text style={s.footerLink} onPress={() => Platform.OS === 'web' && window.open('/terms', '_blank')}>Terms</Text>
+          <Text style={s.footerDot}>·</Text>
+          <Text style={s.footerLink} onPress={() => Platform.OS === 'web' && window.open('/privacy-policy', '_blank')}>Privacy</Text>
+          <Text style={s.footerDot}>·</Text>
+          <Text style={s.footerLink} onPress={() => Platform.OS === 'web' && window.open('/data-deletion', '_blank')}>Data Deletion</Text>
+          <Text style={s.footerDot}>·</Text>
+          <Text style={s.footerVersion}>{VERSION_DISPLAY}</Text>
+        </View>
+      </View>
       </SafeAreaView>
     </View>
   );
@@ -217,26 +250,25 @@ const s = StyleSheet.create({
   logo:    { width: '100%', maxWidth: 420, height: '100%' },
   safe:    { flex: 1 },
   kav:     { flex: 1 },
-  center:  {
-    flex: 1, alignItems: 'center', justifyContent: 'flex-end', padding: 24,
-    // Web: clear the home indicator / standalone-mode inset too
-    paddingBottom: Platform.OS === 'web' ? 'calc(38px + env(safe-area-inset-bottom))' : 38,
-  },
-  versionSmall: {
-    position: 'absolute', right: 12, bottom: 12,
-    fontSize: 11, color: 'rgba(255,255,255,0.9)',
-    textShadowColor: 'rgba(0,0,0,0.9)', textShadowRadius: 4, textShadowOffset: { width: 0, height: 1 },
-  },
+  center:  { flex: 1, alignItems: 'center', justifyContent: 'flex-end', padding: 24, paddingBottom: 16 },
   card: {
     backgroundColor: '#12121e',
-    // Antique-gold stroke to match the flag trim, with a warm glow so it
-    // reads against both the busy monkey art and the dark desktop scenery.
     borderWidth: 3, borderColor: 'rgba(222,184,110,0.9)',
-    borderRadius: 18,
-    width: '100%', maxWidth: 400, padding: 22, gap: 16,
+    borderRadius: 18, overflow: 'hidden',
+    width: '100%', maxWidth: 400,
     shadowColor: colors.goldLight, shadowOpacity: 0.45, shadowRadius: 18,
     shadowOffset: { width: 0, height: 0 }, elevation: 10,
   },
+  complyGrid:  { flexDirection: 'row' },
+  complyCell:  { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 14, gap: 6 },
+  cellLeft:    { borderLeftWidth: 1, borderLeftColor: 'rgba(255,255,255,0.12)' },
+  cellIcon:    { fontSize: 22 },
+  cellLabel:   { color: '#fff', fontSize: 9.5, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.4, textAlign: 'center', lineHeight: 13 },
+  goldLabel:   { color: '#e8b94a' },
+  ageBadge:    { width: 38, height: 38, borderRadius: 19, backgroundColor: '#c0392b', alignItems: 'center', justifyContent: 'center' },
+  ageBadgeText:{ color: '#fff', fontSize: 14, fontWeight: '900', letterSpacing: -0.5 },
+  cardSep:     { height: 1, backgroundColor: 'rgba(255,255,255,0.12)' },
+  cardContent: { padding: 22, gap: 16 },
   googleBtn:   { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#fff', borderRadius: 50, paddingVertical: 13, gap: 10 },
   dim:         { opacity: 0.45 },
   googleG:     { fontSize: 17, fontWeight: '700', color: '#4285F4' },
@@ -244,8 +276,14 @@ const s = StyleSheet.create({
   divider:     { flexDirection: 'row', alignItems: 'center', gap: 10 },
   divLine:     { flex: 1, height: 1, backgroundColor: 'rgba(255,255,255,0.15)' },
   divTxt:      { color: 'rgba(255,255,255,0.4)', fontSize: 12 },
-  sectionLabel:{ color: colors.gray, fontSize: 11, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 1 },
-  input:       { backgroundColor: 'rgba(0,0,0,0.4)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)', borderRadius: 8, paddingHorizontal: 14, paddingVertical: 12, color: colors.white, fontSize: 16 },
+  sectionLabel:{ color: '#e8b94a', fontSize: 11, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 1.2 },
+  input:       { backgroundColor: 'rgba(0,0,0,0.4)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12, color: colors.white, fontSize: 16 },
   joinBtn:     { backgroundColor: colors.goldLight, borderRadius: 12, paddingVertical: 14, alignItems: 'center', shadowColor: colors.goldLight, shadowOpacity: 0.4, shadowRadius: 12, elevation: 6 },
   joinTxt:     { color: '#000', fontSize: 16, fontWeight: '900', letterSpacing: 1 },
+  footer:      { alignItems: 'center', gap: 6, paddingHorizontal: 20, paddingVertical: 10, backgroundColor: 'rgba(8,16,32,0.88)' },
+  footerMain:  { color: 'rgba(255,255,255,0.55)', fontSize: 9, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5, textAlign: 'center' },
+  footerNav:   { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap', justifyContent: 'center' },
+  footerLink:  { color: 'rgba(222,184,110,0.75)', fontSize: 11, textDecorationLine: 'underline' },
+  footerDot:   { color: 'rgba(255,255,255,0.25)', fontSize: 11 },
+  footerVersion:{ color: 'rgba(255,255,255,0.3)', fontSize: 11 },
 });
