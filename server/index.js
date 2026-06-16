@@ -130,12 +130,6 @@ function checkAndFireComplete(m) {
   }
 }
 
-// Quick Match funnel: how long a searcher waits before dropping into a bot game
-const QUICK_MATCH_WAIT_MS = 5000;
-
-// playerId → setTimeout — the search window between find-match and bot fallback
-const fallbackTimers = new Map();
-
 // playerId → { playerId, since, declined:Set } — active broadcast sessions.
 // Quick Match with nobody to pair = "challenge everyone": every eligible human
 // gets an ordinary challenge from this player (broadcast:true on the entry).
@@ -510,10 +504,7 @@ function scheduleNextHand(m, delay = 5000) {
 
 // ── Quick Match funnel ────────────────────────────────────────────────────────
 
-// Stop searching: kill the bot-fallback timer and the broadcast session
 function clearSearchFor(playerId) {
-  const t = fallbackTimers.get(playerId);
-  if (t) { clearTimeout(t); fallbackTimers.delete(playerId); }
   endBroadcast(playerId);
 }
 
@@ -962,25 +953,10 @@ io.on('connection', (socket) => {
       startHumanMatch(pair.p1, pair.p2);
     } else {
       socket.emit('in-queue', {});
-      scheduleFallback(sp.playerId);
       // Quick Match = challenge everyone: every eligible human gets the ask
       startBroadcast(sp, socket.id);
     }
   });
-
-  // After QUICK_MATCH_WAIT_MS with no human, drop the searcher into a bot game.
-  // They stay registered as waiting — the queue keeps running underneath.
-  function scheduleFallback(playerId) {
-    clearTimeout(fallbackTimers.get(playerId));
-    fallbackTimers.set(playerId, setTimeout(() => {
-      fallbackTimers.delete(playerId);
-      const cur = socketPlayers.get(socket.id);
-      if (!cur || cur.playerId !== playerId) return; // socket gone or re-identified
-      if (liveMatchOf(cur)) return;                  // already playing something
-      if (!dequeue(playerId)) return;                // paired or cancelled meanwhile
-      startBotMatch(cur, pickFreeBot(), { fallback: true });
-    }, QUICK_MATCH_WAIT_MS));
-  }
 
   // Start a bot match for this player vs a specific bot. Shared by the
   // Quick Match fallback and direct bot challenges.
@@ -1128,9 +1104,20 @@ io.on('connection', (socket) => {
         clearTimeout(m.cleanupTimer);
         matches.delete(m.id);
 
-        // Start the new match
+        // Start the new match — emit match-found first so the client shows
+        // the vs-countdown overlay (same as a fresh match start)
         newMatch.game.addPlayer(m.p1.playerId, m.p1.playerName, m.p1.avatarId);
         newMatch.game.addPlayer(m.p2.playerId, m.p2.playerName, m.p2.avatarId);
+        if (newMatch.isBotMatch) {
+          const botInfo = BOTS[newMatch.botId] || {};
+          io.to(m.p1.socketId).emit('match-found', {
+            matchId: newMatchId,
+            opponent: { name: botInfo.name, avatarId: botInfo.avatarId, isBot: true, elo: eloCache[newMatch.botId] || 1200 },
+          });
+        } else {
+          io.to(m.p1.socketId).emit('match-found', { matchId: newMatchId, opponent: opponentInfo(m.p2) });
+          io.to(m.p2.socketId).emit('match-found', { matchId: newMatchId, opponent: opponentInfo(m.p1) });
+        }
         broadcastMatchState(newMatch);
         tryAutoStart(newMatch);
       }

@@ -168,7 +168,7 @@ function Scrim({ onPress, children }) {
 // Copy convention: opponents are "humans", bots are "🤖 bot" (never "human").
 export default function MatchFlowOverlays({
   searchOverlay, meantime, preMatch, playerInfo, myElo, incomingChallenges,
-  onCancelSearch, onDismissMeantime,
+  onCancelSearch, onConfirmBot, onDismissMeantime,
   onAcceptChallenge, onDeclineChallenge,
 }) {
   // Challenges the user tap-dismissed: hide the dialog, the challenge itself
@@ -219,15 +219,20 @@ export default function MatchFlowOverlays({
         </Scrim>
       )}
 
-      {/* Bot game in the meantime (yields to an incoming challenge) */}
+      {/* Bot offer dialog — shown 5s after Quick Match with no human found */}
       {!preMatch && !searchOverlay && meantime && !challenge && (
-        <Scrim onPress={onDismissMeantime}>
+        <Scrim onPress={() => {}}>
           <Radar />
-          <Text style={ov.title}>Waiting for <Text style={ov.gold}>humans…</Text></Text>
-          <Text style={ov.sub}>Play a <Text style={ov.bold}>🤖 bot</Text> while we keep searching.</Text>
-          <Pressable style={ov.cta} onPress={onDismissMeantime}>
-            <Text style={ov.ctaTxt}>Play a bot →</Text>
-          </Pressable>
+          <Text style={ov.title}>No humans yet…</Text>
+          <Text style={ov.sub}>Play a <Text style={ov.bold}>🤖 bot</Text> while we keep searching for a human?</Text>
+          <View style={ov.actsRow}>
+            <Pressable style={ov.declineBtn} onPress={onDismissMeantime}>
+              <Text style={ov.declineTxt}>Keep waiting</Text>
+            </Pressable>
+            <Pressable style={[ov.cta, { flex: 1, marginTop: 0 }]} onPress={onConfirmBot}>
+              <Text style={ov.ctaTxt}>Play a bot →</Text>
+            </Pressable>
+          </View>
         </Scrim>
       )}
 

@@ -625,10 +625,11 @@ export default function GameScreen({ navigation }) {
   }, [showWinners]);
 
   const locked   = showWinners && !winDone;
-  const animPot  = locked
-    ? (gameState?.winners?.reduce((s, w) => s + (w.amount || 0), 0) || 0)
-    : null;
-  const dispPot  = animPot !== null ? animPot : (collecting ? collect.pot : totalPot);
+  const winnerPot = gameState?.winners?.reduce((s, w) => s + (w.amount || 0), 0) || 0;
+  const animPot  = locked ? winnerPot : null;
+  // After showdown, server resets pot to 0 — fall back to winner sum so the
+  // pot label stays visible until the chip-flight animation completes.
+  const dispPot  = animPot !== null ? animPot : (collecting ? collect.pot : (totalPot || winnerPot));
   const chipsFor = p => {
     if (!locked) return p?.chips ?? 0;
     const win = gameState?.winners?.find(w => w.playerId === p?.id);

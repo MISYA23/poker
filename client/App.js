@@ -14,7 +14,7 @@ import { clearUser } from './src/utils/user';
 import { track, trackScreen } from './src/utils/analytics';
 import { SERVER_URL } from './src/config';
 import { startMusic, setMusicContext, loadMusicConfig } from './src/audio/music';
-import { HAND_END_LOCK_MS, BUST_REVEAL_MS, FORFEIT_REVEAL_MS, MATCH_OVER_FALLBACK_MS } from './src/timings';
+import { HAND_END_LOCK_MS, DEAL_LOCK_MS, BUST_REVEAL_MS, FORFEIT_REVEAL_MS, MATCH_OVER_FALLBACK_MS } from './src/timings';
 import MatchFlowOverlays from './src/components/MatchFlowOverlays';
 import LoginScreen   from './src/screens/LoginScreen';
 import LobbyScreen   from './src/screens/LobbyScreen';
@@ -81,14 +81,29 @@ function App() {
   // refs, never the overlay state above.
   const searchRef        = useRef(null);
   const foundDelayRef    = useRef(false); // mid pre-match countdown — hold navigation
+  const botOfferTimerRef   = useRef(null); // 5s timer → show bot-offer dialog
   const matchOverTimerRef  = useRef(null); // pending match-over reveal delay
   const bustRevealRef      = useRef(null); // mirrors bustReveal for socket-bound handlers
   const forfeitRevealRef   = useRef(null); // mirrors forfeitReveal for socket-bound handlers
   const handEndLockRef     = useRef(null); // blocks next-hand state during hand-end animation
   const handEndPendingRef  = useRef(null); // queued game-state to apply when lock releases
+  const dealLockRef        = useRef(null); // bot-match only: blocks bot actions during deal anim
+  const dealPendingRef     = useRef(null); // queued game-state to apply when deal lock releases
+  const handNumberRef      = useRef(0);    // tracks current hand number to detect new hands
   const [route, setRoute] = useState('Login');   // current screen (gates music start)
 
   const setSearch = useCallback((v) => { searchRef.current = v; setSearchOverlay(v); }, []);
+  const clearBotOfferTimer = useCallback(() => {
+    if (botOfferTimerRef.current) { clearTimeout(botOfferTimerRef.current); botOfferTimerRef.current = null; }
+  }, []);
+  const startBotOfferTimer = useCallback(() => {
+    clearBotOfferTimer();
+    botOfferTimerRef.current = setTimeout(() => {
+      botOfferTimerRef.current = null;
+      setSearch(null);
+      setMeantime(true);
+    }, 5000);
+  }, [clearBotOfferTimer, setSearch]);
 
   useEffect(() => {
     loadMusicConfig();   // pull per-interface track config from the server (falls back to defaults)
@@ -126,8 +141,9 @@ function App() {
     // brief blip at the table lapses into a forfeit.
     connect:           ()            => { if (playerIdRef.current) emit('session', { playerId: playerIdRef.current }); },
     'in-queue':        ()            => { setInQueue(true); setError(null); },
-    'queue-cancelled': ()            => { setInQueue(false); setSearch(null); },
+    'queue-cancelled': ()            => { clearBotOfferTimer(); setInQueue(false); setSearch(null); setMeantime(false); },
     'match-found':     ({ matchId, opponent, fallback, reconnect }) => {
+      clearBotOfferTimer();
       if (isObserverRef.current) {
         emit('unobserve', { matchId: matchIdRef.current });
         isObserverRef.current = false;
@@ -142,6 +158,9 @@ function App() {
       if (matchOverTimerRef.current) { clearTimeout(matchOverTimerRef.current); matchOverTimerRef.current = null; }
       if (handEndLockRef.current) { clearTimeout(handEndLockRef.current); handEndLockRef.current = null; }
       handEndPendingRef.current = null;
+      if (dealLockRef.current) { clearTimeout(dealLockRef.current); dealLockRef.current = null; }
+      dealPendingRef.current = null;
+      handNumberRef.current = 0;
       bustRevealRef.current = null;
       forfeitRevealRef.current = null;
       // Starting any match voids all challenges (server does the same)
@@ -172,6 +191,7 @@ function App() {
         handEndPendingRef.current = { t, state };
         return;
       }
+
       const apply = (t, state) => {
         setTransition(t || null);
         setGameState(state);
@@ -184,18 +204,43 @@ function App() {
           navigationRef.navigate('Game');
         }
       };
-      if (t?.type === 'HAND_ENDED' && !state.gameOver) {
-        apply(t, state);
-        handEndPendingRef.current = null;
-        handEndLockRef.current = setTimeout(() => {
-          handEndLockRef.current = null;
-          const pending = handEndPendingRef.current;
+
+      const processState = (t, state) => {
+        // Bot-match deal lock: buffer any state that arrives while the deal animation plays
+        if (dealLockRef.current) {
+          dealPendingRef.current = { t, state };
+          return;
+        }
+        if (t?.type === 'HAND_ENDED' && !state.gameOver) {
+          apply(t, state);
           handEndPendingRef.current = null;
-          if (pending) apply(pending.t, pending.state);
-        }, HAND_END_LOCK_MS);
-        return;
-      }
-      apply(t, state);
+          handEndLockRef.current = setTimeout(() => {
+            handEndLockRef.current = null;
+            const pending = handEndPendingRef.current;
+            handEndPendingRef.current = null;
+            // Route through processState so new hands in bot matches get the deal lock
+            if (pending) processState(pending.t, pending.state);
+          }, HAND_END_LOCK_MS);
+          return;
+        }
+        // Bot matches only: lock out state changes for the duration of the deal
+        // animation + 1s so the bot can never pre-empt cards being dealt.
+        if (state.isBotMatch && !state.gameOver && state.handNumber > handNumberRef.current) {
+          handNumberRef.current = state.handNumber;
+          apply(t, state);
+          dealLockRef.current = setTimeout(() => {
+            dealLockRef.current = null;
+            const pending = dealPendingRef.current;
+            dealPendingRef.current = null;
+            if (pending) apply(pending.t, pending.state);
+          }, DEAL_LOCK_MS);
+          return;
+        }
+        if (state.handNumber) handNumberRef.current = state.handNumber;
+        apply(t, state);
+      };
+
+      processState(t, state);
     },
     'observe-rejected': ({ matchId }) => {
       if (matchIdRef.current === matchId) {
@@ -260,11 +305,15 @@ function App() {
       if (isFirst) track('FirstAchievementEarned');
       if (key === 'back_to_back') track('BackToBackWinningDays');
     },
-    error:         ({ message })     => { setError(message); setSearch(null); },
+    error:         ({ message })     => { clearBotOfferTimer(); setError(message); setSearch(null); setMeantime(false); },
     reset:         ()                => {
+      clearBotOfferTimer();
       if (isObserverRef.current) emit('unobserve', { matchId: matchIdRef.current });
       bustRevealRef.current = null;
       forfeitRevealRef.current = null;
+      if (dealLockRef.current) { clearTimeout(dealLockRef.current); dealLockRef.current = null; }
+      dealPendingRef.current = null;
+      handNumberRef.current = 0;
       setGameState(null);
       setInQueue(false); setMatchOver(null);
       setSearch(null); setMeantime(false);
@@ -329,7 +378,8 @@ function App() {
     track('PlayMatch', { mode: 'queue' });
     setSearch({ status: 'searching' });
     emit('find-match', { playerId });
-  }, [emit, setSearch]);
+    startBotOfferTimer();
+  }, [emit, setSearch, startBotOfferTimer]);
 
   const onPlayBot = useCallback((playerId) => {
     if (isObserverRef.current) {
@@ -344,12 +394,27 @@ function App() {
   }, [emit]);
 
   const onCancelMatch = useCallback(() => {
+    clearBotOfferTimer();
     emit('cancel-match', {});
     setInQueue(false);
     setSearch(null);
-  }, [emit, setSearch]);
+    setMeantime(false);
+  }, [emit, setSearch, clearBotOfferTimer]);
 
-  const onDismissMeantime = useCallback(() => setMeantime(false), []);
+  // "Keep Waiting" — hide the dialog, restore searching overlay, restart 5s timer
+  const onDismissMeantime = useCallback(() => {
+    setMeantime(false);
+    setSearch({ status: 'searching' });
+    startBotOfferTimer();
+  }, [setSearch, startBotOfferTimer]);
+
+  // "Play Bot" — confirmed via dialog; emit play-bot (server dequeues internally)
+  const onConfirmBot = useCallback(() => {
+    clearBotOfferTimer();
+    setMeantime(false);
+    track('PlayMatch', { mode: 'bot_confirmed' });
+    emit('play-bot', { playerId: playerIdRef.current });
+  }, [clearBotOfferTimer, emit]);
 
   const onChallenge = useCallback((toId) => {
     setError(null);
@@ -457,6 +522,7 @@ function App() {
             myElo={myElo}
             incomingChallenges={incomingChallenges}
             onCancelSearch={onCancelMatch}
+            onConfirmBot={onConfirmBot}
             onDismissMeantime={onDismissMeantime}
             onAcceptChallenge={onAcceptChallenge}
             onDeclineChallenge={onDeclineChallenge}
