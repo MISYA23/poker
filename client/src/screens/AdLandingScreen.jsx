@@ -148,7 +148,6 @@ export default function AdLandingScreen() {
       {isMobileLayout ? (
         <>
           <Image source={require('../../assets/login-island.jpg')} style={s.bg} resizeMode="cover" />
-          <Image source={require('../../assets/login-monkey.png')} style={s.bg} resizeMode="cover" />
           <View style={s.logoWrap} pointerEvents="none">
             <Image source={require('../../assets/flag-logo.png')} style={s.logo} resizeMode="contain" />
           </View>
