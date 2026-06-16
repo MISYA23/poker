@@ -228,7 +228,7 @@ export default function AdLandingScreen() {
       </KeyboardAvoidingView>
 
       <View style={s.footer}>
-        <Text style={s.footerMain}>18+ · FOR ENTERTAINMENT PURPOSES ONLY · NO REAL-MONEY GAMBLING · NO CASH PRIZES</Text>
+        <Text style={s.footerMain}>18+ · FOR ENTERTAINMENT PURPOSES ONLY · NO REAL-MONEY GAMBLING · NO CASH PRIZES · NO IN-APP PURCHASES</Text>
         <View style={s.footerNav}>
           <Text style={s.footerLink} onPress={() => Platform.OS === 'web' && window.open('/terms', '_blank')}>Terms</Text>
           <Text style={s.footerDot}>·</Text>
