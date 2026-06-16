@@ -21,6 +21,7 @@ import GameScreen    from './src/screens/GameScreen';
 import ProfileScreen    from './src/screens/ProfileScreen';
 import HandReplayScreen   from './src/screens/HandReplayScreen';
 import LeaderboardScreen  from './src/screens/LeaderboardScreen';
+import AdLandingScreen   from './src/screens/AdLandingScreen';
 
 // Initialize crash reporting as early as possible, before any app code runs.
 initSentry();
@@ -37,6 +38,7 @@ const linking = {
       Profile: 'profile',
       HandReplay: 'replay',
       Leaderboard: 'leaderboard',
+      AdLanding: 'ad',
     },
   },
 };
@@ -418,6 +420,7 @@ function App() {
               <Stack.Screen name="Profile"    component={ProfileScreen} />
               <Stack.Screen name="HandReplay"   component={HandReplayScreen} />
               <Stack.Screen name="Leaderboard" component={LeaderboardScreen} />
+              <Stack.Screen name="AdLanding"   component={AdLandingScreen} />
             </Stack.Navigator>
           </NavigationContainer>
           <MatchFlowOverlays
