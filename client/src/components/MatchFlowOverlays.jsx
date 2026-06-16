@@ -85,10 +85,8 @@ function OpponentCard({ name, avatarId, country, elo, isBot }) {
   );
 }
 
-// Pre-match vs card with 3-2-1 countdown. Shown for exactly 3s (matching the
-// server's auto_start_delay_ms) so the hand deals right as we land on the table.
 function PreMatchCountdown({ opponent, playerInfo, myElo }) {
-  const [count, setCount] = useState(3);
+  const [count, setCount] = useState(5);
   const scaleAnim = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
