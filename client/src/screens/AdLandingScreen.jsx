@@ -226,12 +226,7 @@ export default function AdLandingScreen() {
           </View>
 
           <View style={s.footer}>
-            <View style={s.footerRule}>
-              <View style={s.footerLine} />
-              <Text style={s.footerSkull}>☠️</Text>
-              <View style={s.footerLine} />
-            </View>
-            <Text style={s.footerMain}>18+ · FOR ENTERTAINMENT PURPOSES ONLY{'\n'}NO REAL-MONEY GAMBLING · NO CASH PRIZES</Text>
+            <Text style={s.footerMain}>18+ · FOR ENTERTAINMENT PURPOSES ONLY · NO REAL-MONEY GAMBLING · NO CASH PRIZES</Text>
             <Text style={s.footerLinks}>
               <Text style={s.footerLink} onPress={() => Platform.OS === 'web' && window.open('/terms', '_blank')}>Terms</Text>
               <Text style={s.footerDot}> · </Text>
@@ -302,12 +297,9 @@ const s = StyleSheet.create({
   joinBtn:     { backgroundColor: colors.goldLight, borderRadius: 12, paddingVertical: 14, alignItems: 'center', shadowColor: colors.goldLight, shadowOpacity: 0.4, shadowRadius: 12, elevation: 6 },
   joinTxt:     { color: '#000', fontSize: 16, fontWeight: '900', letterSpacing: 1 },
   // Footer
-  footer:      { width: '100%', maxWidth: 400, alignItems: 'center', gap: 10, backgroundColor: 'rgba(8,16,32,0.82)', borderRadius: 14, paddingVertical: 14, paddingHorizontal: 16 },
-  footerRule:  { flexDirection: 'row', alignItems: 'center', gap: 10, width: '100%' },
-  footerLine:  { flex: 1, height: 1, backgroundColor: 'rgba(255,255,255,0.18)' },
-  footerSkull: { fontSize: 16, opacity: 0.7 },
-  footerMain:  { color: 'rgba(255,255,255,0.75)', fontSize: 11, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.6, textAlign: 'center', lineHeight: 18 },
-  footerLinks: { fontSize: 12, textAlign: 'center' },
-  footerLink:  { color: 'rgba(222,184,110,0.75)', textDecorationLine: 'underline' },
-  footerDot:   { color: 'rgba(255,255,255,0.35)' },
+  footer:      { width: '100%', maxWidth: 400, alignItems: 'center', gap: 6, backgroundColor: 'rgba(8,16,32,0.82)', borderRadius: 10, paddingVertical: 10, paddingHorizontal: 14 },
+  footerMain:  { color: 'rgba(255,255,255,0.65)', fontSize: 9.5, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5, textAlign: 'center', lineHeight: 14 },
+  footerLinks: { fontSize: 11, textAlign: 'center' },
+  footerLink:  { color: 'rgba(222,184,110,0.7)', textDecorationLine: 'underline' },
+  footerDot:   { color: 'rgba(255,255,255,0.3)' },
 });
