@@ -7,6 +7,7 @@ import { colors } from '../theme';
 import { VERSION_DISPLAY, SERVER_URL } from '../config';
 import { track } from '../utils/analytics';
 import { flagEmoji } from '../utils/flag';
+import { continentOf, regionEmoji, GLOBAL_EMOJI } from '../utils/regions';
 import { AvatarBadge } from '../components/MatchFlowOverlays';
 import SoundButton from '../components/SoundButton';
 import AchievementGallery from '../components/AchievementGallery';
@@ -148,8 +149,12 @@ export default function LobbyScreen({ navigation }) {
   const lbEntries = lbData?.entries || [];
   const myLbEntry = lbEntries.find(e => e.playerId === myPlayerId);
   const myCountry = myLbEntry?.country || playerInfo?.country || null;
+  const myContinent = continentOf(myCountry);
   const lbCountry = myCountry ? lbEntries.filter(e => e.country === myCountry).map((e, i) => ({ ...e, rank: i + 1 })) : [];
-  const lbActive  = (lbTab === 'country' && myCountry) ? lbCountry : lbEntries;
+  const lbRegion  = myContinent ? lbEntries.filter(e => continentOf(e.country) === myContinent).map((e, i) => ({ ...e, rank: i + 1 })) : [];
+  const lbActive  = (lbTab === 'country' && myCountry)   ? lbCountry
+                  : (lbTab === 'region'  && myContinent) ? lbRegion
+                  : lbEntries;
   const lbTop5    = lbActive.slice(0, 5);
   const lbMyRow   = lbActive.find(e => e.playerId === myPlayerId);
   const lbMeInTop = lbTop5.some(p => p.playerId === myPlayerId);
@@ -311,14 +316,19 @@ export default function LobbyScreen({ navigation }) {
                   <Text style={[s.secTitle, s.secTitleGold]}>Leaderboard</Text>
                 </View>
                 <View style={s.lbCard}>
-                  {/* Global vs My-country tabs */}
+                  {/* Global · my-continent · my-country tabs */}
                   <View style={s.lbTabs}>
                     <Pressable style={[s.lbTab, lbTab === 'global' && s.lbTabOn]} onPress={() => setLbTab('global')}>
-                      <Text style={[s.lbTabTxt, lbTab === 'global' && s.lbTabTxtOn]}>🌍 Global</Text>
+                      <Text style={[s.lbTabTxt, lbTab === 'global' && s.lbTabTxtOn]} numberOfLines={1}>{GLOBAL_EMOJI} Global</Text>
                     </Pressable>
+                    {myContinent && (
+                      <Pressable style={[s.lbTab, lbTab === 'region' && s.lbTabOn]} onPress={() => setLbTab('region')}>
+                        <Text style={[s.lbTabTxt, lbTab === 'region' && s.lbTabTxtOn]} numberOfLines={1}>{regionEmoji(myContinent)} {myContinent}</Text>
+                      </Pressable>
+                    )}
                     {myCountry && (
                       <Pressable style={[s.lbTab, lbTab === 'country' && s.lbTabOn]} onPress={() => setLbTab('country')}>
-                        <Text style={[s.lbTabTxt, lbTab === 'country' && s.lbTabTxtOn]}>{flagEmoji(myCountry)} {myCountry}</Text>
+                        <Text style={[s.lbTabTxt, lbTab === 'country' && s.lbTabTxtOn]} numberOfLines={1}>{flagEmoji(myCountry)} {myCountry}</Text>
                       </Pressable>
                     )}
                   </View>

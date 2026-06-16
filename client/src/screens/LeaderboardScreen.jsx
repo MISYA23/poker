@@ -8,6 +8,7 @@ import { GameContext } from '../context/GameContext';
 import { colors } from '../theme';
 import { SERVER_URL } from '../config';
 import { flagEmoji } from '../utils/flag';
+import { REGION_ORDER, continentOf, regionEmoji, GLOBAL_EMOJI } from '../utils/regions';
 
 const AVATAR_IMAGES = {
   cigar:   require('../../assets/cigar.png'),
@@ -27,20 +28,22 @@ const fmtUpdated = (d) => {
 };
 
 function PlayerRow({ p, isMe }) {
+  const pct = Math.round((p.winRate ?? 0) * 100);
   return (
     <View style={[s.row, isMe && s.rowMe]}>
-      <Text style={[s.rankNum, p.rank <= 3 && s.rankNumGold]}>{p.rank}</Text>
-      <View style={s.avatarWrap}>
-        <Image
-          source={AVATAR_IMAGES[p.avatarId] || AVATAR_IMAGES.captain}
-          style={s.avatar}
-        />
-        <Text style={s.flagOverlay}>{p.isBot ? '🤖' : flagEmoji(p.country)}</Text>
+      <Text style={[s.colRank, s.rankNum, p.rank <= 3 && s.rankNumGold]}>{p.rank}</Text>
+      <View style={[s.colPlayer, s.playerCell]}>
+        <View style={s.avatarWrap}>
+          <Image source={AVATAR_IMAGES[p.avatarId] || AVATAR_IMAGES.captain} style={s.avatar} />
+          <Text style={s.flagOverlay}>{p.isBot ? '🤖' : flagEmoji(p.country)}</Text>
+        </View>
+        <Text style={[s.name, isMe && s.nameMe]} numberOfLines={1}>
+          {isMe ? `${p.displayName} (You)` : p.displayName}
+        </Text>
       </View>
-      <Text style={[s.name, isMe && s.nameMe]} numberOfLines={1}>
-        {isMe ? `${p.displayName} (You)` : p.displayName}
-      </Text>
-      <Text style={[s.eloTxt, isMe && s.eloMe]}>{p.elo}</Text>
+      <Text style={[s.colElo, s.eloTxt, isMe && s.eloMe]} numberOfLines={1}>{p.elo}</Text>
+      <Text style={[s.colRec, s.recTxt]} numberOfLines={1}>{p.wins}–{p.losses}</Text>
+      <Text style={[s.colWin, s.winTxt]} numberOfLines={1}>{pct}%</Text>
     </View>
   );
 }
@@ -76,26 +79,47 @@ export default function LeaderboardScreen({ navigation }) {
   const entries      = data?.entries      || [];
   const myStats      = data?.myStats      || null;
 
-  // Country filter (null = global). Options derived from the full ranked list.
-  const [country, setCountry] = useState(null);
+  // Filter: { type: 'all' | 'region' | 'country', value }
+  const [filter, setFilter] = useState({ type: 'all' });
+  const isAll = filter.type === 'all';
+
+  // Country chips — sorted by player count (count not displayed)
   const countryOpts = useMemo(() => {
     const counts = {};
     for (const e of entries) {
       if (!e.country || e.isBot) continue;
       counts[e.country] = (counts[e.country] || 0) + 1;
     }
-    return Object.entries(counts).sort((a, b) => b[1] - a[1]).map(([cc, n]) => ({ cc, n }));
+    return Object.entries(counts).sort((a, b) => b[1] - a[1]).map(([cc]) => cc);
   }, [entries]);
 
-  // When a country is picked, show only that country, re-ranked 1..N.
-  const rankedList = useMemo(() => {
-    if (!country) return entries;
-    return entries.filter(e => e.country === country).map((e, i) => ({ ...e, rank: i + 1 }));
-  }, [entries, country]);
+  // Region chips — only continents that actually have players, in fixed order
+  const regionOpts = useMemo(() => {
+    const counts = {};
+    for (const e of entries) {
+      if (e.isBot) continue;
+      const r = continentOf(e.country);
+      if (r) counts[r] = (counts[r] || 0) + 1;
+    }
+    return REGION_ORDER.filter(r => counts[r]);
+  }, [entries]);
 
-  // "Jump to my rank" — only when my row is actually shown in the current list.
-  const shownList = rankedList.slice(0, 50);
-  const myRow     = shownList.find(p => p.playerId === myId);
+  // The displayed list, re-ranked 1..N within the chosen scope.
+  const rankedList = useMemo(() => {
+    if (filter.type === 'all') return entries;
+    const pred = filter.type === 'region'
+      ? (e) => continentOf(e.country) === filter.value
+      : (e) => e.country === filter.value;
+    return entries.filter(pred).map((e, i) => ({ ...e, rank: i + 1 }));
+  }, [entries, filter]);
+
+  const filterLabel = filter.type === 'all' ? 'Global' : filter.value;
+
+  // Top 50 shown; if I qualify for this scope but rank below 50, I'm appended
+  // at the bottom so I'm always visible (and jumpable).
+  const shownList  = rankedList.slice(0, 50);
+  const myFullRow  = rankedList.find(p => p.playerId === myId);   // my row in this scope (may be rank > 50)
+  const myInShown  = shownList.some(p => p.playerId === myId);
   const scrollRef = useRef(null);
   const meRowRef  = useRef(null);
   const jumpToMe = () => {
@@ -139,10 +163,14 @@ export default function LeaderboardScreen({ navigation }) {
                     source={AVATAR_IMAGES[playerInfo?.avatarId] || AVATAR_IMAGES.captain}
                     style={s.heroAvatar}
                   />
-                  <View style={s.heroRight}>
+                  <View style={s.heroMid}>
                     <Text style={s.heroName} numberOfLines={1}>{playerInfo?.name}</Text>
                     <Text style={s.heroWinRate}>{winPct}% win rate</Text>
-                    <Text style={s.heroElo}>{myStats.elo} ELO</Text>
+                    <Text style={s.heroWinRate}>{myStats.wins}W - {myStats.losses}L</Text>
+                  </View>
+                  <View style={s.heroEloWrap}>
+                    <Text style={s.heroEloLbl}>ELO</Text>
+                    <Text style={s.heroEloBig}>{myStats.elo}</Text>
                   </View>
                 </View>
                 <View style={s.progressWrap}>
@@ -162,44 +190,68 @@ export default function LeaderboardScreen({ navigation }) {
               </>
             )}
 
-            {/* ── Country filter chips ── */}
+            {/* ── Filter chips: row 1 = Global + regions, row 2 = countries ── */}
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}
+              style={s.chipScroll} contentContainerStyle={s.chipRow}>
+              <Pressable style={[s.chip, isAll && s.chipOn]} onPress={() => setFilter({ type: 'all' })}>
+                <Text style={[s.chipTxt, isAll && s.chipTxtOn]}>{GLOBAL_EMOJI} Global</Text>
+              </Pressable>
+              {regionOpts.map(r => {
+                const on = filter.type === 'region' && filter.value === r;
+                return (
+                  <Pressable key={r} style={[s.chip, on && s.chipOn]} onPress={() => setFilter({ type: 'region', value: r })}>
+                    <Text style={[s.chipTxt, on && s.chipTxtOn]}>{regionEmoji(r)} {r}</Text>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
             {countryOpts.length > 0 && (
               <ScrollView horizontal showsHorizontalScrollIndicator={false}
-                style={s.chipScroll} contentContainerStyle={s.chipRow}>
-                <Pressable style={[s.chip, !country && s.chipOn]} onPress={() => setCountry(null)}>
-                  <Text style={[s.chipTxt, !country && s.chipTxtOn]}>🌍 All</Text>
-                </Pressable>
-                {countryOpts.map(({ cc, n }) => (
-                  <Pressable key={cc} style={[s.chip, country === cc && s.chipOn]} onPress={() => setCountry(cc)}>
-                    <Text style={[s.chipTxt, country === cc && s.chipTxtOn]}>
-                      {flagEmoji(cc)} {cc} <Text style={s.chipCount}>{n}</Text>
-                    </Text>
-                  </Pressable>
-                ))}
+                style={s.chipScroll2} contentContainerStyle={s.chipRow}>
+                {countryOpts.map(cc => {
+                  const on = filter.type === 'country' && filter.value === cc;
+                  return (
+                    <Pressable key={cc} style={[s.chip, on && s.chipOn]} onPress={() => setFilter({ type: 'country', value: cc })}>
+                      <Text style={[s.chipTxt, on && s.chipTxtOn]}>{flagEmoji(cc)} {cc}</Text>
+                    </Pressable>
+                  );
+                })}
               </ScrollView>
             )}
 
             {/* ── Ranked list ── */}
-            {country && (
-              <Text style={s.listLabel}>{flagEmoji(country)} {country} · {rankedList.length} player{rankedList.length === 1 ? '' : 's'}</Text>
-            )}
-            {myRow && (
+            {myFullRow && (
               <Pressable style={s.jumpLink} onPress={jumpToMe} hitSlop={8}>
-                <Text style={s.jumpLinkTxt}>Jump to my rank (#{myRow.rank}) ↓</Text>
+                <Text style={s.jumpLinkTxt}>Jump to my rank (#{myFullRow.rank}) ↓</Text>
               </Pressable>
             )}
+            {/* Column headers */}
+            <View style={s.headRow}>
+              <Text style={[s.colRank, s.headTxt]}>#</Text>
+              <Text style={[s.colPlayer, s.headTxt]}>Player</Text>
+              <Text style={[s.colElo, s.headTxt]}>ELO</Text>
+              <Text style={[s.colRec, s.headTxt]}>W-L</Text>
+              <Text style={[s.colWin, s.headTxt]}>Win %</Text>
+            </View>
             <View style={s.list}>
               {shownList.map((p, i) => {
                 const isMe = p.playerId === myId;
                 return (
-                  <View key={p.playerId} ref={isMe ? meRowRef : undefined}>
+                  <View key={p.playerId} ref={isMe && myInShown ? meRowRef : undefined}>
                     {i > 0 && <View style={s.sep} />}
                     <PlayerRow p={p} isMe={isMe} />
                   </View>
                 );
               })}
+              {/* My row pinned at the bottom when I rank below the shown 50 */}
+              {myFullRow && !myInShown && (
+                <View ref={meRowRef}>
+                  <View style={s.gapRow}><Text style={s.gapDots}>⋯</Text></View>
+                  <PlayerRow p={myFullRow} isMe={true} />
+                </View>
+              )}
               {rankedList.length === 0 && (
-                <Text style={s.emptyTxt}>No ranked players from this country yet.</Text>
+                <Text style={s.emptyTxt}>No ranked players here yet.</Text>
               )}
             </View>
 
@@ -209,7 +261,7 @@ export default function LeaderboardScreen({ navigation }) {
                 {rankedList.length > 50
                   ? `Showing 50 of ${rankedList.length} players`
                   : `${rankedList.length} player${rankedList.length === 1 ? '' : 's'}`}
-                {country ? ` · ${country}` : ' · Global'}
+                {` · ${filterLabel}`}
               </Text>
               {fetchedAt && <Text style={s.footerTime}>Updated {fmtUpdated(fetchedAt)}</Text>}
             </View>
@@ -226,7 +278,7 @@ export default function LeaderboardScreen({ navigation }) {
 const s = StyleSheet.create({
   root:   { flex: 1, backgroundColor: '#0b1420' },
   safe:   { flex: 1 },
-  jumpLink:    { alignSelf: 'flex-end', marginTop: 14, marginBottom: -6, paddingVertical: 4, paddingHorizontal: 4 },
+  jumpLink:    { alignSelf: 'flex-start', marginTop: 14, marginBottom: -6, paddingVertical: 4, paddingHorizontal: 4 },
   jumpLinkTxt: { color: colors.goldLight, fontSize: 12, fontWeight: '700', opacity: 0.9 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 80 },
   scrollV: { flex: 1, minHeight: 0 },   // bounds the scroll area so it scrolls on web
@@ -244,18 +296,25 @@ const s = StyleSheet.create({
 
   // Hero
   hero: {
-    flexDirection: 'row', alignItems: 'center', gap: 16,
+    flexDirection: 'row', alignItems: 'center', gap: 12,
     backgroundColor: 'rgba(240,192,64,0.09)', borderWidth: 1, borderColor: 'rgba(240,192,64,0.25)',
     borderRadius: 20, padding: 18, marginTop: 16,
   },
-  heroLeft:    { alignItems: 'center', minWidth: 52 },
-  heroRank:    { color: colors.goldLight, fontSize: 32, fontWeight: '900', lineHeight: 36 },
+  heroLeft:    { alignItems: 'center', minWidth: 48 },
+  heroRank:    { color: colors.goldLight, fontSize: 30, fontWeight: '900', lineHeight: 34 },
   heroSub:     { color: '#8a98aa', fontSize: 10, fontWeight: '700', marginTop: 2 },
-  heroAvatar:  { width: 58, height: 58, borderRadius: 14 },
-  heroRight:   { flex: 1, minWidth: 0 },
+  heroAvatar:  { width: 56, height: 56, borderRadius: 14 },
+  heroMid:     { flex: 1, minWidth: 0 },
   heroName:    { color: colors.white, fontSize: 17, fontWeight: '900' },
   heroWinRate: { color: '#8a98aa', fontSize: 12, fontWeight: '700', marginTop: 2 },
-  heroElo:     { color: colors.goldLight, fontSize: 24, fontWeight: '900', marginTop: 2 },
+  heroEloWrap: {
+    alignItems: 'center', justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.22)', borderRadius: 16,
+    borderWidth: 1, borderColor: 'rgba(240,192,64,0.30)',
+    paddingHorizontal: 14, paddingVertical: 8, minWidth: 78,
+  },
+  heroEloLbl:  { color: '#b9a25a', fontSize: 10, fontWeight: '800', letterSpacing: 2 },
+  heroEloBig:  { color: colors.goldLight, fontSize: 30, fontWeight: '900', lineHeight: 34 },
 
   progressWrap:  { marginTop: 10, paddingHorizontal: 4 },
   progressBar:   { height: 6, backgroundColor: 'rgba(255,255,255,0.08)', borderRadius: 3, overflow: 'hidden' },
@@ -267,7 +326,8 @@ const s = StyleSheet.create({
   targetElo: { color: '#4ade80', fontWeight: '900' },
 
   // Country filter chips
-  chipScroll: { marginTop: 18, marginHorizontal: -16 },
+  chipScroll:  { marginTop: 18, marginHorizontal: -16 },
+  chipScroll2: { marginTop: 8, marginHorizontal: -16 },
   chipRow:    { paddingHorizontal: 16, gap: 8, alignItems: 'center' },
   chip: {
     paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20,
@@ -287,27 +347,39 @@ const s = StyleSheet.create({
     borderWidth: 1, borderColor: 'rgba(255,255,255,0.07)', overflow: 'hidden',
   },
   sep: { height: 1, backgroundColor: 'rgba(255,255,255,0.06)', marginHorizontal: 14 },
+  gapRow:  { alignItems: 'center', paddingTop: 6, paddingBottom: 2 },
+  gapDots: { color: '#5b6a7d', fontSize: 20, fontWeight: '900', lineHeight: 20, letterSpacing: 2 },
 
   row: {
-    flexDirection: 'row', alignItems: 'center', gap: 14,
-    paddingVertical: 14, paddingHorizontal: 16,
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    paddingVertical: 12, paddingHorizontal: 14,
   },
   rowMe: { backgroundColor: 'rgba(240,192,64,0.08)' },
 
-  rankNum:     { color: '#5b6a7d', fontSize: 16, fontWeight: '800', width: 28, textAlign: 'center' },
+  // Column layout (shared by header + rows)
+  colRank:   { width: 22, textAlign: 'center' },
+  colPlayer: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10 },
+  colElo:    { width: 48, textAlign: 'center' },
+  colRec:    { width: 66, textAlign: 'center' },
+  colWin:    { width: 50, textAlign: 'center' },
+
+  // Header
+  headRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 14, paddingVertical: 6, marginTop: 14 },
+  headTxt: { color: '#8a98aa', fontSize: 13, fontWeight: '800', letterSpacing: 0.3 },
+
+  // Value cells
+  rankNum:     { color: '#5b6a7d', fontSize: 15, fontWeight: '800' },
   rankNumGold: { color: colors.goldLight },
-
-  avatarWrap: { position: 'relative', width: 52, height: 52 },
-  avatar:     { width: 52, height: 52, borderRadius: 13, backgroundColor: '#1a2a3d' },
-  flagOverlay: {
-    position: 'absolute', bottom: -2, right: -4,
-    fontSize: 16, lineHeight: 20,
-  },
-
-  name:   { flex: 1, color: colors.white, fontSize: 16, fontWeight: '800' },
-  nameMe: { color: colors.goldLight },
-  eloTxt: { color: colors.goldLight, fontSize: 16, fontWeight: '900' },
-  eloMe:  { color: colors.goldLight },
+  playerCell:  {},
+  avatarWrap:  { position: 'relative', width: 42, height: 42 },
+  avatar:      { width: 42, height: 42, borderRadius: 11, backgroundColor: '#1a2a3d' },
+  flagOverlay: { position: 'absolute', bottom: -2, right: -4, fontSize: 14, lineHeight: 18 },
+  name:        { flex: 1, color: colors.white, fontSize: 15, fontWeight: '800' },
+  nameMe:      { color: colors.goldLight },
+  eloTxt:      { color: colors.goldLight, fontSize: 15, fontWeight: '900' },
+  eloMe:       { color: colors.goldLight },
+  recTxt:      { color: '#8a98aa', fontSize: 13, fontWeight: '700' },
+  winTxt:      { color: '#cbd5e1', fontSize: 13, fontWeight: '800' },
 
   divider:     { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 24, marginBottom: 4 },
   dividerLine: { flex: 1, height: 1, backgroundColor: 'rgba(255,255,255,0.08)' },
