@@ -27,7 +27,7 @@ const io = new Server(server, { cors: { origin: '*', methods: ['GET', 'POST'] } 
 const db = new Pool({ connectionString: process.env.DATABASE_URL });
 
 // Populated from avatars table on startup
-let validAvatars = ['cigar', 'queen'];
+let validAvatars = ['captain', 'queen'];
 
 // Populated from game_config table on startup — never mutate directly
 let cfg = {};
@@ -763,7 +763,7 @@ async function endMatch(m, winnerId, bust = false) {
 async function persistMatchResult(m, winner, loser, wEloBefore, lEloBefore, wEloAfter, lEloAfter, winnerId) {
   await Promise.all([winner, loser].map(p => db.query(
     `INSERT INTO players (id, display_name, avatar_id, is_guest)
-     VALUES ($1, $2, 'cigar', true)
+     VALUES ($1, $2, 'captain', true)
      ON CONFLICT (id) DO UPDATE SET display_name=$2, last_seen_at=NOW()`,
     [p.playerId, (p.playerName || 'Player').trim().slice(0, 20)]
   )));
@@ -810,7 +810,7 @@ async function persistMatchResult(m, winner, loser, wEloBefore, lEloBefore, wElo
 // side-effect-free w.r.t. match state, so it is safe to call on every connect,
 // reconnect, or lobby arrival.
 async function bindIdentity(socket, playerId) {
-  let playerName = 'Player', avatarId = 'cigar', country = null;
+  let playerName = 'Player', avatarId = 'captain', country = null;
   try {
     const { rows } = await db.query(
       `SELECT p.display_name, p.avatar_id, p.country, s.elo
@@ -1337,7 +1337,7 @@ app.get('/api/player/:playerId/profile', async (req, res) => {
     }
 
     res.json({
-      avatarId:    playerRes.rows[0]?.avatar_id || 'cigar',
+      avatarId:    playerRes.rows[0]?.avatar_id || 'captain',
       displayName: playerRes.rows[0]?.display_name,
       stats: statsRes.rows[0] || { elo: 1200, matches_played: 0, matches_won: 0 },
       history: histRes.rows.map(r => ({
@@ -1637,7 +1637,7 @@ app.post('/api/player/guest', async (req, res) => {
        VALUES ($1, $2, $3, true)
        ON CONFLICT (id) DO UPDATE SET
          display_name=$2, avatar_id=$3, last_seen_at=NOW()`,
-      [playerId, (name || 'Guest').trim().slice(0, 20), avatarId || 'cigar']
+      [playerId, (name || 'Guest').trim().slice(0, 20), avatarId || 'captain']
     );
     res.json({ ok: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -1656,7 +1656,7 @@ app.post('/auth/google', async (req, res) => {
 
     const { rows } = await db.query(
       `INSERT INTO players (id, display_name, avatar_id, is_guest)
-       VALUES ($1, $2, 'cigar', false)
+       VALUES ($1, $2, 'captain', false)
        ON CONFLICT (id) DO UPDATE SET
          display_name=$2, last_seen_at=NOW(), is_guest=false
        RETURNING avatar_id`,
@@ -1680,7 +1680,7 @@ app.post('/auth/facebook', async (req, res) => {
 
     const { rows } = await db.query(
       `INSERT INTO players (id, display_name, avatar_id, is_guest)
-       VALUES ($1, $2, 'cigar', false)
+       VALUES ($1, $2, 'captain', false)
        ON CONFLICT (id) DO UPDATE SET
          display_name=$2, last_seen_at=NOW(), is_guest=false
        RETURNING avatar_id`,

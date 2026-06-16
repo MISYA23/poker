@@ -484,9 +484,11 @@ export default function GameScreen({ navigation }) {
   const totalPot = gameState?.pot || 0;
 
   const winnerId = matchOver?.winnerId;
+  // For me, my locally-chosen avatar is the source of truth (matches my pod);
+  // gameState may still carry a stale/default avatar from match-creation time.
   const winnerAvatarId =
-    gameState?.players?.find(p => p.id === winnerId)?.avatarId
-    || (winnerId === myId ? playerInfo?.avatarId : undefined);
+    (winnerId === myId && playerInfo?.avatarId)
+    || gameState?.players?.find(p => p.id === winnerId)?.avatarId;
   const winnerMap = {};
   if (gameState?.phase === 'showdown' && gameState?.winners) {
     for (const w of gameState.winners) winnerMap[w.playerId] = w;
