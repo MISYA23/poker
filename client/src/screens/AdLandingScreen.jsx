@@ -157,10 +157,7 @@ export default function AdLandingScreen() {
         <ScreenBackground />
       )}
 
-      {/* Fade background image to dark navy at the bottom */}
-      <View style={s.gradientOverlay} pointerEvents="none" />
-
-      <SafeAreaView style={s.safe}>
+<SafeAreaView style={s.safe}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={s.kav}>
         <View style={s.center}>
           <View style={s.card}>
@@ -252,13 +249,6 @@ export default function AdLandingScreen() {
 const s = StyleSheet.create({
   root:    { flex: 1, backgroundColor: '#0a1628', ...Platform.select({ web: { minHeight: '100%', height: '100dvh', width: '100%' } }) },
   bg:      { ...StyleSheet.absoluteFillObject, width: '100%', height: '100%' },
-  gradientOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    ...Platform.select({
-      web: { background: 'linear-gradient(to bottom, transparent 25%, rgba(10,22,40,0.6) 50%, #0a1628 72%)' },
-      default: { backgroundColor: 'transparent' },
-    }),
-  },
   logoWrap: {
     position: 'absolute', top: 0, left: 0, right: 0, height: '33%',
     alignItems: 'center', justifyContent: 'center', paddingHorizontal: 24,
@@ -312,7 +302,7 @@ const s = StyleSheet.create({
   joinBtn:     { backgroundColor: colors.goldLight, borderRadius: 12, paddingVertical: 14, alignItems: 'center', shadowColor: colors.goldLight, shadowOpacity: 0.4, shadowRadius: 12, elevation: 6 },
   joinTxt:     { color: '#000', fontSize: 16, fontWeight: '900', letterSpacing: 1 },
   // Footer
-  footer:      { width: '100%', maxWidth: 400, alignItems: 'center', gap: 10, paddingTop: 4 },
+  footer:      { width: '100%', maxWidth: 400, alignItems: 'center', gap: 10, backgroundColor: 'rgba(8,16,32,0.82)', borderRadius: 14, paddingVertical: 14, paddingHorizontal: 16 },
   footerRule:  { flexDirection: 'row', alignItems: 'center', gap: 10, width: '100%' },
   footerLine:  { flex: 1, height: 1, backgroundColor: 'rgba(255,255,255,0.18)' },
   footerSkull: { fontSize: 16, opacity: 0.7 },
