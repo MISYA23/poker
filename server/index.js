@@ -207,6 +207,7 @@ function createMatch(p1, p2) {
     autoStartTimer: null, nextHandTimer: null,
     turnTimer: null, timerPlayerId: null, turnDeadline: null,
     botTimer: null, isBotMatch: false, botId: null,
+    seq: 0,
     handCount: 0, handEventSeq: 0, currentHandUuid: null,
     maxPlayers: 2, name: `match:${id.slice(0, 8)}`, emoji: '♠',
   };
@@ -281,6 +282,7 @@ function maybeScheduleBotAction(m) {
     }
     try {
       const pre = preActionState(m.game, m.botId);
+      const preBoardLen = m.game.communityCards.length;
       try {
         m.game.handleAction(m.botId, d.action, d.amount);
       } catch (e) {
@@ -292,7 +294,7 @@ function maybeScheduleBotAction(m) {
       writeHandRows(m, m.game, m.currentHandUuid, rows)
         .catch(e => console.error('[bot] logAction:', e.message));
       emitHandEvents(m, rows);
-      broadcastMatchState(m);
+      broadcastMatchState(m, buildActionTransition(m.game, m.botId, d.action, d.amount, preBoardLen));
       if (m.game.phase === 'showdown') scheduleNextHand(m, cfg.inter_hand_delay_ms);
     } catch (err) {
       console.error('[bot] action failed:', err.message);
@@ -301,6 +303,26 @@ function maybeScheduleBotAction(m) {
 }
 
 // ── Broadcast ─────────────────────────────────────────────────────────────────
+
+// Builds the animation-hint object that travels alongside a game-state snapshot.
+// The snapshot is authoritative; this only describes why it changed.
+function buildActionTransition(game, playerId, action, amount, preBoardLen) {
+  if (action === 'fold') {
+    const w = game.winners?.[0];
+    return { type: 'HAND_ENDED', reason: 'fold', winnerPlayerId: w?.id, amountWon: w?.amount };
+  }
+  if (game.phase === 'showdown') {
+    const w = game.winners?.[0];
+    return { type: 'HAND_ENDED', reason: 'showdown', winnerPlayerId: w?.id, amountWon: w?.amount };
+  }
+  const newBoardLen = game.communityCards.length;
+  const newCards    = newBoardLen > preBoardLen ? game.communityCards.slice(preBoardLen) : null;
+  const streetByLen = { 3: 'flop', 4: 'turn', 5: 'river' };
+  return {
+    type: 'ACTION', playerId, action, amount: amount || 0,
+    ...(newCards ? { newStreet: streetByLen[newBoardLen], newCards } : {}),
+  };
+}
 
 // Live discrete hand-event stream — emitted right before the game-state that
 // reflects them, so the client can choreograph beats (call chips appear, hold,
@@ -317,7 +339,8 @@ function emitHandEvents(m, rows) {
   for (const sid of m.observers) io.to(sid).emit('hand-events', payload);
 }
 
-function broadcastMatchState(m) {
+function broadcastMatchState(m, transition = null) {
+  m.seq = (m.seq || 0) + 1;
   startTurnTimer(m);
   maybeScheduleBotAction(m);
   const sittingOut = matchPlayers(m).filter(p => p.vacant).map(p => p.playerId);
@@ -327,20 +350,24 @@ function broadcastMatchState(m) {
     const atTable = m.game.players.some(pl => pl.id === p.playerId);
     const state   = atTable ? m.game.getStateFor(p.playerId) : m.game.getStateFor(null);
     io.to(p.socketId).emit('game-state', {
+      seq: m.seq, transition,
       ...state, atTable,
       matchId: m.id,
       gameOver: m.game.gameOver || false,
       turnDeadline: m.turnDeadline,
+      turnDurationMs: cfg.turn_seconds * 1000,
       handNumber: m.handCount,
       sittingOut,
     });
   }
-  // Observers see face-down cards
+  // Observers see face-down cards; no transition (they join mid-stream)
   for (const sid of m.observers) {
     io.to(sid).emit('game-state', {
+      seq: m.seq,
       ...m.game.getStateFor(null),
       atTable: false, observing: true,
       matchId: m.id, turnDeadline: m.turnDeadline,
+      turnDurationMs: cfg.turn_seconds * 1000,
       handNumber: m.handCount,
       sittingOut,
     });
@@ -445,7 +472,7 @@ function tryAutoStart(m) {
       m.autoStartTimer = null;
       if (m.game.phase === 'waiting' && m.game.canStart()) {
         await beginHand(m);
-        broadcastMatchState(m);
+        broadcastMatchState(m, { type: 'MATCH_STARTING' });
       }
     }, cfg.auto_start_delay_ms);
   }
@@ -1035,12 +1062,13 @@ io.on('connection', (socket) => {
     if (!m) return;
     try {
       const pre = preActionState(m.game, sp.playerId);
+      const preBoardLen = m.game.communityCards.length;
       m.game.handleAction(sp.playerId, action, amount);
       const rows = buildActionRows(m, m.game, pre);
       writeHandRows(m, m.game, m.currentHandUuid, rows)
         .catch(e => console.error('[hand] logAction:', e.message));
       emitHandEvents(m, rows);
-      broadcastMatchState(m);
+      broadcastMatchState(m, buildActionTransition(m.game, sp.playerId, action, amount, preBoardLen));
       checkAndFireBegun(m, sp.playerId);
       if (m.game.phase === 'showdown') scheduleNextHand(m, cfg.inter_hand_delay_ms);
     } catch (err) {

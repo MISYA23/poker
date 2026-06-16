@@ -54,7 +54,13 @@ const INGAME_TABLE  = TABLE_VARIANTS[TABLE_VARIANT].src;
 // rendered with `cover` so it crops rather than distorts on any aspect ratio.
 const AMBIENT_BG = require('../../assets/game-bg.jpg');
 
-const TURN_DURATION_MS = 20000;
+// All timing constants live in src/timings.js
+import {
+  BET_HOLD_MS, BET_SLIDE_MS,
+  STREET_DEAL_PAUSE, FLOP_CARD_GAP, ALLIN_CARD_GAP, ALLIN_INITIAL_PAUSE,
+  FOLD_REVEAL_PAUSE, SHOWDOWN_REVEAL_PAUSE, CHIP_FLIGHT_MS,
+} from '../timings';
+
 const TOP_BAR_H    = 50;
 const ACTION_BAR_H = 125;
 
@@ -120,9 +126,6 @@ const MY_BET_L     = Math.round(TABLE_W / 4);                             // rig
 const MY_BET_BASE   = MY_BET_T + 33;                                      // pile bottom — keeps small bets where they were
 const MY_BET_SLOT_H = 96;                                                 // headroom for the tallest pile
 
-// Street-close bet collection — both piles sit equal, then slide into the pot
-const BET_HOLD_MS  = 200;
-const BET_SLIDE_MS = 260;
 const DEALER_SZ    = Math.round(0.07 * DESIGN_W);
 // Top dealer button: just to the LEFT of the D3 cross (right edge on D-col, centered on row-3 line)
 const DEALER_OPP_L = Math.round(TABLE_L + 3 * (TABLE_W / 4) - DEALER_SZ);
@@ -153,14 +156,14 @@ const OPP_CARDS_L     = AV_TOP_INNER + CARD_AV_GAP;                       // pai
 const OPP_CARDS_T     = OPP_POD_T + NP_TOP + 10 - 59;                     // cards ABOVE the nameplate, bottom 10px tucked in
 
 // ─── TimerRing ────────────────────────────────────────────────────────────────
-function TimerRing({ deadline }) {
+function TimerRing({ deadline, duration }) {
   const [dashOffset, setDashOffset] = useState(RING_CIRC);
   const [timeLeft, setTimeLeft]     = useState(null);
   useEffect(() => {
-    if (!deadline) { setDashOffset(RING_CIRC); setTimeLeft(null); return; }
+    if (!deadline || !duration) { setDashOffset(RING_CIRC); setTimeLeft(null); return; }
     const tick = () => {
       const rem = Math.max(0, deadline - Date.now());
-      setDashOffset(((TURN_DURATION_MS - rem) / TURN_DURATION_MS) * RING_CIRC);
+      setDashOffset(((duration - rem) / duration) * RING_CIRC);
       setTimeLeft(Math.ceil(rem / 1000));
     };
     tick();
@@ -189,13 +192,13 @@ function TimerRing({ deadline }) {
 // starts/stops on the curve, never beyond the plate). Segments run green→red
 // left→right; the gauge starts full and depletes from the left as the turn elapses.
 const TIMER_SEGMENTS = 20;
-function TimerBar({ deadline, isMe }) {
+function TimerBar({ deadline, duration, isMe }) {
   const [frac, setFrac] = useState(0);   // elapsed fraction 0→1
   useEffect(() => {
-    if (!deadline) { setFrac(0); return; }
+    if (!deadline || !duration) { setFrac(0); return; }
     const tick = () => {
       const rem = Math.max(0, deadline - Date.now());
-      setFrac(Math.min(1, (TURN_DURATION_MS - rem) / TURN_DURATION_MS));
+      setFrac(Math.min(1, (duration - rem) / duration));
     };
     tick();
     const id = setInterval(tick, 100);
@@ -315,7 +318,7 @@ function useActionFlash(player, lastAction) {
 }
 
 // ─── PlayerPod — avatar + nameplate only (hole cards are now separate) ────────
-function PlayerPod({ player, isMe, observing, turnDeadline, lastAction, win, displayChips, deckStyle, avatarOverride, sittingOut }) {
+function PlayerPod({ player, isMe, observing, turnDeadline, turnDurationMs, lastAction, win, displayChips, deckStyle, avatarOverride, sittingOut }) {
   const actionLbl = useActionFlash(player, lastAction);
   const present   = !!player;
   const isActive  = present && !!player.isCurrentPlayer;
@@ -369,7 +372,7 @@ function PlayerPod({ player, isMe, observing, turnDeadline, lastAction, win, dis
   return (
     <View style={s.pod}>
       {nameplate}
-      <TimerBar deadline={turnDeadline} isMe={isMe} />
+      <TimerBar deadline={turnDeadline} duration={turnDurationMs} isMe={isMe} />
       {avatar}
     </View>
   );
@@ -378,7 +381,7 @@ function PlayerPod({ player, isMe, observing, turnDeadline, lastAction, win, dis
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 export default function GameScreen({ navigation }) {
   const {
-    gameState, myId, onAction, onLeave, onRematch, onLogout,
+    gameState, transition, myId, onAction, onLeave, onRematch, onLogout,
     matchOver, navigationRef, deckStyle, playerInfo,
     handEventsRef, bustReveal = null, forfeitReveal = null, uiConfig = {},
   } = useContext(GameContext);
@@ -546,25 +549,29 @@ export default function GameScreen({ navigation }) {
     if (revealedCC >= targetCC) return;
     const timers = [];
     const anyAllIn = gameState?.players?.some(p => p.allIn) ?? false;
-    let acc = (isShowdown && anyAllIn) ? (uiConfig.allin_reveal_pause_ms ?? 1500) : 0;
+    let acc = (isShowdown && anyAllIn) ? ALLIN_INITIAL_PAUSE : STREET_DEAL_PAUSE;
     for (let i = revealedCC; i < targetCC; i++) {
       timers.push(setTimeout(() => setRevealedCC(i + 1), acc));
       const next = i + 1;
       if (next < targetCC) {
-        if (next <= 2) acc += 500;
-        else if (isShowdown) acc += 1000;
+        if (next <= 2) acc += FLOP_CARD_GAP;
+        else if (isShowdown) acc += ALLIN_CARD_GAP;
       }
     }
     return () => timers.forEach(clearTimeout);
   }, [targetCC, isShowdown, collecting]);
 
+  const isHandEnded = transition?.type === 'HAND_ENDED';
+
   const [showWinners, setShowWinners] = useState(false);
   useEffect(() => {
-    if (!isShowdown) { setShowWinners(false); return; }
-    if (revealedCC < targetCC) { setShowWinners(false); return; }
-    const t = setTimeout(() => setShowWinners(true), 2000);
+    if (!isHandEnded) { setShowWinners(false); return; }
+    if (revealedCC < targetCC) return;
+    if (collecting) return;
+    const delay = transition?.reason === 'showdown' ? SHOWDOWN_REVEAL_PAUSE : FOLD_REVEAL_PAUSE;
+    const t = setTimeout(() => setShowWinners(true), delay);
     return () => clearTimeout(t);
-  }, [revealedCC, targetCC, isShowdown]);
+  }, [isHandEnded, revealedCC, targetCC, collecting, transition]);
 
   const activeWinners = showWinners ? winnerMap : {};
   const bustWinId = bustReveal?.winnerId ?? null;
@@ -610,24 +617,23 @@ export default function GameScreen({ navigation }) {
     return () => clearInterval(id);
   }, [myDeadline]);
 
-  const [snap, setSnap]       = useState({ chips: {}, pot: 0 });
   const [winDone, setWinDone] = useState(false);
   useEffect(() => {
-    if (isShowdown) return;
-    const chips = {};
-    (gameState?.players || []).forEach(p => { chips[p.id] = p.chips; });
-    setSnap({ chips, pot: gameState?.pot || 0 });
-    setWinDone(false);
-  }, [gameState, isShowdown]);
-  useEffect(() => {
-    if (!showWinners) return;
-    const t = setTimeout(() => setWinDone(true), 950);
+    if (!showWinners) { setWinDone(false); return; }
+    const t = setTimeout(() => setWinDone(true), CHIP_FLIGHT_MS);
     return () => clearTimeout(t);
   }, [showWinners]);
 
-  const locked  = isShowdown && !winDone;
-  const dispPot = locked ? snap.pot : (collecting ? collect.pot : totalPot);
-  const chipsFor = p => locked ? (snap.chips[p?.id] ?? p?.chips ?? 0) : (p?.chips ?? 0);
+  const locked   = showWinners && !winDone;
+  const animPot  = locked
+    ? (gameState?.winners?.reduce((s, w) => s + (w.amount || 0), 0) || 0)
+    : null;
+  const dispPot  = animPot !== null ? animPot : (collecting ? collect.pot : totalPot);
+  const chipsFor = p => {
+    if (!locked) return p?.chips ?? 0;
+    const win = gameState?.winners?.find(w => w.playerId === p?.id);
+    return (p?.chips ?? 0) - (win?.amount ?? 0);
+  };
 
   // While collecting, pills show the final street bets and ride collectProg
   const oppBetShown = collecting ? (collect.bets[opponent?.id] || 0) : (opponent?.roundBet || 0);
@@ -657,7 +663,7 @@ export default function GameScreen({ navigation }) {
     }
     const winner = gameState.winners[0];
     const dir = winner.playerId === bottomId ? 1 : -1;
-    setFlightAmount(winner.amount || snap.pot || totalPot);
+    setFlightAmount(winner.amount || 0);
     flightY.setValue(0);
     flightScale.setValue(1);
     flightOpacity.setValue(1);
@@ -761,7 +767,7 @@ export default function GameScreen({ navigation }) {
           {/* Opponent pod */}
           <View style={s.oppPodSlot}>
             <PlayerPod player={opponent} isMe={false}
-              turnDeadline={oppDeadline} lastAction={gameState?.lastAction}
+              turnDeadline={oppDeadline} turnDurationMs={gameState?.turnDurationMs} lastAction={gameState?.lastAction}
               win={bustWinId ? opponent?.id === bustWinId : (opponent ? activeWinners[opponent.id] : null)}
               displayChips={forfeitReveal?.loserId === opponent?.id && forfeitChipDisplay != null ? forfeitChipDisplay : (opponent ? chipsFor(opponent) : 0)}
               deckStyle={deckStyle} sittingOut={oppSittingOut} />
@@ -851,7 +857,7 @@ export default function GameScreen({ navigation }) {
           {/* Player pod */}
           <View style={s.myPodSlot}>
             <PlayerPod player={me} isMe={true} observing={observing}
-              turnDeadline={myDeadline} lastAction={gameState?.lastAction}
+              turnDeadline={myDeadline} turnDurationMs={gameState?.turnDurationMs} lastAction={gameState?.lastAction}
               win={bustWinId ? me?.id === bustWinId : (me ? activeWinners[me.id] : null)}
               displayChips={forfeitReveal?.loserId === me?.id && forfeitChipDisplay != null ? forfeitChipDisplay : (me ? chipsFor(me) : 0)}
               avatarOverride={observing ? undefined : playerInfo?.avatarId}

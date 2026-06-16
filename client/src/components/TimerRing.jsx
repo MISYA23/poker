@@ -4,22 +4,21 @@ import Svg, { Circle } from 'react-native-svg';
 
 const RING_R = 30;
 const RING_CIRC = 2 * Math.PI * RING_R;
-const TURN_DURATION_MS = 20000;
 
-export default function TimerRing({ turnDeadline }) {
+export default function TimerRing({ turnDeadline, turnDurationMs }) {
   const [dashOffset, setDashOffset] = useState(RING_CIRC);
   const [timeLeft, setTimeLeft] = useState(null);
 
   useEffect(() => {
-    if (!turnDeadline) {
+    if (!turnDeadline || !turnDurationMs) {
       setDashOffset(RING_CIRC);
       setTimeLeft(null);
       return;
     }
     const tick = () => {
       const remaining = Math.max(0, turnDeadline - Date.now());
-      const elapsed = TURN_DURATION_MS - remaining;
-      setDashOffset((elapsed / TURN_DURATION_MS) * RING_CIRC);
+      const elapsed = turnDurationMs - remaining;
+      setDashOffset((elapsed / turnDurationMs) * RING_CIRC);
       setTimeLeft(Math.ceil(remaining / 1000));
     };
     tick();

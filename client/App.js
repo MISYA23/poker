@@ -14,6 +14,7 @@ import { clearUser } from './src/utils/user';
 import { track, trackScreen } from './src/utils/analytics';
 import { SERVER_URL } from './src/config';
 import { startMusic, setMusicContext, loadMusicConfig } from './src/audio/music';
+import { HAND_END_LOCK_MS, BUST_REVEAL_MS, FORFEIT_REVEAL_MS, MATCH_OVER_FALLBACK_MS } from './src/timings';
 import MatchFlowOverlays from './src/components/MatchFlowOverlays';
 import LoginScreen   from './src/screens/LoginScreen';
 import LobbyScreen   from './src/screens/LobbyScreen';
@@ -46,6 +47,7 @@ const linking = {
 function App() {
   const [myId, setMyId]           = useState(null);
   const [gameState, setGameState] = useState(null);
+  const [transition, setTransition] = useState(null);
   // Latest live hand-event batch — arrives just before the game-state that
   // reflects it; GameScreen consumes (and clears) it to choreograph beats
   const handEventsRef = useRef(null);
@@ -82,6 +84,8 @@ function App() {
   const matchOverTimerRef  = useRef(null); // pending match-over reveal delay
   const bustRevealRef      = useRef(null); // mirrors bustReveal for socket-bound handlers
   const forfeitRevealRef   = useRef(null); // mirrors forfeitReveal for socket-bound handlers
+  const handEndLockRef     = useRef(null); // blocks next-hand state during hand-end animation
+  const handEndPendingRef  = useRef(null); // queued game-state to apply when lock releases
   const [route, setRoute] = useState('Login');   // current screen (gates music start)
 
   const setSearch = useCallback((v) => { searchRef.current = v; setSearchOverlay(v); }, []);
@@ -136,6 +140,8 @@ function App() {
       setMeantime(false);
       setBustReveal(null);
       if (matchOverTimerRef.current) { clearTimeout(matchOverTimerRef.current); matchOverTimerRef.current = null; }
+      if (handEndLockRef.current) { clearTimeout(handEndLockRef.current); handEndLockRef.current = null; }
+      handEndPendingRef.current = null;
       bustRevealRef.current = null;
       forfeitRevealRef.current = null;
       // Starting any match voids all challenges (server does the same)
@@ -159,17 +165,37 @@ function App() {
     },
     'match-list':  ({ matches, onlinePlayers: op }) => { setMatchList(matches || []); setOnlinePlayers(op || []); },
     'hand-events': (batch)           => { handEventsRef.current = batch; },
-    'game-state':  (state)           => {
-      if (bustRevealRef.current || forfeitRevealRef.current) return; // preserve state during end-of-match animation
-      setGameState(state);
-      if (state.atTable && !state.gameOver) setMatchOver(null);
-      const belongsToUs = state.matchId === matchIdRef.current;
-      if (belongsToUs && state.atTable && !foundDelayRef.current) {
-        navigationRef.navigate('Game');
-      } else if (belongsToUs && state.observing && isObserverRef.current && pendingObserveRef.current) {
-        pendingObserveRef.current = false;
-        navigationRef.navigate('Game');
+    'game-state':  (payload)         => {
+      if (bustRevealRef.current || forfeitRevealRef.current) return;
+      const { transition: t, seq, ...state } = payload;
+      if (handEndLockRef.current) {
+        handEndPendingRef.current = { t, state };
+        return;
       }
+      const apply = (t, state) => {
+        setTransition(t || null);
+        setGameState(state);
+        if (state.atTable && !state.gameOver) setMatchOver(null);
+        const belongsToUs = state.matchId === matchIdRef.current;
+        if (belongsToUs && state.atTable && !foundDelayRef.current) {
+          navigationRef.navigate('Game');
+        } else if (belongsToUs && state.observing && isObserverRef.current && pendingObserveRef.current) {
+          pendingObserveRef.current = false;
+          navigationRef.navigate('Game');
+        }
+      };
+      if (t?.type === 'HAND_ENDED' && !state.gameOver) {
+        apply(t, state);
+        handEndPendingRef.current = null;
+        handEndLockRef.current = setTimeout(() => {
+          handEndLockRef.current = null;
+          const pending = handEndPendingRef.current;
+          handEndPendingRef.current = null;
+          if (pending) apply(pending.t, pending.state);
+        }, HAND_END_LOCK_MS);
+        return;
+      }
+      apply(t, state);
     },
     'observe-rejected': ({ matchId }) => {
       if (matchIdRef.current === matchId) {
@@ -192,7 +218,7 @@ function App() {
           bustRevealRef.current = null;
           setBustReveal(null);
           setMatchOver({ ...data, myVote: null, opponentWantsRematch: null });
-        }, 3000);
+        }, BUST_REVEAL_MS);
       } else if (data.forfeit) {
         // Forfeit: chip countdown + flight animation for 2.5s, then modal
         const rev = { loserId: data.loserId, loserChips: data.loserChips, loserName: data.loserName };
@@ -203,7 +229,7 @@ function App() {
           forfeitRevealRef.current = null;
           setForfeitReveal(null);
           setMatchOver({ ...data, myVote: null, opponentWantsRematch: null });
-        }, 2500);
+        }, FORFEIT_REVEAL_MS);
       } else {
         // Fallback: plain brief pause
         bustRevealRef.current = null;
@@ -213,7 +239,7 @@ function App() {
         matchOverTimerRef.current = setTimeout(() => {
           matchOverTimerRef.current = null;
           setMatchOver({ ...data, myVote: null, opponentWantsRematch: null });
-        }, 1000);
+        }, MATCH_OVER_FALLBACK_MS);
       }
     },
     'rematch-pending': ({ from })    => {
@@ -386,11 +412,11 @@ function App() {
   // Game/session context — game state, identity, and stable actions. Memoized so
   // lobby broadcasts (match-list, challenges) don't re-render mid-game screens.
   const gameValue = useMemo(() => ({
-    gameState, myId, matchOver, handEventsRef,
+    gameState, transition, myId, matchOver, handEventsRef,
     playerInfo, deckStyle, setDeckStyle, uiConfig, bustReveal, forfeitReveal,
     emit, onLogin, onLogout, onUpdateProfile,
     onAction, onLeave, onRematch, navigationRef,
-  }), [gameState, myId, matchOver, playerInfo, deckStyle, uiConfig, bustReveal, forfeitReveal,
+  }), [gameState, transition, myId, matchOver, playerInfo, deckStyle, uiConfig, bustReveal, forfeitReveal,
        emit, onLogin, onLogout, onUpdateProfile, onAction, onLeave, onRematch]);
 
   // Lobby context — fast-churning lobby data + lobby-only actions
