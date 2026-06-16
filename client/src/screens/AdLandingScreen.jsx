@@ -225,17 +225,21 @@ export default function AdLandingScreen() {
             </View>
           </View>
 
-          <View style={s.footer}>
-            <Text style={s.footerMain}>18+ · FOR ENTERTAINMENT PURPOSES ONLY · NO REAL-MONEY GAMBLING · NO CASH PRIZES</Text>
-            <Text style={s.footerLinks}>
-              <Text style={s.footerLink} onPress={() => Platform.OS === 'web' && window.open('/terms', '_blank')}>Terms</Text>
-              <Text style={s.footerDot}> · </Text>
-              <Text style={s.footerLink} onPress={() => Platform.OS === 'web' && window.open('/privacy-policy', '_blank')}>Privacy</Text>
-            </Text>
-          </View>
         </View>
       </KeyboardAvoidingView>
-      <Text style={s.versionSmall}>{VERSION_DISPLAY}</Text>
+
+      <View style={s.footer}>
+        <Text style={s.footerMain}>18+ · FOR ENTERTAINMENT PURPOSES ONLY · NO REAL-MONEY GAMBLING · NO CASH PRIZES</Text>
+        <View style={s.footerNav}>
+          <Text style={s.footerLink} onPress={() => Platform.OS === 'web' && window.open('/terms', '_blank')}>Terms</Text>
+          <Text style={s.footerDot}>·</Text>
+          <Text style={s.footerLink} onPress={() => Platform.OS === 'web' && window.open('/privacy-policy', '_blank')}>Privacy</Text>
+          <Text style={s.footerDot}>·</Text>
+          <Text style={s.footerLink} onPress={() => Platform.OS === 'web' && window.open('/data-deletion', '_blank')}>Data Deletion</Text>
+          <Text style={s.footerDot}>·</Text>
+          <Text style={s.footerVersion}>{VERSION_DISPLAY}</Text>
+        </View>
+      </View>
       </SafeAreaView>
     </View>
   );
@@ -252,13 +256,7 @@ const s = StyleSheet.create({
   safe:    { flex: 1 },
   kav:     { flex: 1 },
   center:  {
-    flex: 1, alignItems: 'center', justifyContent: 'flex-end', padding: 24,
-    paddingBottom: Platform.OS === 'web' ? 'calc(38px + env(safe-area-inset-bottom))' : 38,
-  },
-  versionSmall: {
-    position: 'absolute', right: 12, bottom: 12,
-    fontSize: 11, color: 'rgba(255,255,255,0.9)',
-    textShadowColor: 'rgba(0,0,0,0.9)', textShadowRadius: 4, textShadowOffset: { width: 0, height: 1 },
+    flex: 1, alignItems: 'center', justifyContent: 'flex-end', padding: 24, paddingBottom: 16,
   },
   card: {
     backgroundColor: '#12121e',
@@ -296,10 +294,11 @@ const s = StyleSheet.create({
   input:       { backgroundColor: 'rgba(0,0,0,0.4)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12, color: colors.white, fontSize: 16 },
   joinBtn:     { backgroundColor: colors.goldLight, borderRadius: 12, paddingVertical: 14, alignItems: 'center', shadowColor: colors.goldLight, shadowOpacity: 0.4, shadowRadius: 12, elevation: 6 },
   joinTxt:     { color: '#000', fontSize: 16, fontWeight: '900', letterSpacing: 1 },
-  // Footer
-  footer:      { width: '100%', maxWidth: 400, alignItems: 'center', gap: 6, backgroundColor: 'rgba(8,16,32,0.82)', borderRadius: 10, paddingVertical: 10, paddingHorizontal: 14 },
-  footerMain:  { color: 'rgba(255,255,255,0.65)', fontSize: 9.5, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5, textAlign: 'center', lineHeight: 14 },
-  footerLinks: { fontSize: 11, textAlign: 'center' },
-  footerLink:  { color: 'rgba(222,184,110,0.7)', textDecorationLine: 'underline' },
-  footerDot:   { color: 'rgba(255,255,255,0.3)' },
+  // Footer — anchored at bottom of SafeAreaView
+  footer:       { alignItems: 'center', gap: 6, paddingHorizontal: 20, paddingVertical: 10, backgroundColor: 'rgba(8,16,32,0.88)' },
+  footerMain:   { color: 'rgba(255,255,255,0.55)', fontSize: 9, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5, textAlign: 'center' },
+  footerNav:    { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap', justifyContent: 'center' },
+  footerLink:   { color: 'rgba(222,184,110,0.75)', fontSize: 11, textDecorationLine: 'underline' },
+  footerDot:    { color: 'rgba(255,255,255,0.25)', fontSize: 11 },
+  footerVersion:{ color: 'rgba(255,255,255,0.3)', fontSize: 11 },
 });
