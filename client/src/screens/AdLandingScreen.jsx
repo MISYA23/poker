@@ -157,6 +157,9 @@ export default function AdLandingScreen() {
         <ScreenBackground />
       )}
 
+      {/* Fade background image to dark navy at the bottom */}
+      <View style={s.gradientOverlay} pointerEvents="none" />
+
       <SafeAreaView style={s.safe}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={s.kav}>
         <View style={s.center}>
@@ -249,6 +252,13 @@ export default function AdLandingScreen() {
 const s = StyleSheet.create({
   root:    { flex: 1, backgroundColor: '#0a1628', ...Platform.select({ web: { minHeight: '100%', height: '100dvh', width: '100%' } }) },
   bg:      { ...StyleSheet.absoluteFillObject, width: '100%', height: '100%' },
+  gradientOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    ...Platform.select({
+      web: { background: 'linear-gradient(to bottom, transparent 25%, rgba(10,22,40,0.6) 50%, #0a1628 72%)' },
+      default: { backgroundColor: 'transparent' },
+    }),
+  },
   logoWrap: {
     position: 'absolute', top: 0, left: 0, right: 0, height: '33%',
     alignItems: 'center', justifyContent: 'center', paddingHorizontal: 24,
