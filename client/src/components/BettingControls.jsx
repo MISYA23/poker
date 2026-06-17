@@ -1,5 +1,6 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { View, Text, Pressable, TextInput, StyleSheet } from 'react-native';
+import PressButton from './PressButton';
 
 export default function BettingControls({ gameState, myId, onAction, raiseAmount, onRaiseChange }) {
   const me = gameState?.players?.find(p => p.id === myId);
@@ -106,30 +107,30 @@ export default function BettingControls({ gameState, myId, onAction, raiseAmount
 
       {/* Action buttons */}
       <View style={s.btns}>
-        <Pressable style={[s.btn, s.btnFold]} onPress={() => onAction('fold')}>
+        <PressButton style={[s.btn, s.btnFold]} onPress={() => onAction('fold')}>
           <Text style={s.btnTxt}>Fold</Text>
-        </Pressable>
+        </PressButton>
 
         {canCheck ? (
-          <Pressable style={[s.btn, s.btnCheck]} onPress={() => onAction('check')}>
+          <PressButton style={[s.btn, s.btnCheck]} onPress={() => onAction('check')}>
             <Text style={s.btnTxt}>Check</Text>
-          </Pressable>
+          </PressButton>
         ) : mustAllInToCall ? (
-          <Pressable style={[s.btn, s.btnAllin]} onPress={() => onAction('all-in', 0)}>
+          <PressButton style={[s.btn, s.btnAllin]} onPress={() => onAction('all-in', 0)}>
             <Text style={s.btnTxt}>All In</Text>
-          </Pressable>
+          </PressButton>
         ) : (
-          <Pressable style={[s.btn, s.btnCall]} onPress={() => onAction('call')}>
+          <PressButton style={[s.btn, s.btnCall]} onPress={() => onAction('call')}>
             <Text style={s.btnTxt}>Call{callAmount > 0 ? ` ${callAmount.toLocaleString()}` : ''}</Text>
-          </Pressable>
+          </PressButton>
         )}
 
         {canRaise && (
-          <Pressable style={[s.btn, isAllin ? s.btnAllin : s.btnRaise]} onPress={handleRaise}>
+          <PressButton style={[s.btn, isAllin ? s.btnAllin : s.btnRaise]} onPress={handleRaise}>
             <Text style={s.btnTxt}>
               {isAllin ? 'All In' : `${isOpening ? 'Bet' : 'Raise'} ${raiseAmount.toLocaleString()}`}
             </Text>
-          </Pressable>
+          </PressButton>
         )}
       </View>
     </View>
