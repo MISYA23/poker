@@ -9,6 +9,7 @@ import { colors } from '../theme';
 import { SERVER_URL } from '../config';
 import { getUser, setUser } from '../utils/user';
 import { isMusicMuted, setMusicMuted } from '../audio/music';
+import { isSfxEnabled, setSfxEnabled } from '../audio/sfx';
 
 // Static image map — Metro requires these to be known at build time
 const AVATAR_IMAGES = {
@@ -50,6 +51,7 @@ export default function ProfileScreen({ navigation }) {
   );
   const [saving, setSaving]     = useState(false);
   const [musicOn, setMusicOn]   = useState(!isMusicMuted());
+  const [sfxOn, setSfxOn]       = useState(isSfxEnabled());
   const [history, setHistory]   = useState(null);
   const [loadingHistory, setLoadingHistory] = useState(true);
 
@@ -78,6 +80,10 @@ export default function ProfileScreen({ navigation }) {
           setMusicOn(data.musicEnabled);
           setMusicMuted(!data.musicEnabled);
         }
+        if (typeof data.sfxEnabled === 'boolean') {
+          setSfxOn(data.sfxEnabled);
+          setSfxEnabled(data.sfxEnabled);
+        }
       })
       .catch(() => setHistory([]))
       .finally(() => setLoadingHistory(false));
@@ -92,10 +98,11 @@ export default function ProfileScreen({ navigation }) {
       fetch(`${SERVER_URL}/api/player/${playerInfo.playerId}/profile`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ displayName: trimmed, avatarId, musicEnabled: musicOn }),
+        body: JSON.stringify({ displayName: trimmed, avatarId, musicEnabled: musicOn, sfxEnabled: sfxOn }),
       }),
     ]);
     setMusicMuted(!musicOn);
+    setSfxEnabled(sfxOn);
     onUpdateProfile(trimmed, avatarId);
     setSaving(false);
     navigation.goBack();
@@ -156,6 +163,12 @@ export default function ProfileScreen({ navigation }) {
             <Text style={s.toggleLbl}>Music</Text>
             <View style={[s.toggleTrack, musicOn && s.toggleOn]}>
               <View style={[s.toggleThumb, musicOn && s.toggleThumbOn]} />
+            </View>
+          </Pressable>
+          <Pressable style={s.toggle} onPress={() => setSfxOn(v => !v)}>
+            <Text style={s.toggleLbl}>Game Sounds</Text>
+            <View style={[s.toggleTrack, sfxOn && s.toggleOn]}>
+              <View style={[s.toggleThumb, sfxOn && s.toggleThumbOn]} />
             </View>
           </Pressable>
         </View>
