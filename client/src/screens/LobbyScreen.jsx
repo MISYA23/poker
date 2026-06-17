@@ -358,7 +358,7 @@ export default function LobbyScreen({ navigation }) {
                         </View>
                       )}
                       <View style={[s.lbRow, s.lbRowMe]}>
-                        <Text style={s.lbRank}>#{lbMyRow.rank}</Text>
+                        <Text style={s.lbRank}>{lbMyRow.rank}</Text>
                         <Text style={s.lbFlag}>{flagEmoji(lbMyRow.country)}</Text>
                         <Text style={[s.lbName, s.lbNameMe]} numberOfLines={1}>You</Text>
                         <Text style={[s.lbElo, s.lbEloMe]}>{lbMyRow.elo}</Text>
@@ -533,7 +533,7 @@ const s = StyleSheet.create({
   lbTabTxtOn:{ color: colors.goldLight },
   lbRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 14, paddingVertical: 10 },
   lbRowMe: { backgroundColor: 'rgba(240,192,64,0.1)' },
-  lbRank:   { color: colors.goldLight, fontSize: 13, fontWeight: '900', width: 28, textAlign: 'center' },
+  lbRank:   { color: colors.goldLight, fontSize: 13, fontWeight: '900', width: 42, textAlign: 'center' },
   lbName:   { flex: 1, color: colors.white, fontSize: 14, fontWeight: '800' },
   lbNameMe: { color: colors.goldLight },
   lbFlag:   { fontSize: 15 },
