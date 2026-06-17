@@ -229,6 +229,7 @@ function resetRoom(m) {
 // ── Turn timer ────────────────────────────────────────────────────────────────
 
 function startTurnTimer(m) {
+  if (m.isBotMatch) return; // no clock in bot matches — human can pause indefinitely
   const pid = m.game.currentPlayerId;
   if (pid === m.timerPlayerId) return;
   if (m.turnTimer) { clearTimeout(m.turnTimer); m.turnTimer = null; }
@@ -242,12 +243,8 @@ function startTurnTimer(m) {
     if (m.ended || m.game.currentPlayerId !== pid) return;
     m.timerPlayerId = null;
     m.turnDeadline  = null;
-    // Timer expired = forfeit. Bot matches use a separate timer and always act
-    // well within the window, so this only fires for humans.
-    if (!m.isBotMatch) {
-      const opponent = matchPlayers(m).find(p => p.playerId !== pid);
-      endMatch(m, opponent?.playerId ?? pid);
-    }
+    const opponent = matchPlayers(m).find(p => p.playerId !== pid);
+    endMatch(m, opponent?.playerId ?? pid);
   }, cfg.turn_seconds * 1000);
 }
 

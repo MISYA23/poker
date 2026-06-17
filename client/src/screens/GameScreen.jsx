@@ -901,7 +901,7 @@ export default function GameScreen({ navigation }) {
               opacity: flightOpacity,
               transform: [{ translateY: flightY }],
             }]}>
-              <ChipStack amount={flightAmount} size={45} />
+              <ChipStack amount={flightAmount} size={33} />
             </Animated.View>
           )}
 
@@ -912,7 +912,7 @@ export default function GameScreen({ navigation }) {
               opacity: forfeitFlightOpacity,
               transform: [{ translateY: forfeitFlightY }],
             }]}>
-              <ChipStack amount={forfeitReveal.loserChips || 0} size={45} />
+              <ChipStack amount={forfeitReveal.loserChips || 0} size={33} />
             </Animated.View>
           )}
 
