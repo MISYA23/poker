@@ -729,7 +729,7 @@ export default function GameScreen({ navigation }) {
   // Pot-to-winner banana flight
   const flightY       = useRef(new Animated.Value(0)).current;
   const flightOpacity = useRef(new Animated.Value(0)).current;
-  const flightScale   = useRef(new Animated.Value(1)).current;
+
   const [flightAmount, setFlightAmount] = useState(0);
   useEffect(() => {
     if (!showWinners || !gameState?.winners?.length) {
@@ -740,7 +740,7 @@ export default function GameScreen({ navigation }) {
     const dir = winner.playerId === bottomId ? 1 : -1;
     setFlightAmount(winner.amount || 0);
     flightY.setValue(0);
-    flightScale.setValue(1);
+
     flightOpacity.setValue(1);
     Animated.parallel([
       Animated.timing(flightY, {
@@ -748,10 +748,6 @@ export default function GameScreen({ navigation }) {
         easing: Easing.bezier(0.25, 0.46, 0.45, 0.94),
         useNativeDriver: true,
       }),
-      Animated.sequence([
-        Animated.timing(flightScale, { toValue: 1.2, duration: 700, useNativeDriver: true }),
-        Animated.timing(flightScale, { toValue: 1,   duration: 200, useNativeDriver: true }),
-      ]),
       Animated.sequence([
         Animated.delay(700),
         Animated.timing(flightOpacity, { toValue: 0, duration: 200, useNativeDriver: true }),
@@ -909,7 +905,7 @@ export default function GameScreen({ navigation }) {
           {flightAmount > 0 && (
             <Animated.View pointerEvents="none" style={[s.winFlight, { top: POT_T - 14,
               opacity: flightOpacity,
-              transform: [{ translateY: flightY }, { scale: flightScale }],
+              transform: [{ translateY: flightY }],
             }]}>
               <ChipStack amount={flightAmount} size={45} />
             </Animated.View>
