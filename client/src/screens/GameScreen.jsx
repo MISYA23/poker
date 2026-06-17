@@ -9,6 +9,7 @@ import { GameContext } from '../context/GameContext';
 import Card from '../components/Card';
 import Avatar from '../components/Avatar';
 import { ChipStack } from '../components/PokerChip';
+import { calcEquity } from '../utils/equity';
 import BettingControls from '../components/BettingControls';
 import PreviousHandDialog from '../components/PreviousHandDialog';
 import SoundButton from '../components/SoundButton';
@@ -648,6 +649,23 @@ export default function GameScreen({ navigation }) {
     return () => clearInterval(id);
   }, [myDeadline]);
 
+  // All-in equity — run Monte Carlo when both hands are visible during a showdown runout.
+  // Recalculates per street (revealedCC), treating the whole flop as one deal.
+  const [allInEquity, setAllInEquity] = useState(null); // { me: 0-100, opp: 0-100 } | null
+  useEffect(() => {
+    if (!isShowdown) { setAllInEquity(null); return; }
+    const anyAllIn = gameState?.players?.some(p => p.allIn);
+    if (!anyAllIn) { setAllInEquity(null); return; }
+    const meP  = gameState?.players?.find(p => p.id === (observing ? gameState.players[0]?.id : myId));
+    const oppP = gameState?.players?.find(p => p.id !== (observing ? gameState.players[0]?.id : myId));
+    const h1 = meP?.holeCards;
+    const h2 = oppP?.holeCards;
+    if (!h1?.length || !h2?.length || h1[0]?.hidden || h2[0]?.hidden) { setAllInEquity(null); return; }
+    const board = (gameState?.communityCards || []).slice(0, revealedCC);
+    const meEq = calcEquity(h1, h2, board);
+    setAllInEquity({ me: meEq, opp: 100 - meEq });
+  }, [isShowdown, revealedCC]);
+
   const [winDone, setWinDone] = useState(false);
   useEffect(() => {
     if (!showWinners) { setWinDone(false); return; }
@@ -845,7 +863,7 @@ export default function GameScreen({ navigation }) {
           <View style={[s.betSlot, { top: OPP_BET_T }]} pointerEvents="none">
             {(oppBetShown > 0 || opponent?.allIn) && (
               <Animated.View style={[s.betPill, collecting && oppCollectStyle]}>
-                {opponent?.allIn && <Text style={s.allInTag}>ALL IN</Text>}
+                {opponent?.allIn && <Text style={s.allInTag}>{allInEquity ? `ALL IN: ${allInEquity.opp}%` : 'ALL IN'}</Text>}
                 {oppBetShown > 0 && <ChipStack amount={oppBetShown} size={33} />}
                 {oppBetShown > 0 && <Text style={s.betAmt}>{oppBetShown.toLocaleString()}</Text>}
               </Animated.View>
@@ -876,7 +894,7 @@ export default function GameScreen({ navigation }) {
           <View style={[s.betSlot, { top: MY_BET_BASE - MY_BET_SLOT_H, height: MY_BET_SLOT_H, left: MY_BET_L, justifyContent: 'flex-end' }]} pointerEvents="none">
             {(myBetShown > 0 || me?.allIn) && (
               <Animated.View style={[s.betPill, collecting && myCollectStyle]}>
-                {me?.allIn && <Text style={s.allInTag}>ALL IN</Text>}
+                {me?.allIn && <Text style={s.allInTag}>{allInEquity ? `ALL IN: ${allInEquity.me}%` : 'ALL IN'}</Text>}
                 {myBetShown > 0 && <ChipStack amount={myBetShown} size={33} />}
                 {myBetShown > 0 && <Text style={s.betAmt}>{myBetShown.toLocaleString()}</Text>}
               </Animated.View>
