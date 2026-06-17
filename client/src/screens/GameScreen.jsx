@@ -382,7 +382,7 @@ function PlayerPod({ player, isMe, observing, turnDeadline, turnDurationMs, last
 export default function GameScreen({ navigation }) {
   const {
     gameState, transition, myId, onAction, onLeave, onRematch, onLogout,
-    matchOver, navigationRef, deckStyle, playerInfo, onHandEndAnimDone,
+    matchOver, navigationRef, deckStyle, playerInfo, onHandEndAnimDone, onStreetRevealDone,
     handEventsRef, bustReveal = null, forfeitReveal = null, uiConfig = {},
   } = useContext(GameContext);
 
@@ -560,6 +560,16 @@ export default function GameScreen({ navigation }) {
     }
     return () => timers.forEach(clearTimeout);
   }, [targetCC, isShowdown, collecting]);
+
+  // Bot matches only: once a mid-hand street (flop/turn/river) has fully revealed,
+  // tell App the reveal is done so it can release the bot's buffered next action.
+  // Idempotent on App's side, so firing in the steady state between deals is a no-op.
+  const isBotMatch = !!gameState?.isBotMatch;
+  useEffect(() => {
+    if (isBotMatch && !isShowdown && !collecting && targetCC > 0 && revealedCC >= targetCC) {
+      onStreetRevealDone?.();
+    }
+  }, [isBotMatch, isShowdown, collecting, targetCC, revealedCC, onStreetRevealDone]);
 
   const isHandEnded = transition?.type === 'HAND_ENDED';
 

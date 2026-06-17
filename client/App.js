@@ -14,7 +14,7 @@ import { clearUser } from './src/utils/user';
 import { track, trackScreen } from './src/utils/analytics';
 import { SERVER_URL } from './src/config';
 import { startMusic, setMusicContext, loadMusicConfig } from './src/audio/music';
-import { HAND_END_MAX_MS, DEAL_LOCK_MS, BUST_REVEAL_MS, FORFEIT_REVEAL_MS, MATCH_OVER_FALLBACK_MS } from './src/timings';
+import { HAND_END_MAX_MS, DEAL_LOCK_MS, STREET_DEAL_MAX_MS, BUST_REVEAL_MS, FORFEIT_REVEAL_MS, MATCH_OVER_FALLBACK_MS } from './src/timings';
 import { recordHumanAction, recordAnimEnd, getBotDelay } from './src/utils/botGate';
 import MatchFlowOverlays from './src/components/MatchFlowOverlays';
 import LoginScreen   from './src/screens/LoginScreen';
@@ -92,6 +92,10 @@ function App() {
   const matchOverPendingRef = useRef(null); // queued match-over to apply when the hand-end animation finishes
   const dealLockRef        = useRef(null); // bot-match only: blocks bot actions during deal anim
   const dealPendingRef     = useRef(null); // queued game-state to apply when deal lock releases
+  const streetDealLockRef  = useRef(null); // bot-match only: holds the safety-cap timer while a flop/turn/river reveal plays
+  const streetDealPendingRef = useRef(null); // bot-match only: queued bot action to apply when the street reveal finishes
+  const releaseStreetDealRef = useRef(null); // bot-match only: set while locked; GameScreen calls this when the reveal ends
+  const boardLenRef        = useRef(0);    // length of the community board in the last applied state (detects street deals)
   const handNumberRef      = useRef(0);    // tracks current hand number to detect new hands
   const [route, setRoute] = useState('Login');   // current screen (gates music start)
 
@@ -206,6 +210,10 @@ function App() {
       matchOverPendingRef.current = null;
       if (dealLockRef.current) { clearTimeout(dealLockRef.current); dealLockRef.current = null; }
       dealPendingRef.current = null;
+      if (streetDealLockRef.current) { clearTimeout(streetDealLockRef.current); streetDealLockRef.current = null; }
+      streetDealPendingRef.current = null;
+      releaseStreetDealRef.current = null;
+      boardLenRef.current = 0;
       handNumberRef.current = 0;
       bustRevealRef.current = null;
       forfeitRevealRef.current = null;
@@ -241,6 +249,7 @@ function App() {
       const apply = (t, state) => {
         setTransition(t || null);
         setGameState(state);
+        boardLenRef.current = state?.communityCards?.length ?? 0;
         if (state.atTable && !state.gameOver) setMatchOver(null);
         const belongsToUs = state.matchId === matchIdRef.current;
         if (belongsToUs && state.atTable && !foundDelayRef.current) {
@@ -255,6 +264,14 @@ function App() {
         // Bot-match deal lock: buffer any state that arrives while the deal animation plays
         if (dealLockRef.current) {
           dealPendingRef.current = { t, state };
+          return;
+        }
+        // Bot-match street-deal lock: while a flop/turn/river reveal animation is
+        // playing, hold the bot's NEXT action so it can't bet/check over the deal.
+        // Only the bot's own action is held — human actions are never gated.
+        if (streetDealLockRef.current && state.isBotMatch
+            && t?.type === 'ACTION' && t.playerId !== playerIdRef.current) {
+          streetDealPendingRef.current = { t, state };
           return;
         }
         if (t?.type === 'HAND_ENDED' && !state.gameOver) {
@@ -303,6 +320,35 @@ function App() {
           return;
         }
         if (state.handNumber) handNumberRef.current = state.handNumber;
+        // Bot-match only: a board-growing state means a street (flop/turn/river)
+        // was just dealt. Open a street-deal lock so the bot's NEXT action is
+        // buffered (above) until GameScreen's reveal animation finishes and calls
+        // onStreetRevealDone. The board-growing state itself still respects the bot
+        // gate if it was the bot's own street-closing action, so that isn't regressed.
+        const boardGrew = (state.communityCards?.length || 0) > boardLenRef.current;
+        if (state.isBotMatch && !state.gameOver && state.phase !== 'showdown' && boardGrew) {
+          boardLenRef.current = state.communityCards?.length || 0;
+          const release = () => {
+            if (!streetDealLockRef.current) return;
+            clearTimeout(streetDealLockRef.current);
+            streetDealLockRef.current = null;
+            releaseStreetDealRef.current = null;
+            recordAnimEnd(); // 500ms bot gate after the reveal completes
+            const pending = streetDealPendingRef.current;
+            streetDealPendingRef.current = null;
+            // Route back through processState (not a bare apply) so a buffered
+            // bot action that itself closes a street re-arms the lock, and so the
+            // getBotDelay gate from recordAnimEnd() above is honored.
+            if (pending) processState(pending.t, pending.state);
+          };
+          releaseStreetDealRef.current = release;
+          streetDealLockRef.current = setTimeout(release, STREET_DEAL_MAX_MS);
+          const isBotAct = t?.type === 'ACTION' && t.playerId !== playerIdRef.current;
+          const d = isBotAct ? getBotDelay() : 0;
+          if (d > 0) setTimeout(() => apply(t, state), d);
+          else apply(t, state);
+          return;
+        }
         // Bot-match only: delay the bot's response until the gate clears.
         // Human-to-human states (t.playerId === ours, or no transition) skip this entirely.
         if (state.isBotMatch && t?.type === 'ACTION' && t.playerId !== playerIdRef.current) {
@@ -360,6 +406,10 @@ function App() {
       matchOverPendingRef.current = null;
       if (dealLockRef.current) { clearTimeout(dealLockRef.current); dealLockRef.current = null; }
       dealPendingRef.current = null;
+      if (streetDealLockRef.current) { clearTimeout(streetDealLockRef.current); streetDealLockRef.current = null; }
+      streetDealPendingRef.current = null;
+      releaseStreetDealRef.current = null;
+      boardLenRef.current = 0;
       handNumberRef.current = 0;
       setGameState(null);
       setInQueue(false); setMatchOver(null);
@@ -517,6 +567,12 @@ function App() {
     releaseHandEndRef.current?.();
   }, []);
 
+  // GameScreen (bot matches only) calls this when a flop/turn/river reveal
+  // animation has fully finished, releasing the bot's buffered next action.
+  const onStreetRevealDone = useCallback(() => {
+    releaseStreetDealRef.current?.();
+  }, []);
+
   const onRematch = useCallback((vote) => {
     emit('rematch-vote', { vote });
     if (vote) {
@@ -534,9 +590,9 @@ function App() {
     gameState, transition, myId, matchOver, handEventsRef,
     playerInfo, deckStyle, setDeckStyle, uiConfig, bustReveal, forfeitReveal,
     emit, onLogin, onLogout, onUpdateProfile,
-    onAction, onLeave, onRematch, onHandEndAnimDone, navigationRef,
+    onAction, onLeave, onRematch, onHandEndAnimDone, onStreetRevealDone, navigationRef,
   }), [gameState, transition, myId, matchOver, playerInfo, deckStyle, uiConfig, bustReveal, forfeitReveal,
-       emit, onLogin, onLogout, onUpdateProfile, onAction, onLeave, onRematch, onHandEndAnimDone]);
+       emit, onLogin, onLogout, onUpdateProfile, onAction, onLeave, onRematch, onHandEndAnimDone, onStreetRevealDone]);
 
   // Lobby context — fast-churning lobby data + lobby-only actions
   const lobbyValue = useMemo(() => ({
