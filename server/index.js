@@ -889,10 +889,16 @@ io.on('connection', (socket) => {
     refreshBroadcasts();
   });
 
-  socket.on('enter-lobby', async ({ playerId, timezone } = {}) => {
+  socket.on('enter-lobby', async ({ playerId, timezone, referrer } = {}) => {
     if (playerId) {
       await bindIdentity(socket, playerId);
       if (timezone) db.query('UPDATE players SET timezone=$1 WHERE id=$2', [timezone, playerId]).catch(() => {});
+      if (referrer && typeof referrer === 'string' && referrer.startsWith('raf_')) {
+        db.query(
+          `INSERT INTO acquisition (uuid, first_visit_referrer) VALUES ($1, $2) ON CONFLICT (uuid) DO NOTHING`,
+          [playerId, referrer]
+        ).catch(e => console.error('[acquisition] insert failed:', e.message));
+      }
 
       // Safety reconciliation for navigation races (e.g. a web refresh that boots
       // straight into the Lobby) where enter-lobby fires while this identity still
@@ -3091,6 +3097,21 @@ async function runAchievementsMigration() {
   }
 }
 
+async function ensureAcquisitionTable() {
+  try {
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS acquisition (
+        uuid                  TEXT PRIMARY KEY REFERENCES players(id),
+        first_visit_referrer  TEXT NOT NULL,
+        created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+    console.log('[acquisition] migration ok');
+  } catch (e) {
+    console.error('[acquisition] migration failed:', e.message);
+  }
+}
+
 async function start() {
   await redis.connect().catch(e => console.error('[redis] connect failed:', e.message));
   await ensureFeedbackTable();
@@ -3101,6 +3122,7 @@ async function start() {
   validAvatars = await initAvatars();
   await initBots();
   await runAchievementsMigration();
+  await ensureAcquisitionTable();
   achiever = initAchievements(db, io, socketPlayers);
   server.listen(PORT, () => console.log(`Poker server on port ${PORT}`));
 }

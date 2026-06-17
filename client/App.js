@@ -1,6 +1,7 @@
 import 'react-native-gesture-handler';
 import { Sentry, initSentry } from './src/sentry';
 import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
+import { Platform } from 'react-native';
 import { NavigationContainer, useNavigationContainerRef } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -11,6 +12,7 @@ import { GameContext } from './src/context/GameContext';
 import { LobbyContext } from './src/context/LobbyContext';
 import { useSocket } from './src/hooks/useSocket';
 import { clearUser } from './src/utils/user';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { track, trackScreen } from './src/utils/analytics';
 import { SERVER_URL } from './src/config';
 import { startMusic, setMusicContext, loadMusicConfig, setMusicMuted } from './src/audio/music';
@@ -91,6 +93,15 @@ function App() {
   const releaseHandEndRef  = useRef(null); // set while locked; the client animation calls this to release
   const matchOverPendingRef = useRef(null); // queued match-over to apply when the hand-end animation finishes
   const [route, setRoute] = useState('Login');   // current screen (gates music start)
+
+  // Capture ?ref= from the URL on first load (web only) and persist it so it
+  // survives OAuth redirects. Sent to the server on first enter-lobby.
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+    const params = new URLSearchParams(window.location.search);
+    const ref = params.get('ref');
+    if (ref) AsyncStorage.setItem('referrer', ref).catch(() => {});
+  }, []);
 
   const setSearch = useCallback((v) => { searchRef.current = v; setSearchOverlay(v); }, []);
   const clearBotOfferTimer = useCallback(() => {
@@ -327,7 +338,9 @@ function App() {
     setMyId(playerId);
     setPlayerInfo({ name, avatarId, playerId });
     setError(null);
-    emit('enter-lobby', { playerId });
+    AsyncStorage.getItem('referrer').then(referrer => {
+      emit('enter-lobby', { playerId, referrer: referrer || undefined });
+    }).catch(() => emit('enter-lobby', { playerId }));
     // Fetch profile + pending friend request count on login
     fetch(`${SERVER_URL}/api/player/${playerId}/profile`)
       .then(r => r.json())

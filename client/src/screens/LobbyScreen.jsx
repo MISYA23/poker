@@ -13,10 +13,7 @@ import SoundButton from '../components/SoundButton';
 import AchievementGallery from '../components/AchievementGallery';
 import { ACHIEVEMENTS, mergeAchievements } from '../data/achievements';
 
-// Always share the public URL — anyone who taps it can play in the browser
-// immediately. ?via= is inert for now; reserved for attribution / a future
-// auto-challenge on arrival.
-const INVITE_URL = 'https://pokermonkey.app';
+const INVITE_BASE = 'https://pokermonkey.app';
 
 // One "Looking to play" row. States, in priority order:
 //   incoming — they challenged me        → green, Accept
@@ -97,7 +94,7 @@ export default function LobbyScreen({ navigation }) {
   // browsers), otherwise copy the link and confirm inline.
   const shareInvite = async () => {
     track('InviteFriends');
-    const url = `${INVITE_URL}/?via=${encodeURIComponent(myPlayerId || '')}`;
+    const url = `${INVITE_BASE}/?ref=raf_${encodeURIComponent(myPlayerId || '')}`;
     const message = `Play me heads-up at Poker Monkey 🐵 ${url}`;
     try {
       if (Platform.OS === 'web') {
