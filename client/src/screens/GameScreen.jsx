@@ -818,7 +818,7 @@ export default function GameScreen({ navigation }) {
           Anchored to the device, NOT the stage scale — on screens taller/wider
           than the stage it covers the leftover margins (cover crops, never
           stretches or letterboxes). */}
-      <Image source={AMBIENT_BG} style={s.ambientBg} resizeMode="cover" pointerEvents="none" />
+      <Image source={AMBIENT_BG} style={s.ambientBg} resizeMode="cover" pointerEvents="none" renderToHardwareTextureAndroid={true} />
 
       {/* Group A — stage: scaled to content area only (below top bar, above action buttons) */}
       <View style={[s.stageOuter, { top: stageTop, bottom: stageBotOffset }]} pointerEvents="none">
