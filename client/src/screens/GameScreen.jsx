@@ -522,6 +522,7 @@ export default function GameScreen({ navigation }) {
     handEventsRef.current = null; // each batch animates at most once
     const rows = batch.rows || [];
     if (!rows.some(r => ['deal_board', 'showdown', 'hand_end'].includes(r.type))) return;
+    if (rows.some(r => r.type === 'hand_end' && r.data?.endedBy === 'fold')) return; // fold: skip collect, bets vanish instantly
     if (!prev || prev.matchId !== gameState.matchId || prev.handNumber !== gameState.handNumber) return;
     // Final piles = what was already on the felt + what the closing action added
     const bets = {};

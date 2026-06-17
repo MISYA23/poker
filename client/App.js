@@ -13,7 +13,8 @@ import { useSocket } from './src/hooks/useSocket';
 import { clearUser } from './src/utils/user';
 import { track, trackScreen } from './src/utils/analytics';
 import { SERVER_URL } from './src/config';
-import { startMusic, setMusicContext, loadMusicConfig } from './src/audio/music';
+import { startMusic, setMusicContext, loadMusicConfig, setMusicMuted } from './src/audio/music';
+import { setSfxEnabled } from './src/audio/sfx';
 import { HAND_END_MAX_MS, BUST_REVEAL_MS, FORFEIT_REVEAL_MS, MATCH_OVER_FALLBACK_MS } from './src/timings';
 import MatchFlowOverlays from './src/components/MatchFlowOverlays';
 import LoginScreen   from './src/screens/LoginScreen';
@@ -330,7 +331,12 @@ function App() {
     // Fetch profile + pending friend request count on login
     fetch(`${SERVER_URL}/api/player/${playerId}/profile`)
       .then(r => r.json())
-      .then(d => { setMyRecentMatches(d.history?.slice(0, 3) || []); if (d.stats?.elo) setMyElo(d.stats.elo); })
+      .then(d => {
+        setMyRecentMatches(d.history?.slice(0, 3) || []);
+        if (d.stats?.elo) setMyElo(d.stats.elo);
+        if (typeof d.musicEnabled === 'boolean') setMusicMuted(!d.musicEnabled);
+        if (typeof d.sfxEnabled  === 'boolean') setSfxEnabled(d.sfxEnabled);
+      })
       .catch(() => {});
     fetch(`${SERVER_URL}/api/friends/${playerId}`)
       .then(r => r.json())
