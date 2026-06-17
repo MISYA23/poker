@@ -91,7 +91,7 @@ function App() {
   const releaseHandEndRef  = useRef(null); // set while locked; the client animation calls this to release
   const matchOverPendingRef = useRef(null); // queued match-over to apply when the hand-end animation finishes
   const dealLockRef        = useRef(null); // bot-match only: blocks bot actions during deal anim
-  const dealPendingRef     = useRef(null); // queued game-state to apply when deal lock releases
+  const dealPendingRef     = useRef([]);   // queue of game-states to replay (in order) when deal lock releases
   const streetDealLockRef  = useRef(null); // bot-match only: holds the safety-cap timer while a flop/turn/river reveal plays
   const streetDealPendingRef = useRef(null); // bot-match only: queued bot action to apply when the street reveal finishes
   const releaseStreetDealRef = useRef(null); // bot-match only: set while locked; GameScreen calls this when the reveal ends
@@ -209,7 +209,7 @@ function App() {
       releaseHandEndRef.current = null;
       matchOverPendingRef.current = null;
       if (dealLockRef.current) { clearTimeout(dealLockRef.current); dealLockRef.current = null; }
-      dealPendingRef.current = null;
+      dealPendingRef.current = [];
       if (streetDealLockRef.current) { clearTimeout(streetDealLockRef.current); streetDealLockRef.current = null; }
       streetDealPendingRef.current = null;
       releaseStreetDealRef.current = null;
@@ -263,7 +263,7 @@ function App() {
       const processState = (t, state) => {
         // Bot-match deal lock: buffer any state that arrives while the deal animation plays
         if (dealLockRef.current) {
-          dealPendingRef.current = { t, state };
+          dealPendingRef.current.push({ t, state });
           return;
         }
         // Bot-match street-deal lock: while a flop/turn/river reveal animation is
@@ -309,13 +309,12 @@ function App() {
           dealLockRef.current = setTimeout(() => {
             dealLockRef.current = null;
             recordAnimEnd(); // bot-gate: deal animation just ended
-            const pending = dealPendingRef.current;
-            dealPendingRef.current = null;
-            if (pending) {
-              const d = getBotDelay();
-              if (d > 0) setTimeout(() => apply(pending.t, pending.state), d);
-              else apply(pending.t, pending.state);
-            }
+            const queue = dealPendingRef.current;
+            dealPendingRef.current = [];
+            // Replay queued states in arrival order through processState so that
+            // board-growing states (flop/turn/river) open the street-deal lock
+            // before any subsequent bot action is processed.
+            for (const { t: qt, state: qs } of queue) processState(qt, qs);
           }, DEAL_LOCK_MS);
           return;
         }
@@ -405,7 +404,7 @@ function App() {
       releaseHandEndRef.current = null;
       matchOverPendingRef.current = null;
       if (dealLockRef.current) { clearTimeout(dealLockRef.current); dealLockRef.current = null; }
-      dealPendingRef.current = null;
+      dealPendingRef.current = [];
       if (streetDealLockRef.current) { clearTimeout(streetDealLockRef.current); streetDealLockRef.current = null; }
       streetDealPendingRef.current = null;
       releaseStreetDealRef.current = null;
