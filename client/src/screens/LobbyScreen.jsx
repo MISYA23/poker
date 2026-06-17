@@ -167,13 +167,7 @@ export default function LobbyScreen({ navigation }) {
   // lobby. Challenging a bot id starts the match instantly server-side.
   const freeBot = (onlinePlayers || []).find(p => p.isBot && !p.inMatch) || null;
 
-  // Live now: human-vs-human matches only. If there are none, show just the
-  // match of the highest-ELO player currently playing (presumably vs a bot).
-  const maxElo = (m) => Math.max(m.player1Elo || 1200, m.player2Elo || 1200);
-  let liveRows = (matchList || []).filter(m => !m.isBotMatch);
-  if (!liveRows.length && matchList?.length) {
-    liveRows = [matchList.reduce((best, m) => (maxElo(m) > maxElo(best) ? m : best), matchList[0])];
-  }
+  const liveRows = (matchList || []).filter(m => !m.isBotMatch);
 
   const isIncoming = (id) => (incomingChallenges || []).some(c => c.fromId === id);
   const isIssued   = (id) => (outgoingChallenges || []).some(c => c.toId === id);
