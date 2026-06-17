@@ -1726,6 +1726,18 @@ function doReset() {
 app.get('/reset', (_, res) => { doReset(); res.json({ ok: true }); });
 app.post('/admin/reset', (_, res) => { doReset(); res.json({ ok: true }); });
 
+app.post('/admin/kick/:playerId', (req, res) => {
+  const { playerId } = req.params;
+  const kicked = [];
+  for (const [sid, sp] of socketPlayers.entries()) {
+    if (sp.playerId === playerId) {
+      io.sockets.sockets.get(sid)?.disconnect(true);
+      kicked.push(sid);
+    }
+  }
+  res.json({ ok: true, kicked });
+});
+
 // ── Admin UI ──────────────────────────────────────────────────────────────────
 
 app.get('/api/admin/players', async (_, res) => {
