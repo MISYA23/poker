@@ -8,6 +8,7 @@ import { LobbyContext } from '../context/LobbyContext';
 import { colors } from '../theme';
 import { SERVER_URL } from '../config';
 import { getUser, setUser } from '../utils/user';
+import { isMusicMuted, setMusicMuted } from '../audio/music';
 
 // Static image map — Metro requires these to be known at build time
 const AVATAR_IMAGES = {
@@ -48,6 +49,7 @@ export default function ProfileScreen({ navigation }) {
     AVATAR_IMAGES[playerInfo?.avatarId] ? playerInfo.avatarId : 'captain'
   );
   const [saving, setSaving]     = useState(false);
+  const [musicOn, setMusicOn]   = useState(!isMusicMuted());
   const [history, setHistory]   = useState(null);
   const [loadingHistory, setLoadingHistory] = useState(true);
 
@@ -70,7 +72,13 @@ export default function ProfileScreen({ navigation }) {
     if (!playerInfo?.playerId) return;
     fetch(`${SERVER_URL}/api/player/${playerInfo.playerId}/profile`)
       .then(r => r.json())
-      .then(data => setHistory(data.history || []))
+      .then(data => {
+        setHistory(data.history || []);
+        if (typeof data.musicEnabled === 'boolean') {
+          setMusicOn(data.musicEnabled);
+          setMusicMuted(!data.musicEnabled);
+        }
+      })
       .catch(() => setHistory([]))
       .finally(() => setLoadingHistory(false));
   }, [playerInfo?.playerId]);
@@ -84,9 +92,10 @@ export default function ProfileScreen({ navigation }) {
       fetch(`${SERVER_URL}/api/player/${playerInfo.playerId}/profile`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ displayName: trimmed, avatarId }),
+        body: JSON.stringify({ displayName: trimmed, avatarId, musicEnabled: musicOn }),
       }),
     ]);
+    setMusicMuted(!musicOn);
     onUpdateProfile(trimmed, avatarId);
     setSaving(false);
     navigation.goBack();
@@ -141,6 +150,12 @@ export default function ProfileScreen({ navigation }) {
             <Text style={s.toggleLbl}>4-Color Deck</Text>
             <View style={[s.toggleTrack, deckStyle === 'four-color' && s.toggleOn]}>
               <View style={[s.toggleThumb, deckStyle === 'four-color' && s.toggleThumbOn]} />
+            </View>
+          </Pressable>
+          <Pressable style={s.toggle} onPress={() => setMusicOn(v => !v)}>
+            <Text style={s.toggleLbl}>Music</Text>
+            <View style={[s.toggleTrack, musicOn && s.toggleOn]}>
+              <View style={[s.toggleThumb, musicOn && s.toggleThumbOn]} />
             </View>
           </Pressable>
         </View>

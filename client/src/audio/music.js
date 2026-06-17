@@ -20,7 +20,7 @@ const DEFAULT_GAME = ['fun-caribbean'];
 const keysToAssets = (keys) =>
   (keys || []).map(k => TRACK_ASSETS[k]).filter(Boolean);
 
-const MAX_VOL = 0.22;    // overall music volume (0..1) — kept under the SFX so they cut through
+const MAX_VOL = 0.15;    // overall music volume (0..1) — kept under the SFX so they cut through
 const FADE_MS = 1000;    // crossfade duration
 
 // Mutable state lives on globalThis so it survives Metro Fast Refresh — otherwise a
@@ -33,7 +33,7 @@ const S = (globalThis.__pmMusic = globalThis.__pmMusic || {
   },
   active: null,          // 'menu' | 'game' | null
   started: false,
-  muted: true,
+  muted: false,
 });
 
 function buildPlayer(c) {

@@ -357,7 +357,7 @@ const s = StyleSheet.create({
   rowMe: { backgroundColor: 'rgba(240,192,64,0.08)' },
 
   // Column layout (shared by header + rows)
-  colRank:   { width: 22, textAlign: 'center' },
+  colRank:   { width: 38, textAlign: 'center' },
   colPlayer: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10 },
   colElo:    { width: 48, textAlign: 'center' },
   colRec:    { width: 66, textAlign: 'center' },

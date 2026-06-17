@@ -1290,7 +1290,7 @@ io.on('connection', (socket) => {
 app.put('/api/player/:playerId/profile', async (req, res) => {
   try {
     const { playerId } = req.params;
-    const { displayName, avatarId } = req.body;
+    const { displayName, avatarId, musicEnabled } = req.body;
     if (!displayName || typeof displayName !== 'string') return res.status(400).json({ error: 'displayName required' });
     const safeName   = displayName.trim().slice(0, 20);
     const safeAvatar = validAvatars.includes(avatarId) ? avatarId : null;
@@ -1298,6 +1298,7 @@ app.put('/api/player/:playerId/profile', async (req, res) => {
     const sets  = ['display_name=$2'];
     const vals  = [playerId, safeName];
     if (safeAvatar) { sets.push(`avatar_id=$${vals.length + 1}`); vals.push(safeAvatar); }
+    if (typeof musicEnabled === 'boolean') { sets.push(`music_enabled=$${vals.length + 1}`); vals.push(musicEnabled); }
     await db.query(`UPDATE players SET ${sets.join(', ')} WHERE id=$1`, vals);
 
     // Refresh any connected socket's cached profile
@@ -1317,7 +1318,7 @@ app.get('/api/player/:playerId/profile', async (req, res) => {
 
     const [statsRes, playerRes, histRes] = await Promise.all([
       db.query('SELECT elo, matches_played, matches_won FROM player_stats WHERE player_id=$1', [playerId]),
-      db.query('SELECT avatar_id, display_name FROM players WHERE id=$1', [playerId]),
+      db.query('SELECT avatar_id, display_name, music_enabled FROM players WHERE id=$1', [playerId]),
       db.query(
         `SELECT m.uuid, m.started_at,
           CASE WHEN m.player1_id=$1 THEN m.player2_id ELSE m.player1_id END AS opponent_id,
@@ -1340,8 +1341,9 @@ app.get('/api/player/:playerId/profile', async (req, res) => {
     }
 
     res.json({
-      avatarId:    playerRes.rows[0]?.avatar_id || 'captain',
-      displayName: playerRes.rows[0]?.display_name,
+      avatarId:     playerRes.rows[0]?.avatar_id || 'captain',
+      displayName:  playerRes.rows[0]?.display_name,
+      musicEnabled: playerRes.rows[0]?.music_enabled ?? true,
       stats: statsRes.rows[0] || { elo: 1200, matches_played: 0, matches_won: 0 },
       history: histRes.rows.map(r => ({
         matchId:      r.uuid,
@@ -3071,6 +3073,7 @@ async function runAchievementsMigration() {
       )
     `);
     await db.query(`ALTER TABLE players ADD COLUMN IF NOT EXISTS timezone TEXT`);
+    await db.query(`ALTER TABLE players ADD COLUMN IF NOT EXISTS music_enabled BOOLEAN NOT NULL DEFAULT true`);
     console.log('[achievements] migration ok');
   } catch (e) {
     console.error('[achievements] migration failed:', e.message);
