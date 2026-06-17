@@ -893,7 +893,7 @@ io.on('connection', (socket) => {
     if (playerId) {
       await bindIdentity(socket, playerId);
       if (timezone) db.query('UPDATE players SET timezone=$1 WHERE id=$2', [timezone, playerId]).catch(() => {});
-      if (referrer && typeof referrer === 'string' && referrer.startsWith('raf_')) {
+      if (referrer && typeof referrer === 'string') {
         db.query(
           `INSERT INTO acquisition (uuid, first_visit_referrer) VALUES ($1, $2) ON CONFLICT (uuid) DO NOTHING`,
           [playerId, referrer]

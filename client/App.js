@@ -99,7 +99,7 @@ function App() {
   useEffect(() => {
     if (Platform.OS !== 'web') return;
     const params = new URLSearchParams(window.location.search);
-    const ref = params.get('ref');
+    const ref = params.get('ref') || window.location.search.slice(1) || null;
     if (ref) AsyncStorage.setItem('referrer', ref).catch(() => {});
   }, []);
 
