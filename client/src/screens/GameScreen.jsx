@@ -818,7 +818,7 @@ export default function GameScreen({ navigation }) {
           Anchored to the device, NOT the stage scale — on screens taller/wider
           than the stage it covers the leftover margins (cover crops, never
           stretches or letterboxes). */}
-      <Image source={AMBIENT_BG} style={s.ambientBg} resizeMode="cover" pointerEvents="none" renderToHardwareTextureAndroid={true} />
+      <Image source={AMBIENT_BG} style={s.ambientBg} resizeMode="cover" pointerEvents="none" />
 
       {/* Group A — stage: scaled to content area only (below top bar, above action buttons) */}
       <View style={[s.stageOuter, { top: stageTop, bottom: stageBotOffset }]} pointerEvents="none">
@@ -1202,7 +1202,7 @@ const s = StyleSheet.create({
 
   // Layer 0 — ambient bg, full opacity (no scrim — game elements carry their
   // own opaque pills/plates)
-  ambientBg: { ...StyleSheet.absoluteFillObject, width: '100%', height: '100%' },
+  ambientBg: { ...StyleSheet.absoluteFillObject, width: '100%', height: '100%', backfaceVisibility: 'hidden' },
 
   // Group A: stage container fills screen, centers the scaled canvas
   stageOuter: {
