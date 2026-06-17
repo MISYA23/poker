@@ -665,7 +665,10 @@ export default function GameScreen({ navigation }) {
   const fullDealerAnimating = dealerAnimating || collecting;
 
   // Bot trigger — fires 1000ms after all animations clear on the bot's turn.
-  // botTurnRequestedRef prevents double-firing if multiple flags clear in sequence.
+  // botTurnRequestedRef is set only when the timer actually fires (not when arming it),
+  // so a cancelled timer (animations started) leaves it false and the next clear re-arms.
+  // It resets on isBotTurn→false (human's turn) and on every new street/hand so the bot
+  // can trigger again even when isBotTurn stays true across street boundaries.
   const botTurnRequestedRef = useRef(false);
   const isBotTurn = !!gameState?.isBotMatch && !!gameState?.botId
     && gameState?.currentPlayerId === gameState?.botId;
@@ -673,14 +676,20 @@ export default function GameScreen({ navigation }) {
     if (!isBotTurn) botTurnRequestedRef.current = false;
   }, [isBotTurn]);
   useEffect(() => {
+    // New street or new hand = new trigger window, even if isBotTurn never went false
+    botTurnRequestedRef.current = false;
+  }, [gameState?.phase, gameState?.handNumber]);
+  useEffect(() => {
     if (fullDealerAnimating) return;
     if (!isBotTurn) return;
     if (['waiting', 'showdown'].includes(gameState?.phase)) return;
     if (botTurnRequestedRef.current) return;
-    botTurnRequestedRef.current = true;
-    const t = setTimeout(() => onBotActionRequest?.(), 1000);
-    return () => clearTimeout(t);
-  }, [fullDealerAnimating, isBotTurn, gameState?.phase]);
+    const t = setTimeout(() => {
+      botTurnRequestedRef.current = true;
+      onBotActionRequest?.();
+    }, 1000);
+    return () => clearTimeout(t); // cancelled timer leaves ref false so next clear re-arms
+  }, [fullDealerAnimating, isBotTurn, gameState?.phase, gameState?.handNumber]);
 
   const locked   = showWinners && !winDone;
   const winnerPot = gameState?.winners?.reduce((s, w) => s + (w.amount || 0), 0) || 0;
@@ -689,9 +698,13 @@ export default function GameScreen({ navigation }) {
   // pot label stays visible until the chip-flight animation completes.
   const dispPot  = animPot !== null ? animPot : (collecting ? collect.pot : (totalPot || winnerPot));
   const chipsFor = p => {
-    if (!locked) return p?.chips ?? 0;
-    const win = gameState?.winners?.find(w => w.playerId === p?.id);
-    return (p?.chips ?? 0) - (win?.amount ?? 0);
+    // From hand-end until chip flight completes, show pre-win chip counts so the
+    // all-in runout doesn't reveal who won via chip totals before the reveal animation.
+    if (isHandEnded && !winDone) {
+      const win = gameState?.winners?.find(w => w.playerId === p?.id);
+      if (win) return (p?.chips ?? 0) - (win?.amount ?? 0);
+    }
+    return p?.chips ?? 0;
   };
 
   // While collecting, pills show the final street bets and ride collectProg
