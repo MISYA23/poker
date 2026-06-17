@@ -1440,13 +1440,24 @@ app.post('/auth/google/exchange', async (req, res) => {
   res.json({ access_token: data.access_token });
 });
 
-app.get('/health', (_, res) => res.json({
-  ok: true,
-  matches: matches.size,
-  activeMatches: [...matches.values()].filter(m => !m.ended).map(m => ({
-    id: m.id, p1: m.p1?.playerName, p2: m.p2?.playerName, phase: m.game.phase,
-  })),
-}));
+app.get('/health', (_, res) => {
+  const seen = new Set();
+  const connected = [];
+  for (const sp of socketPlayers.values()) {
+    if (sp.playerName && !seen.has(sp.playerId)) {
+      seen.add(sp.playerId);
+      connected.push({ name: sp.playerName, id: sp.playerId, matchId: sp.matchId || null });
+    }
+  }
+  res.json({
+    ok: true,
+    matches: matches.size,
+    activeMatches: [...matches.values()].filter(m => !m.ended).map(m => ({
+      id: m.id, p1: m.p1?.playerName, p2: m.p2?.playerName, phase: m.game.phase,
+    })),
+    connected,
+  });
+});
 
 app.get('/api/matches', (_, res) => {
   res.json([...matches.values()].filter(m => !m.ended).map(m => ({
