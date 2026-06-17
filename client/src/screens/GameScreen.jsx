@@ -495,10 +495,6 @@ export default function GameScreen({ navigation }) {
   const meSittingOut  = me ? sittingOutIds.has(me.id) : false;
   const oppSittingOut = opponent ? sittingOutIds.has(opponent.id) : false;
 
-  const isMyTurn    = !observing && gameState?.currentPlayerId === myId && !['waiting','showdown'].includes(gameState?.phase);
-  const myDeadline  = (observing ? me?.isCurrentPlayer : isMyTurn) ? gameState?.turnDeadline : null;
-  const oppDeadline = opponent?.isCurrentPlayer ? gameState?.turnDeadline : null;
-
   // ── Street-close bet collection ─────────────────────────────────────────
   // Driven by the live hand-events stream (arrives just before the game-state
   // that reflects it). When a batch closes a street (deal_board / showdown /
@@ -543,6 +539,13 @@ export default function GameScreen({ navigation }) {
   const targetCC   = gameState?.communityCards?.length || 0;
   const isShowdown = gameState?.phase === 'showdown';
   const [revealedCC, setRevealedCC] = useState(0);
+
+  // Gate actions on all streets: buttons/bot are suppressed until every community
+  // card on the current street has finished animating in. Preflop is always open
+  // because targetCC === 0 → 0 >= 0 is true.
+  const isMyTurn    = !observing && gameState?.currentPlayerId === myId && !['waiting','showdown'].includes(gameState?.phase) && revealedCC >= targetCC;
+  const myDeadline  = (observing ? me?.isCurrentPlayer : isMyTurn) ? gameState?.turnDeadline : null;
+  const oppDeadline = opponent?.isCurrentPlayer ? gameState?.turnDeadline : null;
   useEffect(() => {
     if (targetCC === 0) { setRevealedCC(0); return; }
     if (collecting) return; // hold new cards until the bets finish sliding in
