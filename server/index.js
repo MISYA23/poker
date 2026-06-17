@@ -172,7 +172,7 @@ async function lookupCountry(ip) {
 // Always shown online in the lobby. Each has a fixed personality profile.
 
 const BOTS = {
-  bot_rickdeckard: { name: 'Rick Deckard', avatarId: 'cigar', country: null, isBot: true, profile: getProfile('tag') },
+  bot_rickdeckard: { name: 'Rick Deckard', avatarId: 'pirate', country: null, isBot: true, profile: getProfile('tag') },
   bot_hal:         { name: 'HAL 9000',     avatarId: 'queen', country: null, isBot: true, profile: getProfile('nit') },
   bot_johnny5:     { name: 'Johnny 5',     avatarId: 'cigar', country: null, isBot: true, profile: getProfile('maniac') },
 };
@@ -2849,7 +2849,7 @@ app.get('*', (req, res) => {
 });
 
 app.get('/api/avatars', async (_, res) => {
-  const { rows } = await db.query('SELECT avatar_id, display_name, image_key FROM avatars ORDER BY avatar_id');
+  const { rows } = await db.query('SELECT avatar_id, display_name, image_key FROM avatars WHERE NOT bot_only ORDER BY avatar_id');
   res.json(rows);
 });
 
@@ -2984,21 +2984,23 @@ async function initAvatars() {
       image_key    TEXT NOT NULL
     )
   `);
+  await db.query(`ALTER TABLE avatars ADD COLUMN IF NOT EXISTS bot_only BOOLEAN NOT NULL DEFAULT false`);
   const seeds = [
-    ['captain', 'Captain Flint', 'captain'],  // default
-    ['queen',   'Pearl',         'queen'],
-    ['banana',  'Banjo',         'banana'],
-    ['lemur',   'Skip',          'lemur'],
-    ['baboon',  'Mad Jack',      'baboon'],
-    ['sailor',  'Big Buck',      'sailor'],
-    ['cigar',   'Don Rumbo',     'cigar'],
-    ['parrot',  'Snitch',        'parrot'],
+    ['captain', 'Captain Flint', 'captain', false],  // default
+    ['queen',   'Pearl',         'queen',   false],
+    ['banana',  'Banjo',         'banana',  false],
+    ['lemur',   'Skip',          'lemur',   false],
+    ['baboon',  'Mad Jack',      'baboon',  false],
+    ['sailor',  'Big Buck',      'sailor',  false],
+    ['cigar',   'Don Rumbo',     'cigar',   false],
+    ['parrot',  'Snitch',        'parrot',  false],
+    ['pirate',  'Pirate',        'pirate',  true],
   ];
-  for (const [id, name, key] of seeds) {
+  for (const [id, name, key, botOnly] of seeds) {
     await db.query(
-      `INSERT INTO avatars (avatar_id, display_name, image_key) VALUES ($1, $2, $3)
-       ON CONFLICT (avatar_id) DO UPDATE SET display_name = EXCLUDED.display_name, image_key = EXCLUDED.image_key`,
-      [id, name, key]
+      `INSERT INTO avatars (avatar_id, display_name, image_key, bot_only) VALUES ($1, $2, $3, $4)
+       ON CONFLICT (avatar_id) DO UPDATE SET display_name = EXCLUDED.display_name, image_key = EXCLUDED.image_key, bot_only = EXCLUDED.bot_only`,
+      [id, name, key, botOnly]
     );
   }
   // Migrate any players with stale avatar_ids to the default ('captain')

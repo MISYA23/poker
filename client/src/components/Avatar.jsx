@@ -11,6 +11,7 @@ const AVATAR_IMAGES = {
   sailor: require('../../assets/sailor.png'),
   banana: require('../../assets/banana.png'),
   parrot: require('../../assets/parrot.png'),
+  pirate: require('../../assets/pirate.png'),
 };
 
 export default function Avatar({ size = 52, avatarId }) {
