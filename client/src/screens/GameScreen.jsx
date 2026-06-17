@@ -758,7 +758,6 @@ export default function GameScreen({ navigation }) {
   // Forfeit animation — chip countdown + flight from loser to winner
   const forfeitFlightY       = useRef(new Animated.Value(0)).current;
   const forfeitFlightOpacity = useRef(new Animated.Value(0)).current;
-  const forfeitFlightScale   = useRef(new Animated.Value(1)).current;
   const [forfeitChipDisplay, setForfeitChipDisplay] = useState(null);
   useEffect(() => {
     if (!forfeitReveal) {
@@ -782,17 +781,12 @@ export default function GameScreen({ navigation }) {
     }, 16);
     // Chip flight
     forfeitFlightY.setValue(0);
-    forfeitFlightScale.setValue(1);
     forfeitFlightOpacity.setValue(1);
     Animated.parallel([
       Animated.timing(forfeitFlightY, {
         toValue: travelY, duration: 1500,
         easing: Easing.bezier(0.25, 0.46, 0.45, 0.94), useNativeDriver: true,
       }),
-      Animated.sequence([
-        Animated.timing(forfeitFlightScale, { toValue: 1.3, duration: 1000, useNativeDriver: true }),
-        Animated.timing(forfeitFlightScale, { toValue: 1,   duration: 500,  useNativeDriver: true }),
-      ]),
       Animated.sequence([
         Animated.delay(1200),
         Animated.timing(forfeitFlightOpacity, { toValue: 0, duration: 300, useNativeDriver: true }),
@@ -916,7 +910,7 @@ export default function GameScreen({ navigation }) {
             <Animated.View pointerEvents="none" style={[s.winFlight, {
               top: forfeitReveal.loserId === bottomId ? MY_POD_T + POD_H / 2 : OPP_POD_T + POD_H / 2,
               opacity: forfeitFlightOpacity,
-              transform: [{ translateY: forfeitFlightY }, { scale: forfeitFlightScale }],
+              transform: [{ translateY: forfeitFlightY }],
             }]}>
               <ChipStack amount={forfeitReveal.loserChips || 0} size={45} />
             </Animated.View>
