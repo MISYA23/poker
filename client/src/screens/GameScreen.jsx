@@ -226,7 +226,7 @@ function TimerBar({ deadline, duration, isMe }) {
 // ─── HoleCards — independent Group A element (spec §5: playerCards / opponentCards)
 // Separated from PlayerPod so player and opponent cards anchor at their own
 // spec coordinates, independent of where the nameplates sit.
-function HoleCards({ player, isMe, deckStyle, onDealComplete }) {
+function HoleCards({ player, isMe, deckStyle, onDealComplete, handNumber }) {
   const hasCards = !!player?.holeCards?.length && !player?.folded;
 
   const dealTy0 = useRef(new Animated.Value(0)).current;
@@ -235,9 +235,15 @@ function HoleCards({ player, isMe, deckStyle, onDealComplete }) {
   const dealSc1 = useRef(new Animated.Value(1)).current;
   const dealOp0 = useRef(new Animated.Value(1)).current;
   const dealOp1 = useRef(new Animated.Value(1)).current;
-  const wasHas  = useRef(hasCards);
+  const wasHas     = useRef(false);
+  const seenHand   = useRef(handNumber);
 
   useEffect(() => {
+    // New hand number means new deal — reset so animation always plays
+    if (handNumber !== seenHand.current) {
+      wasHas.current = false;
+      seenHand.current = handNumber;
+    }
     if (hasCards && !wasHas.current) {
       // Cards fly in from the table centre toward this seat
       const startY = isMe ? -240 : 240;
@@ -256,7 +262,7 @@ function HoleCards({ player, isMe, deckStyle, onDealComplete }) {
       ]).start(({ finished }) => { if (finished) onDealComplete?.(); });
     }
     wasHas.current = hasCards;
-  }, [hasCards, isMe]);
+  }, [hasCards, isMe, handNumber]);
 
   if (!hasCards) return null;
 
@@ -913,7 +919,7 @@ export default function GameScreen({ navigation }) {
           )}
 
           {/* Player hole cards — spec §5 playerCards: (0.43, 0.700) */}
-          <HoleCards player={me} isMe={true} deckStyle={deckStyle} onDealComplete={() => setDealingHoleCards(false)} />
+          <HoleCards player={me} isMe={true} deckStyle={deckStyle} onDealComplete={() => setDealingHoleCards(false)} handNumber={gameState?.handNumber} />
 
           {/* Player pod */}
           <View style={s.myPodSlot}>
