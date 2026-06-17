@@ -226,7 +226,7 @@ function TimerBar({ deadline, duration, isMe }) {
 // ─── HoleCards — independent Group A element (spec §5: playerCards / opponentCards)
 // Separated from PlayerPod so player and opponent cards anchor at their own
 // spec coordinates, independent of where the nameplates sit.
-function HoleCards({ player, isMe, deckStyle }) {
+function HoleCards({ player, isMe, deckStyle, onDealComplete, handNumber }) {
   const hasCards = !!player?.holeCards?.length && !player?.folded;
 
   const dealTy0 = useRef(new Animated.Value(0)).current;
@@ -235,9 +235,15 @@ function HoleCards({ player, isMe, deckStyle }) {
   const dealSc1 = useRef(new Animated.Value(1)).current;
   const dealOp0 = useRef(new Animated.Value(1)).current;
   const dealOp1 = useRef(new Animated.Value(1)).current;
-  const wasHas  = useRef(hasCards);
+  const wasHas     = useRef(false);
+  const seenHand   = useRef(handNumber);
 
   useEffect(() => {
+    // New hand number means new deal — reset so animation always plays
+    if (handNumber !== seenHand.current) {
+      wasHas.current = false;
+      seenHand.current = handNumber;
+    }
     if (hasCards && !wasHas.current) {
       // Cards fly in from the table centre toward this seat
       const startY = isMe ? -240 : 240;
@@ -253,10 +259,10 @@ function HoleCards({ player, isMe, deckStyle }) {
       Animated.parallel([
         cardAnim(dealTy0, dealSc0, dealOp0, 0),
         cardAnim(dealTy1, dealSc1, dealOp1, 180),
-      ]).start();
+      ]).start(({ finished }) => { if (finished) onDealComplete?.(); });
     }
     wasHas.current = hasCards;
-  }, [hasCards, isMe]);
+  }, [hasCards, isMe, handNumber]);
 
   if (!hasCards) return null;
 
@@ -382,8 +388,9 @@ function PlayerPod({ player, isMe, observing, turnDeadline, turnDurationMs, last
 export default function GameScreen({ navigation }) {
   const {
     gameState, transition, myId, onAction, onLeave, onRematch, onLogout,
-    matchOver, navigationRef, deckStyle, playerInfo, onHandEndAnimDone, onStreetRevealDone,
+    matchOver, navigationRef, deckStyle, playerInfo, onHandEndAnimDone,
     handEventsRef, bustReveal = null, forfeitReveal = null, uiConfig = {},
+    onBotActionRequest,
   } = useContext(GameContext);
 
   useEffect(() => {
@@ -542,6 +549,14 @@ export default function GameScreen({ navigation }) {
   const isShowdown = gameState?.phase === 'showdown';
   const [revealedCC, setRevealedCC] = useState(0);
 
+  // ── dealer_animating — three named flags, one per dealer animation that
+  // precedes a player/bot action. All must clear before controls show or bot fires.
+  const [dealingHoleCards, setDealingHoleCards] = useState(false);
+  const [revealingBoard,   setRevealingBoard]   = useState(false);
+  // collecting (bet-slide) is already tracked below as `collecting = !!collect`
+
+  const dealerAnimating = dealingHoleCards || revealingBoard;
+
   // Gate actions on all streets: buttons/bot are suppressed until every community
   // card on the current street has finished animating in. Preflop is always open
   // because targetCC === 0 → 0 >= 0 is true.
@@ -552,11 +567,16 @@ export default function GameScreen({ navigation }) {
     if (targetCC === 0) { setRevealedCC(0); return; }
     if (collecting) return; // hold new cards until the bets finish sliding in
     if (revealedCC >= targetCC) return;
+    setRevealingBoard(true);
     const timers = [];
     const anyAllIn = gameState?.players?.some(p => p.allIn) ?? false;
     let acc = (isShowdown && anyAllIn) ? ALLIN_INITIAL_PAUSE : STREET_DEAL_PAUSE;
     for (let i = revealedCC; i < targetCC; i++) {
-      timers.push(setTimeout(() => setRevealedCC(i + 1), acc));
+      const isLast = i === targetCC - 1;
+      timers.push(setTimeout(() => {
+        setRevealedCC(i + 1);
+        if (isLast) setRevealingBoard(false);
+      }, acc));
       const next = i + 1;
       if (next < targetCC) {
         if (next <= 2) acc += FLOP_CARD_GAP;
@@ -566,15 +586,7 @@ export default function GameScreen({ navigation }) {
     return () => timers.forEach(clearTimeout);
   }, [targetCC, isShowdown, collecting]);
 
-  // Bot matches only: once a mid-hand street (flop/turn/river) has fully revealed,
-  // tell App the reveal is done so it can release the bot's buffered next action.
-  // Idempotent on App's side, so firing in the steady state between deals is a no-op.
   const isBotMatch = !!gameState?.isBotMatch;
-  useEffect(() => {
-    if (isBotMatch && !isShowdown && !collecting && targetCC > 0 && revealedCC >= targetCC) {
-      onStreetRevealDone?.();
-    }
-  }, [isBotMatch, isShowdown, collecting, targetCC, revealedCC, onStreetRevealDone]);
 
   const isHandEnded = transition?.type === 'HAND_ENDED';
 
@@ -591,11 +603,14 @@ export default function GameScreen({ navigation }) {
   const activeWinners = showWinners ? winnerMap : {};
   const bustWinId = bustReveal?.winnerId ?? null;
 
-  // Deal sound — when a new hand begins (hand number advances)
+  // Deal sound + hole-card animation gate — when a new hand begins
   const dealSeen = useRef(0);
   useEffect(() => {
     const h = gameState?.handNumber || 0;
-    if (h > dealSeen.current) playSfx('deal');
+    if (h > dealSeen.current) {
+      playSfx('deal');
+      setDealingHoleCards(true);
+    }
     dealSeen.current = h;
   }, [gameState?.handNumber]);
 
@@ -647,6 +662,37 @@ export default function GameScreen({ navigation }) {
     if (isHandEnded && winDone) onHandEndAnimDone?.();
   }, [isHandEnded, winDone, onHandEndAnimDone]);
 
+  // Full dealer_animating gate — all three flags must be clear before controls
+  // appear or the bot is triggered. collecting is the third flag.
+  const fullDealerAnimating = dealerAnimating || collecting;
+
+  // Bot trigger — fires 1000ms after all animations clear on the bot's turn.
+  // botTurnRequestedRef is set only when the timer actually fires (not when arming it),
+  // so a cancelled timer (animations started) leaves it false and the next clear re-arms.
+  // It resets on isBotTurn→false (human's turn) and on every new street/hand so the bot
+  // can trigger again even when isBotTurn stays true across street boundaries.
+  const botTurnRequestedRef = useRef(false);
+  const isBotTurn = !!gameState?.isBotMatch && !!gameState?.botId
+    && gameState?.currentPlayerId === gameState?.botId;
+  useEffect(() => {
+    if (!isBotTurn) botTurnRequestedRef.current = false;
+  }, [isBotTurn]);
+  useEffect(() => {
+    // New street or new hand = new trigger window, even if isBotTurn never went false
+    botTurnRequestedRef.current = false;
+  }, [gameState?.phase, gameState?.handNumber]);
+  useEffect(() => {
+    if (fullDealerAnimating) return;
+    if (!isBotTurn) return;
+    if (['waiting', 'showdown'].includes(gameState?.phase)) return;
+    if (botTurnRequestedRef.current) return;
+    const t = setTimeout(() => {
+      botTurnRequestedRef.current = true;
+      onBotActionRequest?.();
+    }, 1000);
+    return () => clearTimeout(t); // cancelled timer leaves ref false so next clear re-arms
+  }, [fullDealerAnimating, isBotTurn, gameState?.phase, gameState?.handNumber]);
+
   const locked   = showWinners && !winDone;
   const winnerPot = gameState?.winners?.reduce((s, w) => s + (w.amount || 0), 0) || 0;
   const animPot  = locked ? winnerPot : null;
@@ -654,9 +700,13 @@ export default function GameScreen({ navigation }) {
   // pot label stays visible until the chip-flight animation completes.
   const dispPot  = animPot !== null ? animPot : (collecting ? collect.pot : (totalPot || winnerPot));
   const chipsFor = p => {
-    if (!locked) return p?.chips ?? 0;
-    const win = gameState?.winners?.find(w => w.playerId === p?.id);
-    return (p?.chips ?? 0) - (win?.amount ?? 0);
+    // From hand-end until chip flight completes, show pre-win chip counts so the
+    // all-in runout doesn't reveal who won via chip totals before the reveal animation.
+    if (isHandEnded && !winDone) {
+      const win = gameState?.winners?.find(w => w.playerId === p?.id);
+      if (win) return (p?.chips ?? 0) - (win?.amount ?? 0);
+    }
+    return p?.chips ?? 0;
   };
 
   // While collecting, pills show the final street bets and ride collectProg
@@ -876,7 +926,7 @@ export default function GameScreen({ navigation }) {
           )}
 
           {/* Player hole cards — spec §5 playerCards: (0.43, 0.700) */}
-          <HoleCards player={me} isMe={true} deckStyle={deckStyle} />
+          <HoleCards player={me} isMe={true} deckStyle={deckStyle} onDealComplete={() => setDealingHoleCards(false)} handNumber={gameState?.handNumber} />
 
           {/* Player pod */}
           <View style={s.myPodSlot}>
@@ -941,7 +991,7 @@ export default function GameScreen({ navigation }) {
 
         {/* Bottom betting controls (Group B) — fixed ergonomic height */}
         <View style={s.bottomChrome} pointerEvents="box-none">
-          {isMyTurn && (
+          {isMyTurn && !fullDealerAnimating && (
             <BettingControls
               gameState={gameState} myId={myId}
               onAction={onAction} raiseAmount={raiseAmount}

@@ -253,47 +253,43 @@ function startTurnTimer(m) {
 
 // ── Bot play ──────────────────────────────────────────────────────────────────
 
-// Decisions come from the bot brain (Monte Carlo equity + personality profile).
-// Scheduled from broadcastMatchState so every state change (hand start, human
-// action, next hand) gives the bot its turn. If the brain errors or picks an
-// illegal action, fall back to check/call so the match never stalls.
-function maybeScheduleBotAction(m) {
-  if (!m.isBotMatch || m.ended || m.botTimer) return;
+// Bot action execution — triggered by the client via 'bot-action-request' after
+// all dealer animations clear and a 1000ms think delay elapses. The server is
+// purely reactive: it executes whatever arrives, identically to a human action.
+// Server game engine runs freely at all times — only the bot TRIGGER is gated.
+function executeBotAction(m) {
+  if (!m.isBotMatch || m.ended) return;
   if (m.game.currentPlayerId !== m.botId) return;
-  m.botTimer = setTimeout(() => {
-    m.botTimer = null;
-    if (m.ended || m.game.currentPlayerId !== m.botId) return;
-    const bot = m.game.players.find(p => p.id === m.botId);
-    if (!bot) return;
-    const fallback = () => ({ action: bot.roundBet >= m.game.currentBet ? 'check' : 'call' });
-    let d;
+  const bot = m.game.players.find(p => p.id === m.botId);
+  if (!bot) return;
+  const fallback = () => ({ action: bot.roundBet >= m.game.currentBet ? 'check' : 'call' });
+  let d;
+  try {
+    d = decideAction(stateFromGame(m.game, m.botId), m.botProfile || getProfile('tag'));
+    console.log(`[bot] ${BOTS[m.botId]?.name} (${m.botProfile?.name || 'tag'}): ${d.action}${d.amount ? ' to ' + d.amount : ''}`, JSON.stringify(d.meta));
+  } catch (e) {
+    console.error('[bot] brain error, using check/call:', e.message);
+    d = fallback();
+  }
+  try {
+    const pre = preActionState(m.game, m.botId);
+    const preBoardLen = m.game.communityCards.length;
     try {
-      d = decideAction(stateFromGame(m.game, m.botId), m.botProfile || getProfile('tag'));
-      console.log(`[bot] ${BOTS[m.botId]?.name} (${m.botProfile?.name || 'tag'}): ${d.action}${d.amount ? ' to ' + d.amount : ''}`, JSON.stringify(d.meta));
+      m.game.handleAction(m.botId, d.action, d.amount);
     } catch (e) {
-      console.error('[bot] brain error, using check/call:', e.message);
+      console.error(`[bot] ${d.action} rejected (${e.message}) — using check/call`);
       d = fallback();
+      m.game.handleAction(m.botId, d.action);
     }
-    try {
-      const pre = preActionState(m.game, m.botId);
-      const preBoardLen = m.game.communityCards.length;
-      try {
-        m.game.handleAction(m.botId, d.action, d.amount);
-      } catch (e) {
-        console.error(`[bot] ${d.action} rejected (${e.message}) — using check/call`);
-        d = fallback();
-        m.game.handleAction(m.botId, d.action);
-      }
-      const rows = buildActionRows(m, m.game, pre);
-      writeHandRows(m, m.game, m.currentHandUuid, rows)
-        .catch(e => console.error('[bot] logAction:', e.message));
-      emitHandEvents(m, rows);
-      broadcastMatchState(m, buildActionTransition(m.game, m.botId, d.action, d.amount, preBoardLen));
-      if (m.game.phase === 'showdown') scheduleNextHand(m, cfg.inter_hand_delay_ms);
-    } catch (err) {
-      console.error('[bot] action failed:', err.message);
-    }
-  }, 600 + Math.floor(Math.random() * 900));
+    const rows = buildActionRows(m, m.game, pre);
+    writeHandRows(m, m.game, m.currentHandUuid, rows)
+      .catch(e => console.error('[bot] logAction:', e.message));
+    emitHandEvents(m, rows);
+    broadcastMatchState(m, buildActionTransition(m.game, m.botId, d.action, d.amount, preBoardLen));
+    if (m.game.phase === 'showdown') scheduleNextHand(m, cfg.inter_hand_delay_ms);
+  } catch (err) {
+    console.error('[bot] action failed:', err.message);
+  }
 }
 
 // ── Broadcast ─────────────────────────────────────────────────────────────────
@@ -336,7 +332,6 @@ function emitHandEvents(m, rows) {
 function broadcastMatchState(m, transition = null) {
   m.seq = (m.seq || 0) + 1;
   startTurnTimer(m);
-  maybeScheduleBotAction(m);
   const sittingOut = matchPlayers(m).filter(p => p.vacant).map(p => p.playerId);
   for (const p of matchPlayers(m)) {
     const sp = socketPlayers.get(p.socketId);
@@ -348,6 +343,8 @@ function broadcastMatchState(m, transition = null) {
       ...state, atTable,
       matchId: m.id,
       gameOver: m.game.gameOver || false,
+      isBotMatch: !!m.isBotMatch,
+      botId: m.botId || null,
       turnDeadline: m.turnDeadline,
       turnDurationMs: cfg.turn_seconds * 1000,
       handNumber: m.handCount,
@@ -1050,6 +1047,12 @@ io.on('connection', (socket) => {
     } catch (err) {
       socket.emit('error', { message: err.message });
     }
+  });
+
+  socket.on('bot-action-request', ({ matchId } = {}) => {
+    const m = matchId ? matches.get(matchId) : null;
+    if (!m) return;
+    executeBotAction(m);
   });
 
   socket.on('rematch-vote', ({ vote }) => {
