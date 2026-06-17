@@ -547,6 +547,10 @@ function App() {
     emit('player-action', { action, amount });
   }, [emit]);
 
+  const onBotActionRequest = useCallback(() => {
+    emit('bot-action-request', { matchId: matchIdRef.current });
+  }, [emit]);
+
   const onLeave = useCallback(() => {
     if (isObserverRef.current) {
       emit('unobserve', { matchId: matchIdRef.current });
@@ -589,9 +593,9 @@ function App() {
     gameState, transition, myId, matchOver, handEventsRef,
     playerInfo, deckStyle, setDeckStyle, uiConfig, bustReveal, forfeitReveal,
     emit, onLogin, onLogout, onUpdateProfile,
-    onAction, onLeave, onRematch, onHandEndAnimDone, onStreetRevealDone, navigationRef,
+    onAction, onLeave, onRematch, onHandEndAnimDone, onStreetRevealDone, onBotActionRequest, navigationRef,
   }), [gameState, transition, myId, matchOver, playerInfo, deckStyle, uiConfig, bustReveal, forfeitReveal,
-       emit, onLogin, onLogout, onUpdateProfile, onAction, onLeave, onRematch, onHandEndAnimDone, onStreetRevealDone]);
+       emit, onLogin, onLogout, onUpdateProfile, onAction, onLeave, onRematch, onHandEndAnimDone, onStreetRevealDone, onBotActionRequest]);
 
   // Lobby context — fast-churning lobby data + lobby-only actions
   const lobbyValue = useMemo(() => ({

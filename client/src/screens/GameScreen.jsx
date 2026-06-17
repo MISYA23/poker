@@ -226,7 +226,7 @@ function TimerBar({ deadline, duration, isMe }) {
 // ─── HoleCards — independent Group A element (spec §5: playerCards / opponentCards)
 // Separated from PlayerPod so player and opponent cards anchor at their own
 // spec coordinates, independent of where the nameplates sit.
-function HoleCards({ player, isMe, deckStyle }) {
+function HoleCards({ player, isMe, deckStyle, onDealComplete }) {
   const hasCards = !!player?.holeCards?.length && !player?.folded;
 
   const dealTy0 = useRef(new Animated.Value(0)).current;
@@ -253,7 +253,7 @@ function HoleCards({ player, isMe, deckStyle }) {
       Animated.parallel([
         cardAnim(dealTy0, dealSc0, dealOp0, 0),
         cardAnim(dealTy1, dealSc1, dealOp1, 180),
-      ]).start();
+      ]).start(({ finished }) => { if (finished) onDealComplete?.(); });
     }
     wasHas.current = hasCards;
   }, [hasCards, isMe]);
@@ -384,6 +384,7 @@ export default function GameScreen({ navigation }) {
     gameState, transition, myId, onAction, onLeave, onRematch, onLogout,
     matchOver, navigationRef, deckStyle, playerInfo, onHandEndAnimDone, onStreetRevealDone,
     handEventsRef, bustReveal = null, forfeitReveal = null, uiConfig = {},
+    onBotActionRequest,
   } = useContext(GameContext);
 
   useEffect(() => {
@@ -540,6 +541,14 @@ export default function GameScreen({ navigation }) {
   const isShowdown = gameState?.phase === 'showdown';
   const [revealedCC, setRevealedCC] = useState(0);
 
+  // ── dealer_animating — three named flags, one per dealer animation that
+  // precedes a player/bot action. All must clear before controls show or bot fires.
+  const [dealingHoleCards, setDealingHoleCards] = useState(false);
+  const [revealingBoard,   setRevealingBoard]   = useState(false);
+  // collecting (bet-slide) is already tracked below as `collecting = !!collect`
+
+  const dealerAnimating = dealingHoleCards || revealingBoard;
+
   // Gate actions on all streets: buttons/bot are suppressed until every community
   // card on the current street has finished animating in. Preflop is always open
   // because targetCC === 0 → 0 >= 0 is true.
@@ -550,11 +559,16 @@ export default function GameScreen({ navigation }) {
     if (targetCC === 0) { setRevealedCC(0); return; }
     if (collecting) return; // hold new cards until the bets finish sliding in
     if (revealedCC >= targetCC) return;
+    setRevealingBoard(true);
     const timers = [];
     const anyAllIn = gameState?.players?.some(p => p.allIn) ?? false;
     let acc = (isShowdown && anyAllIn) ? ALLIN_INITIAL_PAUSE : STREET_DEAL_PAUSE;
     for (let i = revealedCC; i < targetCC; i++) {
-      timers.push(setTimeout(() => setRevealedCC(i + 1), acc));
+      const isLast = i === targetCC - 1;
+      timers.push(setTimeout(() => {
+        setRevealedCC(i + 1);
+        if (isLast) setRevealingBoard(false);
+      }, acc));
       const next = i + 1;
       if (next < targetCC) {
         if (next <= 2) acc += FLOP_CARD_GAP;
@@ -589,11 +603,14 @@ export default function GameScreen({ navigation }) {
   const activeWinners = showWinners ? winnerMap : {};
   const bustWinId = bustReveal?.winnerId ?? null;
 
-  // Deal sound — when a new hand begins (hand number advances)
+  // Deal sound + hole-card animation gate — when a new hand begins
   const dealSeen = useRef(0);
   useEffect(() => {
     const h = gameState?.handNumber || 0;
-    if (h > dealSeen.current) playSfx('deal');
+    if (h > dealSeen.current) {
+      playSfx('deal');
+      setDealingHoleCards(true);
+    }
     dealSeen.current = h;
   }, [gameState?.handNumber]);
 
@@ -644,6 +661,29 @@ export default function GameScreen({ navigation }) {
   useEffect(() => {
     if (isHandEnded && winDone) onHandEndAnimDone?.();
   }, [isHandEnded, winDone, onHandEndAnimDone]);
+
+  // Full dealer_animating gate — all three flags must be clear before controls
+  // appear or the bot is triggered. collecting is the third flag.
+  const fullDealerAnimating = dealerAnimating || collecting;
+
+  // Bot trigger — fires 1000ms after all animations clear on the bot's turn.
+  // botTurnRequestedRef prevents double-firing if multiple flags clear in sequence.
+  const botTurnRequestedRef = useRef(false);
+  useEffect(() => {
+    if (gameState?.currentPlayerId !== opponent?.id || !opponent?.isBot) {
+      botTurnRequestedRef.current = false;
+    }
+  }, [gameState?.currentPlayerId]);
+  useEffect(() => {
+    if (fullDealerAnimating) return;
+    if (!gameState?.isBotMatch) return;
+    if (!opponent?.isBot || gameState?.currentPlayerId !== opponent?.id) return;
+    if (['waiting', 'showdown'].includes(gameState?.phase)) return;
+    if (botTurnRequestedRef.current) return;
+    botTurnRequestedRef.current = true;
+    const t = setTimeout(() => onBotActionRequest?.(), 1000);
+    return () => clearTimeout(t);
+  }, [fullDealerAnimating, gameState?.currentPlayerId, gameState?.phase, gameState?.isBotMatch]);
 
   const locked   = showWinners && !winDone;
   const winnerPot = gameState?.winners?.reduce((s, w) => s + (w.amount || 0), 0) || 0;
@@ -874,7 +914,7 @@ export default function GameScreen({ navigation }) {
           )}
 
           {/* Player hole cards — spec §5 playerCards: (0.43, 0.700) */}
-          <HoleCards player={me} isMe={true} deckStyle={deckStyle} />
+          <HoleCards player={me} isMe={true} deckStyle={deckStyle} onDealComplete={() => setDealingHoleCards(false)} />
 
           {/* Player pod */}
           <View style={s.myPodSlot}>
@@ -939,7 +979,7 @@ export default function GameScreen({ navigation }) {
 
         {/* Bottom betting controls (Group B) — fixed ergonomic height */}
         <View style={s.bottomChrome} pointerEvents="box-none">
-          {isMyTurn && (
+          {isMyTurn && !fullDealerAnimating && (
             <BettingControls
               gameState={gameState} myId={myId}
               onAction={onAction} raiseAmount={raiseAmount}
