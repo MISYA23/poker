@@ -33,7 +33,7 @@ const S = (globalThis.__pmMusic = globalThis.__pmMusic || {
   },
   active: null,          // 'menu' | 'game' | null
   started: false,
-  muted: false,
+  muted: true,
 });
 
 function buildPlayer(c) {

@@ -15,7 +15,7 @@ const SOURCES = {
   alarm:    require('../../assets/sfx/alarm.wav'),      // ~5s left on your turn timer
 };
 
-let sfxEnabled = false;
+let sfxEnabled = true;
 export function isSfxEnabled() { return sfxEnabled; }
 export function setSfxEnabled(v) { sfxEnabled = !!v; }
 

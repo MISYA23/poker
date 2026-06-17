@@ -15,6 +15,7 @@ import { track, trackScreen } from './src/utils/analytics';
 import { SERVER_URL } from './src/config';
 import { startMusic, setMusicContext, loadMusicConfig } from './src/audio/music';
 import { HAND_END_LOCK_MS, DEAL_LOCK_MS, BUST_REVEAL_MS, FORFEIT_REVEAL_MS, MATCH_OVER_FALLBACK_MS } from './src/timings';
+import { recordHumanAction, recordAnimEnd, getBotDelay } from './src/utils/botGate';
 import MatchFlowOverlays from './src/components/MatchFlowOverlays';
 import LoginScreen   from './src/screens/LoginScreen';
 import LobbyScreen   from './src/screens/LobbyScreen';
@@ -230,13 +231,24 @@ function App() {
           apply(t, state);
           dealLockRef.current = setTimeout(() => {
             dealLockRef.current = null;
+            recordAnimEnd(); // bot-gate: deal animation just ended
             const pending = dealPendingRef.current;
             dealPendingRef.current = null;
-            if (pending) apply(pending.t, pending.state);
+            if (pending) {
+              const d = getBotDelay();
+              if (d > 0) setTimeout(() => apply(pending.t, pending.state), d);
+              else apply(pending.t, pending.state);
+            }
           }, DEAL_LOCK_MS);
           return;
         }
         if (state.handNumber) handNumberRef.current = state.handNumber;
+        // Bot-match only: delay the bot's response until the gate clears.
+        // Human-to-human states (t.playerId === ours, or no transition) skip this entirely.
+        if (state.isBotMatch && t?.type === 'ACTION' && t.playerId !== playerIdRef.current) {
+          const d = getBotDelay();
+          if (d > 0) { setTimeout(() => apply(t, state), d); return; }
+        }
         apply(t, state);
       };
 
@@ -408,10 +420,10 @@ function App() {
     startBotOfferTimer();
   }, [setSearch, startBotOfferTimer]);
 
-  // "Play Bot" — confirmed via dialog; emit play-bot (server dequeues internally)
+  // "Play Bot" — confirmed via dialog; overlay stays up until match-found closes it
+  // to avoid a flash of the bare lobby between tap and navigation.
   const onConfirmBot = useCallback(() => {
     clearBotOfferTimer();
-    setMeantime(false);
     track('PlayMatch', { mode: 'bot_confirmed' });
     emit('play-bot', { playerId: playerIdRef.current });
   }, [clearBotOfferTimer, emit]);
@@ -447,6 +459,7 @@ function App() {
   }, [emit]);
 
   const onAction = useCallback((action, amount) => {
+    recordHumanAction(); // bot-gate: bot must wait ≥500ms after this
     emit('player-action', { action, amount });
   }, [emit]);
 
