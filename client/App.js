@@ -14,7 +14,7 @@ import { clearUser } from './src/utils/user';
 import { track, trackScreen } from './src/utils/analytics';
 import { SERVER_URL } from './src/config';
 import { startMusic, setMusicContext, loadMusicConfig } from './src/audio/music';
-import { HAND_END_LOCK_MS, DEAL_LOCK_MS, BUST_REVEAL_MS, FORFEIT_REVEAL_MS, MATCH_OVER_FALLBACK_MS } from './src/timings';
+import { HAND_END_MAX_MS, DEAL_LOCK_MS, BUST_REVEAL_MS, FORFEIT_REVEAL_MS, MATCH_OVER_FALLBACK_MS } from './src/timings';
 import { recordHumanAction, recordAnimEnd, getBotDelay } from './src/utils/botGate';
 import MatchFlowOverlays from './src/components/MatchFlowOverlays';
 import LoginScreen   from './src/screens/LoginScreen';
@@ -86,8 +86,10 @@ function App() {
   const matchOverTimerRef  = useRef(null); // pending match-over reveal delay
   const bustRevealRef      = useRef(null); // mirrors bustReveal for socket-bound handlers
   const forfeitRevealRef   = useRef(null); // mirrors forfeitReveal for socket-bound handlers
-  const handEndLockRef     = useRef(null); // blocks next-hand state during hand-end animation
+  const handEndLockRef     = useRef(null); // truthy (holds the safety-cap timer) while a hand-end animation is playing
   const handEndPendingRef  = useRef(null); // queued game-state to apply when lock releases
+  const releaseHandEndRef  = useRef(null); // set while locked; the client animation calls this to release
+  const matchOverPendingRef = useRef(null); // queued match-over to apply when the hand-end animation finishes
   const dealLockRef        = useRef(null); // bot-match only: blocks bot actions during deal anim
   const dealPendingRef     = useRef(null); // queued game-state to apply when deal lock releases
   const handNumberRef      = useRef(0);    // tracks current hand number to detect new hands
@@ -133,6 +135,47 @@ function App() {
   // Keep the player id available to the mount-bound socket handlers below.
   useEffect(() => { playerIdRef.current = playerInfo?.playerId ?? null; }, [playerInfo]);
 
+  // Reveal the end-of-match state (bust badge / forfeit flight / plain pause →
+  // modal). Deferred while a hand-end animation is still playing — see the
+  // match-over handler — so a busting all-in finishes its runout first.
+  const applyMatchOver = useCallback((data) => {
+    setMeantime(false);
+    if (data.newElo != null) setMyElo(data.newElo);
+    if (matchOverTimerRef.current) clearTimeout(matchOverTimerRef.current);
+    if (data.bust) {
+      // Natural bust: freeze showdown state, show winner badge for 3s, then modal
+      bustRevealRef.current = { winnerId: data.winnerId };
+      setBustReveal({ winnerId: data.winnerId });
+      matchOverTimerRef.current = setTimeout(() => {
+        matchOverTimerRef.current = null;
+        bustRevealRef.current = null;
+        setBustReveal(null);
+        setMatchOver({ ...data, myVote: null, opponentWantsRematch: null });
+      }, BUST_REVEAL_MS);
+    } else if (data.forfeit) {
+      // Forfeit: chip countdown + flight animation for 2.5s, then modal
+      const rev = { loserId: data.loserId, loserChips: data.loserChips, loserName: data.loserName };
+      forfeitRevealRef.current = rev;
+      setForfeitReveal(rev);
+      matchOverTimerRef.current = setTimeout(() => {
+        matchOverTimerRef.current = null;
+        forfeitRevealRef.current = null;
+        setForfeitReveal(null);
+        setMatchOver({ ...data, myVote: null, opponentWantsRematch: null });
+      }, FORFEIT_REVEAL_MS);
+    } else {
+      // Fallback: plain brief pause
+      bustRevealRef.current = null;
+      setBustReveal(null);
+      forfeitRevealRef.current = null;
+      setForfeitReveal(null);
+      matchOverTimerRef.current = setTimeout(() => {
+        matchOverTimerRef.current = null;
+        setMatchOver({ ...data, myVote: null, opponentWantsRematch: null });
+      }, MATCH_OVER_FALLBACK_MS);
+    }
+  }, []);
+
   const emit = useSocket({
     // Re-establish identity on every (re)connect. Socket.IO hands out a new
     // socket id each time and the server forgets the old one on disconnect; the
@@ -159,6 +202,8 @@ function App() {
       if (matchOverTimerRef.current) { clearTimeout(matchOverTimerRef.current); matchOverTimerRef.current = null; }
       if (handEndLockRef.current) { clearTimeout(handEndLockRef.current); handEndLockRef.current = null; }
       handEndPendingRef.current = null;
+      releaseHandEndRef.current = null;
+      matchOverPendingRef.current = null;
       if (dealLockRef.current) { clearTimeout(dealLockRef.current); dealLockRef.current = null; }
       dealPendingRef.current = null;
       handNumberRef.current = 0;
@@ -215,13 +260,28 @@ function App() {
         if (t?.type === 'HAND_ENDED' && !state.gameOver) {
           apply(t, state);
           handEndPendingRef.current = null;
-          handEndLockRef.current = setTimeout(() => {
+          // Release is driven by the client's hand-end animation finishing
+          // (onHandEndAnimDone → releaseHandEndRef), NOT a fixed timer — the
+          // all-in runout takes ~8s while a normal showdown takes ~2.5s, and
+          // only the animation knows when it's actually done. The timer below
+          // is just a safety cap so a stalled animation can't wedge the table.
+          const release = () => {
+            if (!handEndLockRef.current) return; // already released
+            clearTimeout(handEndLockRef.current);
             handEndLockRef.current = null;
+            releaseHandEndRef.current = null;
             const pending = handEndPendingRef.current;
             handEndPendingRef.current = null;
             // Route through processState so new hands in bot matches get the deal lock
             if (pending) processState(pending.t, pending.state);
-          }, HAND_END_LOCK_MS);
+            // A bust/forfeit match-over that arrived mid-runout was held too —
+            // reveal it now that the animation is done.
+            const pendingMO = matchOverPendingRef.current;
+            matchOverPendingRef.current = null;
+            if (pendingMO) applyMatchOver(pendingMO);
+          };
+          releaseHandEndRef.current = release;
+          handEndLockRef.current = setTimeout(release, HAND_END_MAX_MS);
           return;
         }
         // Bot matches only: lock out state changes for the duration of the deal
@@ -263,41 +323,12 @@ function App() {
       setError('That match just ended');
     },
     'match-over':  (data)            => {
-      setMeantime(false);
-      if (data.newElo != null) setMyElo(data.newElo);
-      if (matchOverTimerRef.current) clearTimeout(matchOverTimerRef.current);
-      if (data.bust) {
-        // Natural bust: freeze showdown state, show winner badge for 3s, then modal
-        bustRevealRef.current = { winnerId: data.winnerId };
-        setBustReveal({ winnerId: data.winnerId });
-        matchOverTimerRef.current = setTimeout(() => {
-          matchOverTimerRef.current = null;
-          bustRevealRef.current = null;
-          setBustReveal(null);
-          setMatchOver({ ...data, myVote: null, opponentWantsRematch: null });
-        }, BUST_REVEAL_MS);
-      } else if (data.forfeit) {
-        // Forfeit: chip countdown + flight animation for 2.5s, then modal
-        const rev = { loserId: data.loserId, loserChips: data.loserChips, loserName: data.loserName };
-        forfeitRevealRef.current = rev;
-        setForfeitReveal(rev);
-        matchOverTimerRef.current = setTimeout(() => {
-          matchOverTimerRef.current = null;
-          forfeitRevealRef.current = null;
-          setForfeitReveal(null);
-          setMatchOver({ ...data, myVote: null, opponentWantsRematch: null });
-        }, FORFEIT_REVEAL_MS);
-      } else {
-        // Fallback: plain brief pause
-        bustRevealRef.current = null;
-        setBustReveal(null);
-        forfeitRevealRef.current = null;
-        setForfeitReveal(null);
-        matchOverTimerRef.current = setTimeout(() => {
-          matchOverTimerRef.current = null;
-          setMatchOver({ ...data, myVote: null, opponentWantsRematch: null });
-        }, MATCH_OVER_FALLBACK_MS);
-      }
+      // If a hand-end animation is still playing (e.g. the all-in runout that
+      // produced this bust), defer the reveal until it finishes — otherwise the
+      // winner badge shows and the runout freezes before the cards are dealt.
+      // The release in the HAND_ENDED branch drains this when winDone fires.
+      if (handEndLockRef.current) { matchOverPendingRef.current = data; return; }
+      applyMatchOver(data);
     },
     'rematch-pending': ({ from })    => {
       setMatchOver(prev => prev ? { ...prev, opponentWantsRematch: from } : prev);
@@ -323,6 +354,10 @@ function App() {
       if (isObserverRef.current) emit('unobserve', { matchId: matchIdRef.current });
       bustRevealRef.current = null;
       forfeitRevealRef.current = null;
+      if (handEndLockRef.current) { clearTimeout(handEndLockRef.current); handEndLockRef.current = null; }
+      handEndPendingRef.current = null;
+      releaseHandEndRef.current = null;
+      matchOverPendingRef.current = null;
       if (dealLockRef.current) { clearTimeout(dealLockRef.current); dealLockRef.current = null; }
       dealPendingRef.current = null;
       handNumberRef.current = 0;
@@ -476,6 +511,12 @@ function App() {
     navigationRef.reset({ index: 0, routes: [{ name: 'Lobby' }] });
   }, [emit]);
 
+  // The GameScreen calls this when its hand-end animation (runout → reveal →
+  // chip flight) has fully finished, releasing the buffered next-hand state.
+  const onHandEndAnimDone = useCallback(() => {
+    releaseHandEndRef.current?.();
+  }, []);
+
   const onRematch = useCallback((vote) => {
     emit('rematch-vote', { vote });
     if (vote) {
@@ -493,9 +534,9 @@ function App() {
     gameState, transition, myId, matchOver, handEventsRef,
     playerInfo, deckStyle, setDeckStyle, uiConfig, bustReveal, forfeitReveal,
     emit, onLogin, onLogout, onUpdateProfile,
-    onAction, onLeave, onRematch, navigationRef,
+    onAction, onLeave, onRematch, onHandEndAnimDone, navigationRef,
   }), [gameState, transition, myId, matchOver, playerInfo, deckStyle, uiConfig, bustReveal, forfeitReveal,
-       emit, onLogin, onLogout, onUpdateProfile, onAction, onLeave, onRematch]);
+       emit, onLogin, onLogout, onUpdateProfile, onAction, onLeave, onRematch, onHandEndAnimDone]);
 
   // Lobby context — fast-churning lobby data + lobby-only actions
   const lobbyValue = useMemo(() => ({

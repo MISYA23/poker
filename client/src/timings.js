@@ -16,7 +16,7 @@ export const ALLIN_INITIAL_PAUSE     =  2500; // dramatic pause before first car
 export const FOLD_REVEAL_PAUSE       =   500; // pause after fold before chip flight
 export const SHOWDOWN_REVEAL_PAUSE   =  1000; // pause after cards shown before chip flight
 export const CHIP_FLIGHT_MS          =  1000; // chip flight duration (winDone fires here)
-export const HAND_END_LOCK_MS        =  2000; // blocks next-hand state during hand-end animation
+export const HAND_END_MAX_MS         = 12000; // safety cap: release next-hand state if the hand-end animation never signals done
 export const DEAL_LOCK_MS            =  1800; // bot-match only: blocks bot actions during deal animation + 1s buffer
 
 // Match end

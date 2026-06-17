@@ -382,7 +382,7 @@ function PlayerPod({ player, isMe, observing, turnDeadline, turnDurationMs, last
 export default function GameScreen({ navigation }) {
   const {
     gameState, transition, myId, onAction, onLeave, onRematch, onLogout,
-    matchOver, navigationRef, deckStyle, playerInfo,
+    matchOver, navigationRef, deckStyle, playerInfo, onHandEndAnimDone,
     handEventsRef, bustReveal = null, forfeitReveal = null, uiConfig = {},
   } = useContext(GameContext);
 
@@ -623,6 +623,14 @@ export default function GameScreen({ navigation }) {
     const t = setTimeout(() => setWinDone(true), CHIP_FLIGHT_MS);
     return () => clearTimeout(t);
   }, [showWinners]);
+
+  // The hand-end animation (runout → reveal → chip flight) is fully done once
+  // winDone fires. Tell App to release the buffered next-hand state now, instead
+  // of it guessing the duration with a fixed timer — this is what lets the all-in
+  // runout play out in full before the next hand can land on top of it.
+  useEffect(() => {
+    if (isHandEnded && winDone) onHandEndAnimDone?.();
+  }, [isHandEnded, winDone, onHandEndAnimDone]);
 
   const locked   = showWinners && !winDone;
   const winnerPot = gameState?.winners?.reduce((s, w) => s + (w.amount || 0), 0) || 0;
