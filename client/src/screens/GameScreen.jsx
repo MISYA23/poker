@@ -669,21 +669,20 @@ export default function GameScreen({ navigation }) {
   // Bot trigger — fires 1000ms after all animations clear on the bot's turn.
   // botTurnRequestedRef prevents double-firing if multiple flags clear in sequence.
   const botTurnRequestedRef = useRef(false);
+  const isBotTurn = !!gameState?.isBotMatch && !!gameState?.botId
+    && gameState?.currentPlayerId === gameState?.botId;
   useEffect(() => {
-    if (gameState?.currentPlayerId !== opponent?.id || !opponent?.isBot) {
-      botTurnRequestedRef.current = false;
-    }
-  }, [gameState?.currentPlayerId]);
+    if (!isBotTurn) botTurnRequestedRef.current = false;
+  }, [isBotTurn]);
   useEffect(() => {
     if (fullDealerAnimating) return;
-    if (!gameState?.isBotMatch) return;
-    if (!opponent?.isBot || gameState?.currentPlayerId !== opponent?.id) return;
+    if (!isBotTurn) return;
     if (['waiting', 'showdown'].includes(gameState?.phase)) return;
     if (botTurnRequestedRef.current) return;
     botTurnRequestedRef.current = true;
     const t = setTimeout(() => onBotActionRequest?.(), 1000);
     return () => clearTimeout(t);
-  }, [fullDealerAnimating, gameState?.currentPlayerId, gameState?.phase, gameState?.isBotMatch]);
+  }, [fullDealerAnimating, isBotTurn, gameState?.phase]);
 
   const locked   = showWinners && !winDone;
   const winnerPot = gameState?.winners?.reduce((s, w) => s + (w.amount || 0), 0) || 0;

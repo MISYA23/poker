@@ -343,6 +343,8 @@ function broadcastMatchState(m, transition = null) {
       ...state, atTable,
       matchId: m.id,
       gameOver: m.game.gameOver || false,
+      isBotMatch: !!m.isBotMatch,
+      botId: m.botId || null,
       turnDeadline: m.turnDeadline,
       turnDurationMs: cfg.turn_seconds * 1000,
       handNumber: m.handCount,
