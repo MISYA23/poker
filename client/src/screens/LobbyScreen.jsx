@@ -92,20 +92,17 @@ function PlayerRow({ p, incoming, issued, onChallenge, onCancelChallenge, onAcce
   );
 }
 
-function LifeCapsule({ lives, lifeRefillAt, onPress }) {
-  const ms = useCountdown(lives === 0 ? lifeRefillAt : null);
+function LifeCapsule({ lives, onPress }) {
   const spent = lives === 0;
   return (
     <Pressable style={[lc.capsule, spent && lc.capsuleSpent]} onPress={onPress}>
       <Text style={[lc.icon, spent && lc.iconSpent]}>🍌</Text>
-      <Text style={[lc.txt, spent && lc.txtSpent]}>
-        {spent ? fmtCountdownShort(ms) : '1'}
-      </Text>
+      <Text style={[lc.txt, spent && lc.txtSpent]}>{lives}</Text>
     </Pressable>
   );
 }
 
-function TopBar({ playerInfo, myElo, lives, lifeRefillAt, onBanana, onMenu }) {
+function TopBar({ playerInfo, myElo, lives, onBanana, onMenu }) {
   return (
     <View style={tb.bar}>
       <AvatarBadge avatarId={playerInfo?.avatarId} size={42} />
@@ -114,7 +111,7 @@ function TopBar({ playerInfo, myElo, lives, lifeRefillAt, onBanana, onMenu }) {
         <Text style={tb.elo}>ELO {myElo ?? 1200}</Text>
       </View>
       <View style={{ flex: 1 }} />
-      <LifeCapsule lives={lives} lifeRefillAt={lifeRefillAt} onPress={onBanana} />
+      <LifeCapsule lives={lives} onPress={onBanana} />
       <Pressable style={tb.menuBtn} onPress={onMenu}>
         <Text style={tb.menuTxt}>☰</Text>
       </Pressable>
@@ -122,9 +119,8 @@ function TopBar({ playerInfo, myElo, lives, lifeRefillAt, onBanana, onMenu }) {
   );
 }
 
-function LifeDetailSheet({ visible, lives, lifeRefillAt, onClose, onOpenStore }) {
+function LifeDetailSheet({ visible, lives, maxLives, onClose, onOpenStore }) {
   const spent = lives === 0;
-  const ms = useCountdown(spent ? lifeRefillAt : null);
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <Pressable style={ld.overlay} onPress={onClose}>
@@ -133,11 +129,10 @@ function LifeDetailSheet({ visible, lives, lifeRefillAt, onClose, onOpenStore })
           {spent ? (
             <>
               <Text style={ld.title}>Out of bananas</Text>
-              <Text style={ld.countdown}>{fmtCountdownHMS(ms)}</Text>
-              <Text style={ld.copy}>until your free banana refills</Text>
+              <Text style={ld.copy}>Buy one in the store to keep playing.</Text>
               <View style={ld.btns}>
                 <Pressable style={ld.waitBtn} onPress={onClose}>
-                  <Text style={ld.waitTxt}>Wait</Text>
+                  <Text style={ld.waitTxt}>Later</Text>
                 </Pressable>
                 <Pressable style={ld.buyBtn} onPress={onOpenStore}>
                   <Text style={ld.buyTxt}>🍌 Buy a banana</Text>
@@ -146,8 +141,8 @@ function LifeDetailSheet({ visible, lives, lifeRefillAt, onClose, onOpenStore })
             </>
           ) : (
             <>
-              <Text style={ld.title}>Your banana is at risk 🍌</Text>
-              <Text style={ld.copy}>If you lose, it's gone.</Text>
+              <Text style={ld.title}>🍌 ×{lives}{maxLives > 1 ? ` / ${maxLives}` : ''}</Text>
+              <Text style={ld.copy}>1 banana per match. Win to keep it.</Text>
               <Pressable style={[ld.waitBtn, { alignSelf: 'stretch', marginTop: 8 }]} onPress={onClose}>
                 <Text style={ld.waitTxt}>Got it</Text>
               </Pressable>
@@ -182,7 +177,7 @@ function NoLifeAlert({ visible, onClose, onGetOne }) {
 }
 
 export default function LobbyScreen({ navigation }) {
-  const { onLogout, playerInfo, navigationRef, emit, lives, lifeRefillAt, fetchLives } = useContext(GameContext);
+  const { onLogout, playerInfo, navigationRef, emit, lives, maxLives, fetchLives } = useContext(GameContext);
   const { onFindMatch, onObserve, error, matchList, onlinePlayers, myElo,
           incomingChallenges, outgoingChallenges,
           onChallenge, onAcceptChallenge, onWithdrawChallenge } = useContext(LobbyContext);
@@ -306,7 +301,6 @@ export default function LobbyScreen({ navigation }) {
           playerInfo={playerInfo}
           myElo={myElo}
           lives={lives}
-          lifeRefillAt={lifeRefillAt}
           onBanana={() => setLifeSheetOpen(true)}
           onMenu={() => setMenuOpen(o => !o)}
         />
@@ -333,7 +327,7 @@ export default function LobbyScreen({ navigation }) {
         <LifeDetailSheet
           visible={lifeSheetOpen}
           lives={lives}
-          lifeRefillAt={lifeRefillAt}
+          maxLives={maxLives}
           onClose={() => setLifeSheetOpen(false)}
           onOpenStore={() => { setLifeSheetOpen(false); setBananaStoreOpen(true); }}
         />
@@ -349,9 +343,10 @@ export default function LobbyScreen({ navigation }) {
         <BananaStore
           visible={bananaStoreOpen}
           onClose={() => setBananaStoreOpen(false)}
-          hasLife={lives > 0}
+          lives={lives}
+          maxLives={maxLives}
           playerInfo={{ id: playerInfo?.playerId, ...playerInfo }}
-          onBought={() => { fetchLives(); setBananaStoreOpen(false); }}
+          onBought={fetchLives}
         />
 
         <ScrollView contentContainerStyle={s.scroll} keyboardShouldPersistTaps="handled">

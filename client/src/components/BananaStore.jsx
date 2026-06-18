@@ -3,15 +3,16 @@ import { View, Text, Pressable, StyleSheet, Modal, ActivityIndicator } from 'rea
 import { colors } from '../theme';
 import { SERVER_URL } from '../config';
 
-export default function BananaStore({ visible, onClose, hasLife, playerInfo, onBought }) {
+export default function BananaStore({ visible, onClose, lives = 0, maxLives = 3, playerInfo, onBought }) {
   const [loading, setLoading] = useState(false);
+  const atMax = lives >= maxLives;
 
-  async function claimFree() {
-    if (!playerInfo?.id) return;
+  async function buyOne() {
+    if (!playerInfo?.id || atMax) return;
     setLoading(true);
     try {
       const res = await fetch(`${SERVER_URL}/api/player/${playerInfo.id}/buy-life`, { method: 'POST' });
-      if (res.ok) { onBought?.(); onClose?.(); }
+      if (res.ok) onBought?.();
     } catch (_) {}
     setLoading(false);
   }
@@ -25,17 +26,21 @@ export default function BananaStore({ visible, onClose, hasLife, playerInfo, onB
           <Text style={bs.icon}>🍌</Text>
           <Text style={bs.title}>Banana Store</Text>
 
-          {hasLife ? (
+          {atMax ? (
             <>
-              <Text style={bs.sub}>You have 1 banana{'\n'}It costs 1 banana to play a match</Text>
+              <Text style={bs.sub}>You have {lives} banana{lives !== 1 ? 's' : ''}{'\n'}You're ready to play</Text>
               <View style={bs.readyBox}>
-                <Text style={bs.readyBoxTxt}>🍌 ×1 · You're ready to play</Text>
+                <Text style={bs.readyBoxTxt}>🍌 ×{lives} · Ready to play</Text>
               </View>
             </>
           ) : (
             <>
-              <Text style={bs.sub}>Out of bananas?{'\n'}Grab one to keep playing</Text>
-              <Pressable style={bs.tierActive} onPress={claimFree} disabled={loading}>
+              <Text style={bs.sub}>
+                {lives === 0
+                  ? 'Out of bananas?\nGrab one to keep playing'
+                  : `You have ${lives} banana${lives !== 1 ? 's' : ''}\nBuy more to build up your stash`}
+              </Text>
+              <Pressable style={bs.tierActive} onPress={buyOne} disabled={loading}>
                 {loading
                   ? <ActivityIndicator color="#0c151f" />
                   : <><Text style={bs.tierActiveTxt}>1 Banana</Text><Text style={bs.tierActiveTag}>FREE</Text></>
@@ -65,21 +70,15 @@ export default function BananaStore({ visible, onClose, hasLife, playerInfo, onB
 }
 
 const bs = StyleSheet.create({
-  backdrop: {
-    flex: 1, backgroundColor: 'rgba(6,11,17,0.72)',
-    justifyContent: 'flex-end',
-  },
+  backdrop: { flex: 1, backgroundColor: 'rgba(6,11,17,0.72)', justifyContent: 'flex-end' },
   sheet: {
     backgroundColor: '#16222f', borderTopLeftRadius: 28, borderTopRightRadius: 28,
     paddingTop: 12, paddingBottom: 36, paddingHorizontal: 22,
     alignItems: 'center', borderTopWidth: 1, borderColor: 'rgba(255,255,255,0.1)',
   },
-  handle: {
-    width: 40, height: 4, borderRadius: 2,
-    backgroundColor: 'rgba(255,255,255,0.2)', marginBottom: 20,
-  },
+  handle: { width: 40, height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.2)', marginBottom: 20 },
   icon:  { fontSize: 48, marginBottom: 6 },
-  title: { color: colors.white, fontSize: 22, fontWeight: '900', marginBottom: 6 },
+  title: { color: '#fff', fontSize: 22, fontWeight: '900', marginBottom: 6 },
   sub:   { color: '#8a98aa', fontSize: 14, fontWeight: '600', textAlign: 'center', lineHeight: 21, marginBottom: 20 },
 
   readyBox: {
@@ -92,7 +91,7 @@ const bs = StyleSheet.create({
   tierActive: {
     alignSelf: 'stretch', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     backgroundColor: colors.goldLight, borderRadius: 16,
-    paddingVertical: 16, paddingHorizontal: 18, marginBottom: 10,
+    paddingVertical: 16, paddingHorizontal: 18, marginBottom: 10, minHeight: 54,
   },
   tierActiveTxt: { color: '#0c151f', fontSize: 16, fontWeight: '900' },
   tierActiveTag: { color: '#0c151f', fontSize: 13, fontWeight: '900', opacity: 0.7 },

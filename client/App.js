@@ -67,8 +67,9 @@ function App() {
   const [outgoingChallenges, setOutgoingChallenges] = useState([]); // [{ toId, toName }]
   const [pendingFriendRequests, setPendingFriendRequests] = useState(0);
   const [uiConfig, setUiConfig] = useState({});
-  const [lives, setLives]               = useState(1);
-  const [lifeRefillAt, setLifeRefillAt] = useState(null);
+  const [lives, setLives]               = useState(3);
+  const [maxLives, setMaxLives]         = useState(3);
+  const [lifeRefillAt, setLifeRefillAt] = useState(null); // kept for socket compat, always null now
 
   // Quick Match funnel overlays (see MatchFlowOverlays)
   const [searchOverlay, setSearchOverlay] = useState(null); // null | {status:'searching'} | {status:'found', opponent}
@@ -315,7 +316,7 @@ function App() {
       if (isFirst) track('FirstAchievementEarned');
       if (key === 'back_to_back') track('BackToBackWinningDays');
     },
-    'lives-update': ({ lives: l, lifeRefillAt: r }) => { setLives(l); setLifeRefillAt(r || null); },
+    'lives-update': ({ lives: l, maxLives: m }) => { setLives(l); if (m != null) setMaxLives(m); setLifeRefillAt(null); },
     error:         ({ message })     => { clearBotOfferTimer(); setError(message); setSearch(null); setMeantime(false); },
     reset:         ()                => {
       clearBotOfferTimer();
@@ -360,7 +361,7 @@ function App() {
       .catch(() => {});
     fetch(`${SERVER_URL}/api/player/${encodeURIComponent(playerId)}/lives`)
       .then(r => r.json())
-      .then(d => { setLives(d.lives ?? 1); setLifeRefillAt(d.lifeRefillAt || null); })
+      .then(d => { setLives(d.lives ?? 3); if (d.maxLives != null) setMaxLives(d.maxLives); setLifeRefillAt(null); })
       .catch(() => {});
     navigationRef.navigate('Lobby');
   }, [emit]);
@@ -375,7 +376,8 @@ function App() {
     setMyId(null);
     setPlayerInfo(null);
     setMyElo(null);
-    setLives(1);
+    setLives(3);
+    setMaxLives(3);
     setLifeRefillAt(null);
     setInQueue(false);
     setMatchOver(null);
@@ -397,7 +399,7 @@ function App() {
     if (!pid) return;
     fetch(`${SERVER_URL}/api/player/${encodeURIComponent(pid)}/lives`)
       .then(r => r.json())
-      .then(d => { setLives(d.lives ?? 1); setLifeRefillAt(d.lifeRefillAt || null); })
+      .then(d => { setLives(d.lives ?? 3); if (d.maxLives != null) setMaxLives(d.maxLives); setLifeRefillAt(null); })
       .catch(() => {});
   }, [playerInfo?.playerId]);
 
@@ -523,11 +525,11 @@ function App() {
   const gameValue = useMemo(() => ({
     gameState, transition, myId, matchOver, handEventsRef,
     playerInfo, deckStyle, setDeckStyle, uiConfig, bustReveal, forfeitReveal,
-    lives, lifeRefillAt, fetchLives,
+    lives, maxLives, lifeRefillAt, fetchLives,
     emit, onLogin, onLogout, onUpdateProfile,
     onAction, onLeave, onRematch, onHandEndAnimDone, onBotActionRequest, navigationRef,
   }), [gameState, transition, myId, matchOver, playerInfo, deckStyle, uiConfig, bustReveal, forfeitReveal,
-       lives, lifeRefillAt, fetchLives,
+       lives, maxLives, lifeRefillAt, fetchLives,
        emit, onLogin, onLogout, onUpdateProfile, onAction, onLeave, onRematch, onHandEndAnimDone, onBotActionRequest]);
 
   // Lobby context — fast-churning lobby data + lobby-only actions

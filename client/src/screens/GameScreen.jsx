@@ -23,14 +23,6 @@ function calcEloGain(winnerElo, loserElo, K = 32) {
   return Math.round(K * (1 - exp));
 }
 
-function fmtCountdownHMS(ms) {
-  if (ms <= 0) return '00:00:00';
-  const totalSec = Math.floor(ms / 1000);
-  const h = Math.floor(totalSec / 3600);
-  const m = Math.floor((totalSec % 3600) / 60);
-  const s = totalSec % 60;
-  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
-}
 
 const FEEDBACK_OPTIONS = [
   { value: 'bug',        label: '🐞 Bug' },
@@ -422,7 +414,7 @@ export default function GameScreen({ navigation }) {
     gameState, transition, myId, onAction, onLeave, onRematch, onLogout,
     matchOver, navigationRef, deckStyle, playerInfo, onHandEndAnimDone,
     handEventsRef, bustReveal = null, forfeitReveal = null, uiConfig = {},
-    onBotActionRequest, lives = 1, lifeRefillAt,
+    onBotActionRequest, lives = 3, maxLives = 3,
   } = useContext(GameContext);
 
   useEffect(() => {
@@ -485,16 +477,6 @@ export default function GameScreen({ navigation }) {
   const [feedbackText,   setFeedbackText]   = useState('');
   const [feedbackState,  setFeedbackState]  = useState('idle'); // idle | sending | done | error
   const [bananaStoreOpen, setBananaStoreOpen] = useState(false);
-
-  // Banana refill countdown for the match-over loss screen
-  const [refillMs, setRefillMs] = useState(0);
-  useEffect(() => {
-    if (!lifeRefillAt) { setRefillMs(0); return; }
-    const tick = () => setRefillMs(Math.max(0, new Date(lifeRefillAt) - Date.now()));
-    tick();
-    const id = setInterval(tick, 1000);
-    return () => clearInterval(id);
-  }, [lifeRefillAt]);
 
   const openFeedback = () => {
     setFeedbackType('bug');
@@ -1314,14 +1296,6 @@ export default function GameScreen({ navigation }) {
                 </Text>
               </Animated.View>
 
-              {/* Loss banana refill countdown */}
-              {!iWon && (
-                <Animated.View style={[s.moRefill, { opacity: moElo }]}>
-                  <Text style={s.moRefillTimer}>{fmtCountdownHMS(refillMs)}</Text>
-                  <Text style={s.moRefillLabel}>until free banana</Text>
-                </Animated.View>
-              )}
-
               {/* Buttons */}
               <Animated.View style={{ opacity: moBtns, alignSelf: 'stretch', marginTop: 4 }}>
                 {matchOver.forfeit || matchOver.observer ? (
@@ -1381,7 +1355,8 @@ export default function GameScreen({ navigation }) {
       <BananaStore
         visible={bananaStoreOpen}
         onClose={() => setBananaStoreOpen(false)}
-        hasLife={lives > 0}
+        lives={lives}
+        maxLives={maxLives}
         playerInfo={{ id: playerInfo?.playerId, ...playerInfo }}
         onBought={() => setBananaStoreOpen(false)}
       />
