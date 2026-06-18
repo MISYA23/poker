@@ -137,14 +137,20 @@ function LifeDetailSheet({ visible, lives, lifeRefillAt, onClose, onBuy }) {
               <Text style={ld.countdownLabel}>until a free banana</Text>
             </>
           )}
-          <View style={ld.btns}>
-            <Pressable style={ld.waitBtn} onPress={onClose}>
-              <Text style={ld.waitTxt}>Wait</Text>
+          {spent ? (
+            <View style={ld.btns}>
+              <Pressable style={ld.waitBtn} onPress={onClose}>
+                <Text style={ld.waitTxt}>Wait</Text>
+              </Pressable>
+              <Pressable style={ld.buyBtn} onPress={onBuy}>
+                <Text style={ld.buyTxt}>🍌 Buy a banana</Text>
+              </Pressable>
+            </View>
+          ) : (
+            <Pressable style={[ld.waitBtn, { alignSelf: 'stretch', marginTop: 8 }]} onPress={onClose}>
+              <Text style={ld.waitTxt}>Close</Text>
             </Pressable>
-            <Pressable style={ld.buyBtn} onPress={onBuy}>
-              <Text style={ld.buyTxt}>🍌 Buy a banana</Text>
-            </Pressable>
-          </View>
+          )}
         </Pressable>
       </Pressable>
     </Modal>
