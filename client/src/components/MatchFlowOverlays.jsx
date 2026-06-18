@@ -138,7 +138,7 @@ function OpponentCard({ name, avatarId, country, elo, isBot }) {
 
 // Pre-match vs card with animated ELO drop + ring countdown. Tap anywhere to skip.
 function PreMatchCountdown({ opponent, playerInfo, myElo, onLeave }) {
-  const DURATION = 3000;
+  const DURATION = 10000;
   const RING_R = 36;
   const RING_C = 2 * Math.PI * RING_R;
 
@@ -174,8 +174,8 @@ function PreMatchCountdown({ opponent, playerInfo, myElo, onLeave }) {
   if (skipped) return null;
 
   return (
-    <Pressable style={ov.scrim} onPress={() => setSkipped(true)}>
-      <Pressable style={ov.dialog} onPress={() => setSkipped(true)}>
+    <Pressable style={ov.scrim} onPress={() => {}}>
+      <Pressable style={ov.dialog} onPress={() => {}}>
         <Text style={ov.vsHeading}>Match Starting</Text>
         <View style={ov.vsRow}>
           <View style={ov.vsPlayer}>
@@ -205,12 +205,15 @@ function PreMatchCountdown({ opponent, playerInfo, myElo, onLeave }) {
 
         <StakePot potElo={potElo} label="Winner takes the pot" />
 
-        <Pressable style={[ov.ghostBtn, { marginTop: 10, alignSelf: 'stretch' }]}
-          onPress={() => { onLeave?.(); setSkipped(true); }}>
-          <Text style={ov.ghostBtnTxt}>Leave</Text>
+        <Pressable style={[ov.cta, { marginTop: 10, alignSelf: 'stretch' }]}
+          onPress={() => setSkipped(true)}>
+          <Text style={ov.ctaTxt}>LET'S PLAY</Text>
         </Pressable>
 
-        <Text style={ov.tapHint}>Tap anywhere to start now</Text>
+        <Pressable style={[ov.ghostBtn, { marginTop: 8, alignSelf: 'stretch' }]}
+          onPress={() => { onLeave?.(); setSkipped(true); }}>
+          <Text style={[ov.ghostBtnTxt, { fontSize: 13 }]}>Cancel</Text>
+        </Pressable>
       </Pressable>
     </Pressable>
   );

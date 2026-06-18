@@ -1339,10 +1339,16 @@ export default function GameScreen({ navigation }) {
                     <Pressable style={[s.modalBtn, s.modalBtnNo]} onPress={onLeave}>
                       <Text style={s.modalBtnTxt}>Lobby</Text>
                     </Pressable>
-                    <Pressable style={[s.modalBtn, { flex: 2, backgroundColor: '#e7b23b', borderRadius: 14, paddingVertical: 14, alignItems: 'center' }]}
-                      onPress={() => setBananaStoreOpen(true)}>
-                      <Text style={[s.modalBtnTxt, { color: '#0c151f' }]}>🍌 Get more bananas</Text>
-                    </Pressable>
+                    {lives > 0 ? (
+                      <Pressable style={[s.modalBtn, s.modalBtnYes]} onPress={() => onRematch(true)}>
+                        <Text style={s.modalBtnTxt}>Rematch →</Text>
+                      </Pressable>
+                    ) : (
+                      <Pressable style={[s.modalBtn, { flex: 2, backgroundColor: '#e7b23b', borderRadius: 14, paddingVertical: 14, alignItems: 'center' }]}
+                        onPress={() => setBananaStoreOpen(true)}>
+                        <Text style={[s.modalBtnTxt, { color: '#0c151f' }]}>🍌 Get more bananas</Text>
+                      </Pressable>
+                    )}
                   </View>
                 )}
               </Animated.View>
