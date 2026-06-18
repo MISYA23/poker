@@ -875,9 +875,11 @@ export default function GameScreen({ navigation }) {
 
           {/* Opponent bet */}
           <View style={[s.betSlot, { top: OPP_BET_T }]} pointerEvents="none">
-            {(oppBetShown > 0 || opponent?.allIn) && (
+            {(oppBetShown > 0 || opponent?.allIn || allInEquity) && (
               <View style={s.betPill}>
-                {opponent?.allIn && <Text style={s.allInTag}>{allInEquity ? `ALL IN: ${allInEquity.opp}%` : 'ALL IN'}</Text>}
+                {opponent?.allIn
+                  ? <Text style={s.allInTag}>{allInEquity ? `ALL IN: ${allInEquity.opp}%` : 'ALL IN'}</Text>
+                  : allInEquity ? <Text style={s.allInTag}>{allInEquity.opp}%</Text> : null}
                 {oppBetShown > 0 && (
                   <Animated.View style={[s.betPillChips, collecting && oppCollectStyle]}>
                     <ChipStack amount={oppBetShown} size={33} />
@@ -910,9 +912,11 @@ export default function GameScreen({ navigation }) {
 
           {/* Player bet — bottom-anchored, grows up toward the pot (clears hole cards) */}
           <View style={[s.betSlot, { top: MY_BET_BASE - MY_BET_SLOT_H, height: MY_BET_SLOT_H, left: MY_BET_L, justifyContent: 'flex-end' }]} pointerEvents="none">
-            {(myBetShown > 0 || me?.allIn) && (
+            {(myBetShown > 0 || me?.allIn || allInEquity) && (
               <View style={s.betPill}>
-                {me?.allIn && <Text style={s.allInTag}>{allInEquity ? `ALL IN: ${allInEquity.me}%` : 'ALL IN'}</Text>}
+                {me?.allIn
+                  ? <Text style={s.allInTag}>{allInEquity ? `ALL IN: ${allInEquity.me}%` : 'ALL IN'}</Text>
+                  : allInEquity ? <Text style={s.allInTag}>{allInEquity.me}%</Text> : null}
                 {myBetShown > 0 && (
                   <Animated.View style={[s.betPillChips, collecting && myCollectStyle]}>
                     <ChipStack amount={myBetShown} size={33} />
