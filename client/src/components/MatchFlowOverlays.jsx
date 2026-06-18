@@ -19,17 +19,56 @@ const AVATAR_IMAGES = {
   sailor: require('../../assets/sailor.png'),
   banana: require('../../assets/banana.png'),
   parrot: require('../../assets/parrot.png'),
+  rickdeckard: require('../../assets/rickdeckard.png'),
 };
+
+function calcEloGain(winnerElo, loserElo, K = 32) {
+  const exp = 1 / (1 + Math.pow(10, (loserElo - winnerElo) / 400));
+  return Math.round(K * (1 - exp));
+}
 
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 
-function BananaBanner() {
+function StakePot({ potElo, label, winElo, loseElo }) {
   return (
-    <View style={ov.bananaBanner}>
-      <Text style={ov.bananaEmoji}>🍌</Text>
+    <View style={ov.stakePot}>
+      {label ? <Text style={ov.stakePotLabel}>{label}</Text> : null}
+      <View style={ov.stakePotItems}>
+        <View style={ov.stakePotItem}>
+          <Text style={ov.stakePotIcon}>🍌</Text>
+          <Text style={ov.stakePotBig}>1</Text>
+          <Text style={ov.stakePotSmall}>banana</Text>
+        </View>
+        <Text style={ov.stakePotSep}>+</Text>
+        <View style={ov.stakePotItem}>
+          <Text style={ov.stakePotIcon}>📈</Text>
+          {winElo != null && loseElo != null ? (
+            <>
+              <Text style={ov.stakePotBig}>+{winElo} / −{loseElo}</Text>
+              <Text style={ov.stakePotSmall}>ELO win/lose</Text>
+            </>
+          ) : (
+            <>
+              <Text style={ov.stakePotBig}>{potElo ?? '?'} ELO</Text>
+              <Text style={ov.stakePotSmall}>winner takes it</Text>
+            </>
+          )}
+        </View>
+      </View>
+    </View>
+  );
+}
+
+function BotOpponentBlock({ name = 'Rick Deckard', elo = 1394 }) {
+  return (
+    <View style={ov.oppRow}>
+      <AvatarBadge avatarId="rickdeckard" isBot size={68} />
       <View>
-        <Text style={ov.bananaTitle}>1 banana on the line</Text>
-        <Text style={ov.bananaSub}>Win to keep it · lose it's gone</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <Text style={ov.oppName} numberOfLines={1}>{name}</Text>
+          <View style={ov.botTag}><Text style={ov.botTagTxt}>BOT</Text></View>
+        </View>
+        <Text style={ov.oppMeta}>ELO <Text style={ov.oppElo}>{elo}</Text></Text>
       </View>
     </View>
   );
@@ -97,46 +136,83 @@ function OpponentCard({ name, avatarId, country, elo, isBot }) {
   );
 }
 
-// Pre-match vs card with 3-2-1 countdown. Shown for exactly 3s (matching the
-// server's auto_start_delay_ms) so the hand deals right as we land on the table.
-function PreMatchCountdown({ opponent, playerInfo, myElo }) {
-  const [count, setCount] = useState(3);
-  const scaleAnim = useRef(new Animated.Value(1)).current;
+// Pre-match vs card with animated ELO drop + ring countdown. Tap anywhere to skip.
+function PreMatchCountdown({ opponent, playerInfo, myElo, onLeave }) {
+  const DURATION = 3000;
+  const RING_R = 36;
+  const RING_C = 2 * Math.PI * RING_R;
+
+  const myEloVal = myElo ?? 1200;
+  const oppEloVal = opponent?.elo ?? 1200;
+  const myLoss  = calcEloGain(oppEloVal, myEloVal);
+  const oppLoss = calcEloGain(myEloVal, oppEloVal);
+  const potElo  = calcEloGain(myEloVal, oppEloVal);
+
+  const [skipped, setSkipped] = useState(false);
+  const [myEloDisplay, setMyEloDisplay]   = useState(myEloVal);
+  const [oppEloDisplay, setOppEloDisplay] = useState(oppEloVal);
+  const ringOffset = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    Animated.sequence([
-      Animated.timing(scaleAnim, { toValue: 1.5, duration: 100, useNativeDriver: true }),
-      Animated.timing(scaleAnim, { toValue: 1,   duration: 250, useNativeDriver: true }),
-    ]).start();
-  }, [count]);
+    Animated.timing(ringOffset, {
+      toValue: RING_C, duration: DURATION, easing: Easing.linear, useNativeDriver: false,
+    }).start();
+    const STEPS = 60;
+    const stepMs = DURATION / STEPS;
+    let step = 0;
+    const id = setInterval(() => {
+      step++;
+      const t = step / STEPS;
+      const ease = 1 - Math.pow(1 - t, 3);
+      setMyEloDisplay(Math.round(myEloVal - myLoss * ease));
+      setOppEloDisplay(Math.round(oppEloVal - oppLoss * ease));
+      if (step >= STEPS) clearInterval(id);
+    }, stepMs);
+    return () => clearInterval(id);
+  }, []);
 
-  useEffect(() => {
-    if (count <= 0) return;
-    const t = setTimeout(() => setCount(c => c - 1), 1000);
-    return () => clearTimeout(t);
-  }, [count]);
+  if (skipped) return null;
 
   return (
-    <Scrim onPress={() => {}}>
-      <Text style={ov.vsHeading}>Match Starting</Text>
-      <View style={ov.vsRow}>
-        <View style={ov.vsPlayer}>
-          <AvatarBadge avatarId={playerInfo?.avatarId} size={74} />
-          <Text style={ov.vsName} numberOfLines={1}>{playerInfo?.name || 'You'}</Text>
-          <Text style={ov.vsElo}>{myElo ?? 1200}</Text>
+    <Pressable style={ov.scrim} onPress={() => setSkipped(true)}>
+      <Pressable style={ov.dialog} onPress={() => setSkipped(true)}>
+        <Text style={ov.vsHeading}>Match Starting</Text>
+        <View style={ov.vsRow}>
+          <View style={ov.vsPlayer}>
+            <AvatarBadge avatarId={playerInfo?.avatarId} size={64} />
+            <Text style={ov.vsName} numberOfLines={1}>{playerInfo?.name || 'You'}</Text>
+            <Text style={ov.vsEloBlue}>{myEloDisplay}</Text>
+          </View>
+
+          <View style={ov.countRingWrap}>
+            <Svg width={80} height={80} viewBox="0 0 80 80">
+              <Circle cx="40" cy="40" r={RING_R} stroke="rgba(255,255,255,0.1)" strokeWidth="5" fill="none" />
+              <AnimatedCircle
+                cx="40" cy="40" r={RING_R} stroke={colors.goldLight} strokeWidth="5" fill="none"
+                strokeLinecap="round" strokeDasharray={`${RING_C}`} strokeDashoffset={ringOffset}
+                transform="rotate(-90 40 40)"
+              />
+            </Svg>
+            <Text style={ov.vsVs}>VS</Text>
+          </View>
+
+          <View style={ov.vsPlayer}>
+            <AvatarBadge avatarId={opponent?.avatarId} country={opponent?.country} isBot={!!opponent?.isBot} size={64} />
+            <Text style={ov.vsName} numberOfLines={1}>{opponent?.name || '…'}</Text>
+            <Text style={ov.vsEloBlue}>{oppEloDisplay}</Text>
+          </View>
         </View>
-        <Text style={ov.vsVs}>VS</Text>
-        <View style={ov.vsPlayer}>
-          <AvatarBadge avatarId={opponent?.avatarId} country={opponent?.country} isBot={!!opponent?.isBot} size={74} />
-          <Text style={ov.vsName} numberOfLines={1}>{opponent?.name || '…'}</Text>
-          <Text style={ov.vsElo}>{opponent?.elo ?? 1200}</Text>
-        </View>
-      </View>
-      <BananaBanner />
-      <Animated.Text style={[ov.countdown, { transform: [{ scale: scaleAnim }] }]}>
-        {count > 0 ? count : 'GO!'}
-      </Animated.Text>
-    </Scrim>
+
+        <StakePot potElo={potElo} label="Winner takes the pot" />
+
+        <Pressable style={[ov.ghostBtn, { marginTop: 10, alignSelf: 'stretch' }]}
+          onPress={() => { onLeave?.(); setSkipped(true); }}>
+          <Text style={ov.ghostBtnTxt}>Leave</Text>
+        </Pressable>
+
+        <Text style={ov.tapHint}>Tap anywhere to start now</Text>
+      </Pressable>
+    </Pressable>
   );
 }
 
@@ -208,7 +284,7 @@ export default function MatchFlowOverlays({
 
       {/* Pre-match vs countdown */}
       {preMatch && !challenge && (
-        <PreMatchCountdown opponent={preMatch.opponent} playerInfo={playerInfo} myElo={myElo} copy={copy} />
+        <PreMatchCountdown opponent={preMatch.opponent} playerInfo={playerInfo} myElo={myElo} onLeave={onCancelSearch} />
       )}
 
       {/* Searching… / Human found! */}
@@ -237,14 +313,16 @@ export default function MatchFlowOverlays({
         <Scrim onPress={() => {}}>
           <Radar />
           <Text style={ov.title}>{copy?.botTitle ?? 'No humans yet…'}</Text>
-          <Text style={ov.sub}>{copy?.botSub ?? 'Play a 🤖 bot while we keep searching for a human?'}</Text>
-          <BananaBanner />
+          <BotOpponentBlock />
+          <View style={ov.stakeBar}>
+            <Text style={ov.stakeBarTxt}>🍌 1 banana + ELO on the line · Win to keep it · lose it's gone</Text>
+          </View>
           <View style={ov.actsRow}>
             <Pressable style={ov.declineBtn} onPress={onDismissMeantime}>
               <Text style={ov.declineTxt}>{copy?.botKeepWaitingBtn ?? 'Keep waiting'}</Text>
             </Pressable>
             <Pressable style={[ov.cta, { flex: 1, marginTop: 0 }]} onPress={onConfirmBot}>
-              <Text style={ov.ctaTxt}>{copy?.botPlayBtn ?? 'Play a bot →'}</Text>
+              <Text style={ov.ctaTxt}>{copy?.botPlayBtn ?? 'Play Rick →'}</Text>
             </Pressable>
           </View>
         </Scrim>
@@ -266,11 +344,10 @@ export default function MatchFlowOverlays({
               <Text style={ov.oppMeta}>ELO <Text style={ov.oppElo}>{challenge.fromElo ?? 1200}</Text></Text>
             </View>
           </View>
-          <Text style={ov.sub}>
-            <Text style={ov.bold}>{challenge.fromName}</Text>
-            {(copy?.challengeSub ?? ' {name} wants to play you.').replace('{name}', '').trimStart()}
-          </Text>
-          <BananaBanner />
+          <StakePot
+            winElo={calcEloGain(myElo ?? 1200, challenge.fromElo ?? 1200)}
+            loseElo={calcEloGain(challenge.fromElo ?? 1200, myElo ?? 1200)}
+          />
           <View style={ov.actsRow}>
             <Pressable style={ov.declineBtn} onPress={() => { onDeclineChallenge(challenge.fromId); }}>
               <Text style={ov.declineTxt}>{copy?.challengeDeclineBtn ?? 'Decline'}</Text>
@@ -322,16 +399,44 @@ const ov = StyleSheet.create({
   oppElo: { color: colors.goldLight, fontWeight: '900' },
   flagBadge: { position: 'absolute', bottom: -6, right: -7, textShadowColor: 'rgba(0,0,0,0.5)', textShadowRadius: 2 },
 
-  vsHeading: { color: '#8a98aa', fontSize: 13, fontWeight: '800', letterSpacing: 1.2, textTransform: 'uppercase', marginBottom: 20 },
-  vsRow:     { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 12, marginBottom: 24 },
-  vsPlayer:  { alignItems: 'center', gap: 8, width: 100 },
-  vsName:    { color: colors.white, fontSize: 15, fontWeight: '800', textAlign: 'center' },
-  vsElo:     { color: colors.goldLight, fontSize: 13, fontWeight: '700' },
-  vsVs:      { color: colors.goldLight, fontSize: 22, fontWeight: '900' },
-  countdown: { color: colors.white, fontSize: 64, fontWeight: '900', lineHeight: 72 },
+  vsHeading: { color: '#8a98aa', fontSize: 13, fontWeight: '800', letterSpacing: 1.2, textTransform: 'uppercase', marginBottom: 14 },
+  vsRow:     { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginBottom: 18 },
+  vsPlayer:  { alignItems: 'center', gap: 6, width: 96 },
+  vsName:    { color: colors.white, fontSize: 14, fontWeight: '800', textAlign: 'center' },
+  vsEloBlue: { color: '#a9d0f5', fontSize: 13, fontWeight: '700' },
+  vsVs:      { color: colors.goldLight, fontSize: 18, fontWeight: '900', position: 'absolute' },
 
+  countRingWrap: { width: 80, height: 80, alignItems: 'center', justifyContent: 'center' },
   ringWrap: { width: 92, height: 92, alignItems: 'center', justifyContent: 'center' },
   ringSvg: { position: 'absolute' },
+
+  tapHint: { color: 'rgba(255,255,255,0.3)', fontSize: 11, fontWeight: '700', marginTop: 10, letterSpacing: 0.5 },
+
+  stakePot: {
+    alignSelf: 'stretch', marginBottom: 14,
+    backgroundColor: 'rgba(231,178,59,0.08)', borderWidth: 1, borderColor: 'rgba(231,178,59,0.3)',
+    borderRadius: 14, paddingVertical: 12, paddingHorizontal: 14, alignItems: 'center',
+  },
+  stakePotLabel: { color: '#8a98aa', fontSize: 11, fontWeight: '800', letterSpacing: 0.8, textTransform: 'uppercase', marginBottom: 8 },
+  stakePotItems: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  stakePotItem:  { alignItems: 'center', gap: 2 },
+  stakePotIcon:  { fontSize: 20 },
+  stakePotBig:   { color: colors.white, fontSize: 15, fontWeight: '900' },
+  stakePotSmall: { color: '#8a98aa', fontSize: 11, fontWeight: '700' },
+  stakePotSep:   { color: '#8a98aa', fontSize: 18, fontWeight: '700' },
+
+  stakeBar: {
+    alignSelf: 'stretch', marginBottom: 14,
+    backgroundColor: 'rgba(231,178,59,0.08)', borderWidth: 1, borderColor: 'rgba(231,178,59,0.3)',
+    borderRadius: 14, paddingVertical: 11, paddingHorizontal: 14,
+  },
+  stakeBarTxt: { color: '#c49a2a', fontSize: 13, fontWeight: '800', textAlign: 'center' },
+
+  botTag: {
+    backgroundColor: 'rgba(169,208,245,0.15)', borderRadius: 6,
+    paddingHorizontal: 6, paddingVertical: 2,
+  },
+  botTagTxt: { color: '#a9d0f5', fontSize: 10, fontWeight: '900', letterSpacing: 1 },
 
   cta: {
     alignSelf: 'stretch', backgroundColor: colors.goldLight, borderRadius: 16,
@@ -351,14 +456,4 @@ const ov = StyleSheet.create({
     paddingVertical: 15, alignItems: 'center',
   },
   declineTxt: { color: '#8a98aa', fontSize: 15, fontWeight: '800' },
-
-  bananaBanner: {
-    flexDirection: 'row', alignItems: 'center', gap: 12,
-    alignSelf: 'stretch', marginBottom: 14,
-    backgroundColor: 'rgba(231,178,59,0.1)', borderWidth: 1, borderColor: 'rgba(231,178,59,0.3)',
-    borderRadius: 14, paddingVertical: 12, paddingHorizontal: 14,
-  },
-  bananaEmoji: { fontSize: 26 },
-  bananaTitle: { color: colors.white, fontSize: 14, fontWeight: '900' },
-  bananaSub: { color: '#8a98aa', fontSize: 12, fontWeight: '700', marginTop: 2 },
 });

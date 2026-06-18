@@ -9,6 +9,7 @@ import { track } from '../utils/analytics';
 import { flagEmoji } from '../utils/flag';
 import { continentOf, regionEmoji, GLOBAL_EMOJI } from '../utils/regions';
 import { AvatarBadge } from '../components/MatchFlowOverlays';
+import BananaStore from '../components/BananaStore';
 import SoundToggleRows from '../components/SoundToggleRows';
 import AchievementGallery from '../components/AchievementGallery';
 import { ACHIEVEMENTS, mergeAchievements } from '../data/achievements';
@@ -20,6 +21,16 @@ function fmtCountdownShort(ms) {
   const h = Math.floor(totalSec / 3600);
   const m = Math.floor((totalSec % 3600) / 60);
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+}
+
+// HH:MM:SS from ms remaining (used in LifeDetailSheet)
+function fmtCountdownHMS(ms) {
+  if (ms <= 0) return '00:00:00';
+  const totalSec = Math.floor(ms / 1000);
+  const h = Math.floor(totalSec / 3600);
+  const m = Math.floor((totalSec % 3600) / 60);
+  const s = totalSec % 60;
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 }
 
 function useCountdown(targetIso) {
@@ -111,8 +122,9 @@ function TopBar({ playerInfo, myElo, lives, lifeRefillAt, onBanana, onMenu }) {
   );
 }
 
-function LifeDetailSheet({ visible, lives, onClose, onGetOne }) {
+function LifeDetailSheet({ visible, lives, lifeRefillAt, onClose, onOpenStore }) {
   const spent = lives === 0;
+  const ms = useCountdown(spent ? lifeRefillAt : null);
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <Pressable style={ld.overlay} onPress={onClose}>
@@ -120,14 +132,15 @@ function LifeDetailSheet({ visible, lives, onClose, onGetOne }) {
           <Text style={[ld.bigIcon, spent && ld.bigIconSpent]}>🍌</Text>
           {spent ? (
             <>
-              <Text style={ld.title}>Want another banana?</Text>
-              <Text style={ld.copy}>One banana gets you back in the game.</Text>
+              <Text style={ld.title}>Out of bananas</Text>
+              <Text style={ld.countdown}>{fmtCountdownHMS(ms)}</Text>
+              <Text style={ld.copy}>until your free banana refills</Text>
               <View style={ld.btns}>
                 <Pressable style={ld.waitBtn} onPress={onClose}>
-                  <Text style={ld.waitTxt}>No thanks</Text>
+                  <Text style={ld.waitTxt}>Wait</Text>
                 </Pressable>
-                <Pressable style={ld.buyBtn} onPress={onGetOne}>
-                  <Text style={ld.buyTxt}>🍌 Yes!</Text>
+                <Pressable style={ld.buyBtn} onPress={onOpenStore}>
+                  <Text style={ld.buyTxt}>🍌 Buy a banana</Text>
                 </Pressable>
               </View>
             </>
@@ -193,6 +206,7 @@ export default function LobbyScreen({ navigation }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [lifeSheetOpen, setLifeSheetOpen] = useState(false);
   const [noLifeOpen, setNoLifeOpen] = useState(false);
+  const [bananaStoreOpen, setBananaStoreOpen] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
   const [lbData, setLbData] = useState(null);
   const [achievements, setAchievements] = useState(() => mergeAchievements([]));
@@ -319,29 +333,25 @@ export default function LobbyScreen({ navigation }) {
         <LifeDetailSheet
           visible={lifeSheetOpen}
           lives={lives}
+          lifeRefillAt={lifeRefillAt}
           onClose={() => setLifeSheetOpen(false)}
-          onGetOne={() => {
-            const pid = playerInfo?.playerId;
-            if (!pid) return;
-            fetch(`${SERVER_URL}/api/player/${encodeURIComponent(pid)}/buy-life`, { method: 'POST' })
-              .then(r => r.json())
-              .then(() => { fetchLives(); setLifeSheetOpen(false); })
-              .catch(() => {});
-          }}
+          onOpenStore={() => { setLifeSheetOpen(false); setBananaStoreOpen(true); }}
         />
 
         {/* No banana — tried to play without one */}
         <NoLifeAlert
           visible={noLifeOpen}
           onClose={() => setNoLifeOpen(false)}
-          onGetOne={() => {
-            const pid = playerInfo?.playerId;
-            if (!pid) return;
-            fetch(`${SERVER_URL}/api/player/${encodeURIComponent(pid)}/buy-life`, { method: 'POST' })
-              .then(r => r.json())
-              .then(() => { fetchLives(); setNoLifeOpen(false); })
-              .catch(() => {});
-          }}
+          onGetOne={() => { setNoLifeOpen(false); setBananaStoreOpen(true); }}
+        />
+
+        {/* Banana store */}
+        <BananaStore
+          visible={bananaStoreOpen}
+          onClose={() => setBananaStoreOpen(false)}
+          hasLife={lives > 0}
+          playerInfo={{ id: playerInfo?.playerId, ...playerInfo }}
+          onBought={() => { fetchLives(); setBananaStoreOpen(false); }}
         />
 
         <ScrollView contentContainerStyle={s.scroll} keyboardShouldPersistTaps="handled">
@@ -704,6 +714,7 @@ const ld = StyleSheet.create({
   bigIcon: { fontSize: 56, marginBottom: 14 },
   bigIconSpent: { opacity: 0.35 },
   title: { color: colors.white, fontSize: 18, fontWeight: '900', textAlign: 'center', marginBottom: 8 },
+  countdown: { color: '#e7b23b', fontSize: 32, fontWeight: '900', letterSpacing: 1, marginBottom: 4 },
   copy: { color: '#8a98aa', fontSize: 13, fontWeight: '700', textAlign: 'center', marginBottom: 16 },
   btns: { flexDirection: 'row', gap: 10, marginTop: 8 },
   waitBtn: {

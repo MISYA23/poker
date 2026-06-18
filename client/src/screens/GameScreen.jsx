@@ -16,6 +16,21 @@ import { colors } from '../theme';
 import { SERVER_URL } from '../config';
 import { playSfx } from '../audio/sfx';
 import SoundToggleRows from '../components/SoundToggleRows';
+import BananaStore from '../components/BananaStore';
+
+function calcEloGain(winnerElo, loserElo, K = 32) {
+  const exp = 1 / (1 + Math.pow(10, (loserElo - winnerElo) / 400));
+  return Math.round(K * (1 - exp));
+}
+
+function fmtCountdownHMS(ms) {
+  if (ms <= 0) return '00:00:00';
+  const totalSec = Math.floor(ms / 1000);
+  const h = Math.floor(totalSec / 3600);
+  const m = Math.floor((totalSec % 3600) / 60);
+  const s = totalSec % 60;
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+}
 
 const FEEDBACK_OPTIONS = [
   { value: 'bug',        label: '🐞 Bug' },
@@ -407,7 +422,7 @@ export default function GameScreen({ navigation }) {
     gameState, transition, myId, onAction, onLeave, onRematch, onLogout,
     matchOver, navigationRef, deckStyle, playerInfo, onHandEndAnimDone,
     handEventsRef, bustReveal = null, forfeitReveal = null, uiConfig = {},
-    onBotActionRequest, lives = 1,
+    onBotActionRequest, lives = 1, lifeRefillAt,
   } = useContext(GameContext);
 
   useEffect(() => {
@@ -469,6 +484,17 @@ export default function GameScreen({ navigation }) {
   const [typeMenuOpen,   setTypeMenuOpen]   = useState(false);
   const [feedbackText,   setFeedbackText]   = useState('');
   const [feedbackState,  setFeedbackState]  = useState('idle'); // idle | sending | done | error
+  const [bananaStoreOpen, setBananaStoreOpen] = useState(false);
+
+  // Banana refill countdown for the match-over loss screen
+  const [refillMs, setRefillMs] = useState(0);
+  useEffect(() => {
+    if (!lifeRefillAt) { setRefillMs(0); return; }
+    const tick = () => setRefillMs(Math.max(0, new Date(lifeRefillAt) - Date.now()));
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [lifeRefillAt]);
 
   const openFeedback = () => {
     setFeedbackType('bug');
@@ -1071,9 +1097,13 @@ export default function GameScreen({ navigation }) {
             );
           })()}
           <View style={s.topBarRight}>
-            <View style={s.bananaRisk}>
-              <Text style={s.bananaRiskEmoji}>🍌</Text>
-              <Text style={s.bananaRiskTxt}>at risk</Text>
+            <View style={s.stakeChip}>
+              <Text style={s.stakeChipTxt}>🍌</Text>
+            </View>
+            <View style={[s.stakeChip, s.stakeChipElo]}>
+              <Text style={s.stakeChipEloTxt}>
+                +{me?.elo && opponent?.elo ? calcEloGain(me.elo, opponent.elo) : 16}
+              </Text>
             </View>
             <Pressable style={s.menuBtn} onPress={() => setMenuOpen(o => !o)}>
               <Text style={s.menuBtnTxt}>☰</Text>
@@ -1232,81 +1262,129 @@ export default function GameScreen({ navigation }) {
         onClose={() => setReplayOpen(false)} />
 
       {/* Match over modal — root-level overlay, not scaled */}
-      {matchOver && (
-        <Animated.View style={[s.modalOverlay, { opacity: moScrim }]}>
-          <Animated.View style={[s.modal, { opacity: moCard, transform: [{ translateY: moSlide }] }]}>
-            <Animated.Text style={[s.modalTitle, { opacity: moTitle }]}>
-              {matchOver.forfeit
-                ? (matchOver.winnerId === myId ? 'You Won By Forfeit' : 'You Lost By Forfeit')
-                : (matchOver.winnerId === myId ? '🎉 You Won!' : `${matchOver.winnerName} Won!`)}
-            </Animated.Text>
+      {matchOver && (() => {
+        const iWon = matchOver.winnerId === myId;
+        const myAvatarId = playerInfo?.avatarId ?? me?.avatarId;
+        const oppAvatarId = opponent?.avatarId;
+        const eloAmt = Math.abs(matchOver.eloChange ?? 0);
+        return (
+          <Animated.View style={[s.modalOverlay, { opacity: moScrim }]}>
+            <Animated.View style={[s.modal, { opacity: moCard, transform: [{ translateY: moSlide }] }]}>
 
-            {matchOver.forfeit && (
-              <Animated.Text style={[s.modalSub, { opacity: moTitle }]}>
-                {matchOver.loserName} timed out
+              {/* Result crest */}
+              <Animated.Text style={[s.moCrest, { opacity: moAvatar }]}>
+                {iWon ? '🏆' : '🍌'}
               </Animated.Text>
-            )}
+              <Animated.Text style={[s.moResult, iWon ? s.moResultWin : s.moResultLose, { opacity: moTitle }]}>
+                {matchOver.forfeit
+                  ? (iWon ? 'You Won By Forfeit' : 'You Lost By Forfeit')
+                  : (iWon ? 'You Win!' : 'You Lose')}
+              </Animated.Text>
 
-            <Animated.View style={[s.winnerWrap, { opacity: moAvatar }]}>
-              <Avatar size={104} avatarId={winnerAvatarId} />
-            </Animated.View>
-
-            {matchOver.eloChange != null && (
-              <Animated.View style={[s.eloRow, { opacity: moElo }]}>
-                <Text style={[s.eloChange, matchOver.eloChange >= 0 ? s.eloPos : s.eloNeg]}>
-                  {matchOver.eloChange >= 0 ? '+' : ''}{matchOver.eloChange} ELO
-                </Text>
-                <Text style={s.eloNew}>→ {matchOver.newElo}</Text>
+              {/* Duel row */}
+              <Animated.View style={[s.moDuelRow, { opacity: moAvatar }]}>
+                <View style={s.moDuelPlayer}>
+                  <View>
+                    <Avatar size={60} avatarId={myAvatarId} />
+                    {iWon && <Text style={s.moCrown}>👑</Text>}
+                  </View>
+                  <Text style={s.moDuelName} numberOfLines={1}>{playerInfo?.name || 'You'}</Text>
+                  <Text style={[s.moDuelElo, iWon ? s.moDuelEloWin : s.moDuelEloLose]}>
+                    {iWon ? `+${eloAmt}` : `−${eloAmt}`}
+                  </Text>
+                </View>
+                <Text style={s.moDuelVs}>VS</Text>
+                <View style={s.moDuelPlayer}>
+                  <View>
+                    <Avatar size={60} avatarId={oppAvatarId} />
+                    {!iWon && <Text style={s.moCrown}>👑</Text>}
+                  </View>
+                  <Text style={s.moDuelName} numberOfLines={1}>{opponent?.name || '…'}</Text>
+                  <Text style={[s.moDuelElo, !iWon ? s.moDuelEloWin : s.moDuelEloLose]}>
+                    {!iWon ? `+${eloAmt}` : `−${eloAmt}`}
+                  </Text>
+                </View>
               </Animated.View>
-            )}
 
-            <Animated.View style={{ opacity: moBtns, alignSelf: 'stretch' }}>
-              {matchOver.forfeit || matchOver.observer ? (
-                <View style={s.modalBtns}>
+              {/* Pot block */}
+              <Animated.View style={[s.moPot, iWon ? s.moPotWin : s.moPotLose, { opacity: moElo }]}>
+                <Text style={s.moPotLabel}>{iWon ? 'You win' : 'You lose'}</Text>
+                <Text style={s.moPotLine}>
+                  {iWon ? '🍌 banana kept' : '🍌 banana gone'} · {iWon ? `+${eloAmt}` : `−${eloAmt}`} ELO
+                </Text>
+              </Animated.View>
+
+              {/* Loss banana refill countdown */}
+              {!iWon && (
+                <Animated.View style={[s.moRefill, { opacity: moElo }]}>
+                  <Text style={s.moRefillTimer}>{fmtCountdownHMS(refillMs)}</Text>
+                  <Text style={s.moRefillLabel}>until free banana</Text>
+                </Animated.View>
+              )}
+
+              {/* Buttons */}
+              <Animated.View style={{ opacity: moBtns, alignSelf: 'stretch', marginTop: 4 }}>
+                {matchOver.forfeit || matchOver.observer ? (
                   <Pressable style={[s.modalBtn, s.modalBtnYes]} onPress={onLeave}>
                     <Text style={s.modalBtnTxt}>Back to Lobby</Text>
                   </Pressable>
-                </View>
-              ) : matchOver.myVote ? (
-                <>
-                  <Text style={s.modalWaiting}>
-                    {matchOver.opponentWantsRematch ? 'Starting rematch…' : 'Waiting for opponent…'}
-                  </Text>
-                  <View style={s.modalBtns}>
-                    <Pressable style={[s.modalBtn, s.modalBtnYes]} onPress={onLeave}>
+                ) : matchOver.myVote ? (
+                  <>
+                    <Text style={s.modalWaiting}>
+                      {matchOver.opponentWantsRematch ? 'Starting rematch…' : 'Waiting for opponent…'}
+                    </Text>
+                    <Pressable style={[s.modalBtn, s.modalBtnYes, { marginTop: 8 }]} onPress={onLeave}>
                       <Text style={s.modalBtnTxt}>Back to Lobby</Text>
                     </Pressable>
-                  </View>
-                </>
-              ) : matchOver.opponentWantsRematch ? (
-                <>
-                  <Text style={s.modalSub}>{matchOver.opponentWantsRematch} wants a rematch!</Text>
+                  </>
+                ) : iWon ? (
+                  matchOver.opponentWantsRematch ? (
+                    <>
+                      <Text style={s.modalSub}>{matchOver.opponentWantsRematch} wants a rematch!</Text>
+                      <View style={s.modalBtns}>
+                        <Pressable style={[s.modalBtn, s.modalBtnNo]} onPress={() => onRematch(false)}>
+                          <Text style={s.modalBtnTxt}>Decline</Text>
+                        </Pressable>
+                        <Pressable style={[s.modalBtn, s.modalBtnYes]} onPress={() => onRematch(true)}>
+                          <Text style={s.modalBtnTxt}>Accept</Text>
+                        </Pressable>
+                      </View>
+                    </>
+                  ) : (
+                    <View style={s.modalBtns}>
+                      <Pressable style={[s.modalBtn, s.modalBtnNo]} onPress={() => onRematch(false)}>
+                        <Text style={s.modalBtnTxt}>Lobby</Text>
+                      </Pressable>
+                      <Pressable style={[s.modalBtn, s.modalBtnYes]} onPress={() => onRematch(true)}>
+                        <Text style={s.modalBtnTxt}>Rematch →</Text>
+                      </Pressable>
+                    </View>
+                  )
+                ) : (
                   <View style={s.modalBtns}>
-                    <Pressable style={[s.modalBtn, s.modalBtnNo]} onPress={() => onRematch(false)}>
-                      <Text style={s.modalBtnTxt}>Decline</Text>
+                    <Pressable style={[s.modalBtn, s.modalBtnNo]} onPress={onLeave}>
+                      <Text style={s.modalBtnTxt}>Lobby</Text>
                     </Pressable>
-                    <Pressable style={[s.modalBtn, s.modalBtnYes]} onPress={() => onRematch(true)}>
-                      <Text style={s.modalBtnTxt}>Accept</Text>
-                    </Pressable>
-                  </View>
-                </>
-              ) : (
-                <>
-                  <View style={s.modalBtns}>
-                    <Pressable style={[s.modalBtn, s.modalBtnNo]} onPress={() => onRematch(false)}>
-                      <Text style={s.modalBtnTxt}>Leave</Text>
-                    </Pressable>
-                    <Pressable style={[s.modalBtn, s.modalBtnYes]} onPress={() => onRematch(true)}>
-                      <Text style={s.modalBtnTxt} numberOfLines={1}
-                        adjustsFontSizeToFit minimumFontScale={0.8}>Play Again</Text>
+                    <Pressable style={[s.modalBtn, { flex: 2, backgroundColor: '#e7b23b', borderRadius: 14, paddingVertical: 14, alignItems: 'center' }]}
+                      onPress={() => setBananaStoreOpen(true)}>
+                      <Text style={[s.modalBtnTxt, { color: '#0c151f' }]}>🍌 Get more bananas</Text>
                     </Pressable>
                   </View>
-                </>
-              )}
+                )}
+              </Animated.View>
             </Animated.View>
           </Animated.View>
-        </Animated.View>
-      )}
+        );
+      })()}
+
+      {/* Banana store (opened from match-over loss screen) */}
+      <BananaStore
+        visible={bananaStoreOpen}
+        onClose={() => setBananaStoreOpen(false)}
+        hasLife={lives > 0}
+        playerInfo={{ id: playerInfo?.playerId, ...playerInfo }}
+        onBought={() => setBananaStoreOpen(false)}
+      />
 
     </View>
   );
@@ -1471,13 +1549,16 @@ const s = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
   },
   menuBtnTxt: { color: colors.white, fontSize: 17 },
-  bananaRisk: {
-    flexDirection: 'row', alignItems: 'center', gap: 5,
-    paddingVertical: 7, paddingHorizontal: 11, borderRadius: 11,
-    backgroundColor: 'rgba(224,86,77,0.15)', borderWidth: 1, borderColor: 'rgba(224,86,77,0.55)',
+  stakeChip: {
+    paddingVertical: 6, paddingHorizontal: 10, borderRadius: 10,
+    backgroundColor: 'rgba(224,86,77,0.15)', borderWidth: 1, borderColor: 'rgba(224,86,77,0.5)',
+    alignItems: 'center', justifyContent: 'center',
   },
-  bananaRiskEmoji: { fontSize: 16, lineHeight: 19 },
-  bananaRiskTxt:   { color: '#e8897f', fontSize: 13, fontWeight: '800' },
+  stakeChipTxt: { fontSize: 16 },
+  stakeChipElo: {
+    backgroundColor: 'rgba(169,208,245,0.12)', borderColor: 'rgba(169,208,245,0.4)',
+  },
+  stakeChipEloTxt: { color: '#a9d0f5', fontSize: 13, fontWeight: '800' },
   observingBanner: { alignSelf: 'center', marginTop: 4, backgroundColor: 'rgba(0,0,0,0.5)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)', borderRadius: 8, paddingVertical: 4, paddingHorizontal: 12 },
   observingTxt:    { color: 'rgba(255,255,255,0.7)', fontSize: 12, fontWeight: '700' },
   disconnectBanner: { marginHorizontal: 12, marginTop: 4, backgroundColor: 'rgba(251,146,60,0.18)', borderWidth: 1, borderColor: 'rgba(251,146,60,0.5)', borderRadius: 8, paddingVertical: 6, paddingHorizontal: 12 },
@@ -1504,6 +1585,31 @@ const s = StyleSheet.create({
   eloPos:      { color: '#4ade80' },
   eloNeg:      { color: '#f87171' },
   eloNew:      { color: colors.gray, fontSize: 16 },
+
+  moCrest:       { fontSize: 52 },
+  moResult:      { fontSize: 22, fontWeight: '900', textAlign: 'center' },
+  moResultWin:   { color: '#36d07f' },
+  moResultLose:  { color: '#e0564d' },
+  moDuelRow:     { flexDirection: 'row', alignItems: 'center', gap: 12, marginVertical: 4 },
+  moDuelPlayer:  { alignItems: 'center', gap: 4, flex: 1 },
+  moDuelName:    { color: colors.white, fontSize: 13, fontWeight: '800', textAlign: 'center' },
+  moDuelElo:     { fontSize: 14, fontWeight: '900' },
+  moDuelEloWin:  { color: '#36d07f' },
+  moDuelEloLose: { color: '#e0564d' },
+  moDuelVs:      { color: '#8a98aa', fontSize: 16, fontWeight: '900' },
+  moCrown:       { position: 'absolute', top: -10, right: -10, fontSize: 18 },
+  moPot: {
+    alignSelf: 'stretch', borderRadius: 12, paddingVertical: 10, paddingHorizontal: 14, alignItems: 'center',
+    borderWidth: 1,
+  },
+  moPotWin:  { backgroundColor: 'rgba(54,208,127,0.1)', borderColor: 'rgba(54,208,127,0.35)' },
+  moPotLose: { backgroundColor: 'rgba(224,86,77,0.1)', borderColor: 'rgba(224,86,77,0.35)' },
+  moPotLabel:{ color: '#8a98aa', fontSize: 11, fontWeight: '800', letterSpacing: 0.8, textTransform: 'uppercase', marginBottom: 4 },
+  moPotLine: { color: colors.white, fontSize: 14, fontWeight: '800', textAlign: 'center' },
+  moRefill:  { alignItems: 'center', gap: 2 },
+  moRefillTimer: { color: '#e7b23b', fontSize: 22, fontWeight: '900', letterSpacing: 1 },
+  moRefillLabel: { color: '#8a98aa', fontSize: 12, fontWeight: '700' },
+
   modalSub:    { color: 'rgba(255,255,255,0.6)', fontSize: 14 },
   modalWaiting:{ color: colors.gray, fontSize: 14, fontStyle: 'italic' },
   modalBtns:   { flexDirection: 'row', gap: 12, marginTop: 4, alignSelf: 'stretch' },
