@@ -515,6 +515,19 @@ export default function GameScreen({ navigation }) {
   const collecting  = !!collect;
   const collectProg = useRef(new Animated.Value(0)).current;
   const prevSnapRef = useRef(null);
+
+  // When the match changes (rematch), force-clear mid-animation state so it
+  // doesn't bleed into the new match's first hand.
+  const prevMatchIdRef = useRef(null);
+  useEffect(() => {
+    const mid = gameState?.matchId;
+    if (!mid || mid === prevMatchIdRef.current) return;
+    prevMatchIdRef.current = mid;
+    setCollect(null);
+    setShowWinners(false);
+    setWinDone(false);
+    prevSnapRef.current = null;
+  }, [gameState?.matchId]);
   useEffect(() => {
     const prev = prevSnapRef.current;
     prevSnapRef.current = gameState;
