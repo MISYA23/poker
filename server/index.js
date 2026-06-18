@@ -172,7 +172,7 @@ async function lookupCountry(ip) {
 // Always shown online in the lobby. Each has a fixed personality profile.
 
 const BOTS = {
-  bot_rickdeckard: { name: 'Rick Deckard', avatarId: 'cigar', country: null, isBot: true, profile: getProfile('tag') },
+  bot_rickdeckard: { name: 'Rick Deckard', avatarId: 'rickdeckard', country: null, isBot: true, profile: getProfile('tag') },
   bot_hal:         { name: 'HAL 9000',     avatarId: 'queen', country: null, isBot: true, profile: getProfile('nit') },
   bot_johnny5:     { name: 'Johnny 5',     avatarId: 'cigar', country: null, isBot: true, profile: getProfile('maniac') },
 };
