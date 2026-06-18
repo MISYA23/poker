@@ -325,13 +325,13 @@ function useActionFlash(player, lastAction) {
 }
 
 // ─── PlayerPod — avatar + nameplate only (hole cards are now separate) ────────
-function PlayerPod({ player, isMe, observing, turnDeadline, turnDurationMs, lastAction, win, displayChips, deckStyle, avatarOverride, sittingOut }) {
+function PlayerPod({ player, isMe, observing, turnDeadline, turnDurationMs, lastAction, win, splitPot, displayChips, deckStyle, avatarOverride, sittingOut }) {
   const actionLbl = useActionFlash(player, lastAction);
   const present   = !!player;
   const isActive  = present && !!player.isCurrentPlayer;
   const displayName = present ? player.name : (isMe && !observing ? 'You' : 'Waiting…');
   const chipLabel = !present ? '—'
-    : (win ? '🏆 Winner!' : (actionLbl || (displayChips ?? player.chips).toLocaleString()));
+    : (win ? (splitPot ? 'Split Pot' : '🏆 Winner!') : (actionLbl || (displayChips ?? player.chips).toLocaleString()));
 
   const avatar = (
     <View style={[
@@ -369,7 +369,7 @@ function PlayerPod({ player, isMe, observing, turnDeadline, turnDurationMs, last
         {sittingOut && <Text style={[s.badge, s.badgeSitOut]}>Sitting Out</Text>}
       </View>
       <View style={s.chipsRow}>
-        <Text style={[s.podChips, win && s.podChipsWin, !!actionLbl && s.podChipsAction,
+        <Text style={[s.podChips, win && (splitPot ? s.podChipsSplit : s.podChipsWin), !!actionLbl && s.podChipsAction,
           present && player.folded && s.podTextFolded]}
           numberOfLines={1}>{chipLabel}</Text>
       </View>
@@ -728,6 +728,8 @@ export default function GameScreen({ navigation }) {
 
   const locked   = showWinners && !winDone;
   const winnerPot = gameState?.winners?.reduce((s, w) => s + (w.amount || 0), 0) || 0;
+  // Split pot — both players chop (heads-up: >1 winner). Not during a bust/forfeit reveal.
+  const isSplit  = !bustWinId && (gameState?.winners?.length || 0) > 1;
   const animPot  = locked ? winnerPot : null;
   // After showdown, server resets pot to 0 — fall back to winner sum so the
   // pot label stays visible until the chip-flight animation completes.
@@ -758,33 +760,53 @@ export default function GameScreen({ navigation }) {
     ],
   };
 
-  // Pot-to-winner banana flight
-  const flightY       = useRef(new Animated.Value(0)).current;
-  const flightOpacity = useRef(new Animated.Value(0)).current;
+  // Pot-to-winner banana flight. Two flights so a split pot can divide into two
+  // halves, each riding to its own winner. Flight A = winners[0], B = winners[1].
+  const flightY        = useRef(new Animated.Value(0)).current;
+  const flightOpacity  = useRef(new Animated.Value(0)).current;
+  const flightY2       = useRef(new Animated.Value(0)).current;
+  const flightOpacity2 = useRef(new Animated.Value(0)).current;
 
-  const [flightAmount, setFlightAmount] = useState(0);
+  const [flightAmount,  setFlightAmount]  = useState(0);
+  const [flightAmount2, setFlightAmount2] = useState(0);
   useEffect(() => {
     if (!showWinners || !gameState?.winners?.length) {
       flightOpacity.setValue(0);
+      flightOpacity2.setValue(0);
       return;
     }
-    const winner = gameState.winners[0];
-    const dir = winner.playerId === bottomId ? 1 : -1;
-    setFlightAmount(winner.amount || 0);
-    flightY.setValue(0);
-
-    flightOpacity.setValue(1);
-    Animated.parallel([
-      Animated.timing(flightY, {
-        toValue: dir * 220, duration: 900,
-        easing: Easing.bezier(0.25, 0.46, 0.45, 0.94),
-        useNativeDriver: true,
-      }),
-      Animated.sequence([
-        Animated.delay(700),
-        Animated.timing(flightOpacity, { toValue: 0, duration: 200, useNativeDriver: true }),
-      ]),
-    ]).start();
+    const winners = gameState.winners;
+    // Land the chips centred on the winner's nameplate instead of a flat ±220
+    // (which overshot the plate). Derived from pod geometry so it tracks the
+    // nameplate wherever it sits.
+    const npCenterFor = (pid) =>
+      (pid === bottomId ? MY_POD_T : OPP_POD_T) + NP_TOP + NP_H / 2;
+    const makeFlight = (yVal, oVal, w) => {
+      yVal.setValue(0);
+      oVal.setValue(1);
+      return Animated.parallel([
+        Animated.timing(yVal, {
+          toValue: npCenterFor(w.playerId) - POT_T, duration: 900,
+          easing: Easing.bezier(0.25, 0.46, 0.45, 0.94),
+          useNativeDriver: true,
+        }),
+        Animated.sequence([
+          Animated.delay(700),
+          Animated.timing(oVal, { toValue: 0, duration: 200, useNativeDriver: true }),
+        ]),
+      ]);
+    };
+    setFlightAmount(winners[0].amount || 0);
+    const anims = [makeFlight(flightY, flightOpacity, winners[0])];
+    if (winners.length > 1) {
+      // Split pot — second half flies to the other player's nameplate.
+      setFlightAmount2(winners[1].amount || 0);
+      anims.push(makeFlight(flightY2, flightOpacity2, winners[1]));
+    } else {
+      setFlightAmount2(0);
+      flightOpacity2.setValue(0);
+    }
+    Animated.parallel(anims).start();
   }, [showWinners]);
 
   // Forfeit animation — chip countdown + flight from loser to winner
@@ -866,6 +888,7 @@ export default function GameScreen({ navigation }) {
             <PlayerPod player={opponent} isMe={false}
               turnDeadline={oppDeadline} turnDurationMs={gameState?.turnDurationMs} lastAction={gameState?.lastAction}
               win={bustWinId ? opponent?.id === bustWinId : (opponent ? activeWinners[opponent.id] : null)}
+              splitPot={isSplit}
               displayChips={forfeitReveal?.loserId === opponent?.id && forfeitChipDisplay != null ? forfeitChipDisplay : (opponent ? chipsFor(opponent) : 0)}
               deckStyle={deckStyle} sittingOut={oppSittingOut} />
           </View>
@@ -939,13 +962,23 @@ export default function GameScreen({ navigation }) {
             </View>
           )}
 
-          {/* Pot-to-winner banana flight */}
+          {/* Pot-to-winner banana flight (Flight A) */}
           {flightAmount > 0 && (
             <Animated.View pointerEvents="none" style={[s.winFlight, { top: POT_T - 14,
               opacity: flightOpacity,
               transform: [{ translateY: flightY }],
             }]}>
               <ChipStack amount={flightAmount} size={33} />
+            </Animated.View>
+          )}
+
+          {/* Split-pot second half (Flight B) — flies to the other winner */}
+          {flightAmount2 > 0 && (
+            <Animated.View pointerEvents="none" style={[s.winFlight, { top: POT_T - 14,
+              opacity: flightOpacity2,
+              transform: [{ translateY: flightY2 }],
+            }]}>
+              <ChipStack amount={flightAmount2} size={33} />
             </Animated.View>
           )}
 
@@ -968,6 +1001,7 @@ export default function GameScreen({ navigation }) {
             <PlayerPod player={me} isMe={true} observing={observing}
               turnDeadline={myDeadline} turnDurationMs={gameState?.turnDurationMs} lastAction={gameState?.lastAction}
               win={bustWinId ? me?.id === bustWinId : (me ? activeWinners[me.id] : null)}
+              splitPot={isSplit}
               displayChips={forfeitReveal?.loserId === me?.id && forfeitChipDisplay != null ? forfeitChipDisplay : (me ? chipsFor(me) : 0)}
               avatarOverride={observing ? undefined : playerInfo?.avatarId}
               deckStyle={deckStyle} sittingOut={meSittingOut} />
@@ -1331,6 +1365,7 @@ const s = StyleSheet.create({
   podName:   { color: colors.white, fontSize: 17, fontWeight: '800', flexShrink: 1, minWidth: 0 },
   podChips:  { color: '#facc15', fontSize: 18, fontWeight: '900' },
   podChipsWin:    { color: '#4ade80' },
+  podChipsSplit:  { color: '#60a5fa' },                                     // blue — split pot
   podChipsAction: { color: colors.orange, fontSize: 14, fontWeight: '800' },
   badge:   { fontSize: 10, color: '#fff', backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 4, paddingHorizontal: 5, paddingVertical: 1, fontWeight: '700' },
   badgeSB:     { backgroundColor: '#2563eb' },
