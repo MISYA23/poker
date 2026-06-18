@@ -540,6 +540,28 @@ function voidMatch(m) {
   console.log(`[match] voided ${m.id.slice(0, 8)} (no rating effect)`);
 }
 
+// Debit one banana from a player's wallet when a match begins.
+// Idempotent: if already 0, no change. Pushes lives-update to the socket.
+async function spendBanana(playerId, socketId) {
+  try {
+    const refillAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    const { rows } = await db.query(`
+      INSERT INTO wallet (player_id, bananas, banana_refill_at, updated_at)
+      VALUES ($1, 0, $2, NOW())
+      ON CONFLICT (player_id) DO UPDATE SET
+        bananas          = CASE WHEN wallet.bananas > 0 THEN 0 ELSE wallet.bananas END,
+        banana_refill_at = CASE WHEN wallet.bananas > 0 THEN EXCLUDED.banana_refill_at ELSE wallet.banana_refill_at END,
+        updated_at       = NOW()
+      RETURNING bananas, banana_refill_at
+    `, [playerId, refillAt]);
+    if (rows[0] && socketId) {
+      io.to(socketId).emit('lives-update', { lives: rows[0].bananas, lifeRefillAt: rows[0].banana_refill_at });
+    }
+  } catch (e) {
+    console.error('[banana] spend failed for', playerId, ':', e.message);
+  }
+}
+
 // Shared by queue pairing, challenge accepts, and human-arrived swaps.
 // p1/p2: { playerId, playerName, avatarId, socketId }
 function startHumanMatch(p1, p2) {
@@ -560,6 +582,9 @@ function startHumanMatch(p1, p2) {
 
   io.to(p1.socketId).emit('match-found', { matchId: m.id, opponent: opponentInfo(p2) });
   io.to(p2.socketId).emit('match-found', { matchId: m.id, opponent: opponentInfo(p1) });
+
+  spendBanana(p1.playerId, p1.socketId);
+  spendBanana(p2.playerId, p2.socketId);
 
   broadcastMatchState(m);
   broadcastMatchList();
@@ -795,22 +820,17 @@ async function persistMatchResult(m, winner, loser, wEloBefore, lEloBefore, wElo
       .catch(e => console.error('[achievement] match check failed:', e.message));
   }
 
-  // Spend the loser's banana
+  // Banana was already debited at match start — restore it for the winner only
   try {
-    const refillAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
-    // Upsert: create row if first match, only spend if bananas > 0
     await db.query(`
       INSERT INTO wallet (player_id, bananas, banana_refill_at, updated_at)
-      VALUES ($1, 0, $2, NOW())
-      ON CONFLICT (player_id) DO UPDATE SET
-        bananas          = CASE WHEN wallet.bananas > 0 THEN 0 ELSE wallet.bananas END,
-        banana_refill_at = CASE WHEN wallet.bananas > 0 THEN EXCLUDED.banana_refill_at ELSE wallet.banana_refill_at END,
-        updated_at       = NOW()
-    `, [loser.playerId, refillAt]);
-    const loserSid = socketIdOf(loser.playerId);
-    if (loserSid) io.to(loserSid).emit('lives-update', { lives: 0, lifeRefillAt: refillAt.toISOString() });
+      VALUES ($1, 1, NULL, NOW())
+      ON CONFLICT (player_id) DO UPDATE SET bananas=1, banana_refill_at=NULL, updated_at=NOW()
+    `, [winner.playerId]);
+    const winnerSid = socketIdOf(winner.playerId);
+    if (winnerSid) io.to(winnerSid).emit('lives-update', { lives: 1, lifeRefillAt: null });
   } catch (e) {
-    console.error('[lives] spend failed:', e.message);
+    console.error('[banana] restore failed:', e.message);
   }
 }
 
@@ -1006,6 +1026,7 @@ io.on('connection', (socket) => {
     m.game.addPlayer(p2.playerId, p2.playerName, p2.avatarId);
 
     socket.emit('match-found', { matchId: m.id, opponent: { name: bot.name, avatarId: bot.avatarId, isBot: true, elo: eloCache[m.botId] || 1200 }, fallback });
+    spendBanana(sp.playerId, socket.id);
     broadcastMatchState(m);
     broadcastMatchList();
     // Other searchers re-ask this player in their new in-game (15s) context
