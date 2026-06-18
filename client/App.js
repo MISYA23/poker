@@ -66,8 +66,7 @@ function App() {
   const [incomingChallenges, setIncomingChallenges] = useState([]); // [{ fromId, fromName, fromAvatarId }]
   const [outgoingChallenges, setOutgoingChallenges] = useState([]); // [{ toId, toName }]
   const [pendingFriendRequests, setPendingFriendRequests] = useState(0);
-  const [uiConfig, setUiConfig]         = useState({});
-  const [dialogCopy, setDialogCopy]     = useState({});
+  const [uiConfig, setUiConfig] = useState({});
 
   // Quick Match funnel overlays (see MatchFlowOverlays)
   const [searchOverlay, setSearchOverlay] = useState(null); // null | {status:'searching'} | {status:'found', opponent}
@@ -138,10 +137,6 @@ function App() {
     fetch(`${SERVER_URL}/api/config/ui`)
       .then(r => r.json())
       .then(setUiConfig)
-      .catch(() => {});
-    fetch(`${SERVER_URL}/api/dialog-copy`)
-      .then(r => r.json())
-      .then(setDialogCopy)
       .catch(() => {});
   }, []);
 
@@ -557,7 +552,6 @@ function App() {
             onDismissMeantime={onDismissMeantime}
             onAcceptChallenge={onAcceptChallenge}
             onDeclineChallenge={onDeclineChallenge}
-            copy={dialogCopy}
           />
         </SafeAreaProvider>
       </GestureHandlerRootView>

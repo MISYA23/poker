@@ -87,7 +87,7 @@ function OpponentCard({ name, avatarId, country, elo, isBot }) {
 
 // Pre-match vs card with 3-2-1 countdown. Shown for exactly 3s (matching the
 // server's auto_start_delay_ms) so the hand deals right as we land on the table.
-function PreMatchCountdown({ opponent, playerInfo, myElo, copy }) {
+function PreMatchCountdown({ opponent, playerInfo, myElo }) {
   const [count, setCount] = useState(3);
   const scaleAnim = useRef(new Animated.Value(1)).current;
 
@@ -106,14 +106,14 @@ function PreMatchCountdown({ opponent, playerInfo, myElo, copy }) {
 
   return (
     <Scrim onPress={() => {}}>
-      <Text style={ov.vsHeading}>{copy?.preMatchHeading ?? 'Match Starting'}</Text>
+      <Text style={ov.vsHeading}>Match Starting</Text>
       <View style={ov.vsRow}>
         <View style={ov.vsPlayer}>
           <AvatarBadge avatarId={playerInfo?.avatarId} size={74} />
           <Text style={ov.vsName} numberOfLines={1}>{playerInfo?.name || 'You'}</Text>
           <Text style={ov.vsElo}>{myElo ?? 1200}</Text>
         </View>
-        <Text style={ov.vsVs}>{copy?.preMatchVs ?? 'VS'}</Text>
+        <Text style={ov.vsVs}>VS</Text>
         <View style={ov.vsPlayer}>
           <AvatarBadge avatarId={opponent?.avatarId} country={opponent?.country} isBot={!!opponent?.isBot} size={74} />
           <Text style={ov.vsName} numberOfLines={1}>{opponent?.name || '…'}</Text>
@@ -121,7 +121,7 @@ function PreMatchCountdown({ opponent, playerInfo, myElo, copy }) {
         </View>
       </View>
       <Animated.Text style={[ov.countdown, { transform: [{ scale: scaleAnim }] }]}>
-        {count > 0 ? count : (copy?.preMatchGo ?? 'GO!')}
+        {count > 0 ? count : 'GO!'}
       </Animated.Text>
     </Scrim>
   );
