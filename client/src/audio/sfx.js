@@ -16,8 +16,13 @@ const SOURCES = {
 };
 
 let sfxEnabled = true;
+const sfxListeners = [];
 export function isSfxEnabled() { return sfxEnabled; }
-export function setSfxEnabled(v) { sfxEnabled = !!v; }
+export function onSfxEnabledChange(fn) {
+  sfxListeners.push(fn);
+  return () => { sfxListeners.splice(sfxListeners.indexOf(fn), 1); };
+}
+export function setSfxEnabled(v) { sfxEnabled = !!v; sfxListeners.forEach(fn => fn(sfxEnabled)); }
 
 const players = {};
 function getPlayer(name) {

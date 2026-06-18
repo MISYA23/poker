@@ -34,6 +34,7 @@ const S = (globalThis.__pmMusic = globalThis.__pmMusic || {
   active: null,          // 'menu' | 'game' | null
   started: false,
   muted: false,
+  listeners: [],
 });
 
 function buildPlayer(c) {
@@ -134,8 +135,13 @@ export function setMusicContext(target) {
 }
 
 export function isMusicMuted() { return S.muted; }
+export function onMusicMutedChange(fn) {
+  S.listeners.push(fn);
+  return () => { S.listeners = S.listeners.filter(f => f !== fn); };
+}
 export function setMusicMuted(value) {
   S.muted = !!value;
+  S.listeners.forEach(fn => fn(S.muted));
   // Always sync the native muted flag on BOTH players — otherwise the inactive
   // context (e.g. the menu track while you're in-game) stays stuck muted and is
   // silent when you switch back to it.

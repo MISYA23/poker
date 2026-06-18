@@ -93,7 +93,7 @@ export default function ProfileScreen({ navigation }) {
     const trimmed = name.trim();
     if (!trimmed) return;
     setSaving(true);
-    await Promise.all([
+    const [, res] = await Promise.all([
       setUser({ name: trimmed }),
       fetch(`${SERVER_URL}/api/player/${playerInfo.playerId}/profile`, {
         method: 'PUT',
@@ -101,8 +101,13 @@ export default function ProfileScreen({ navigation }) {
         body: JSON.stringify({ displayName: trimmed, avatarId, musicEnabled: musicOn, sfxEnabled: sfxOn }),
       }),
     ]);
-    setMusicMuted(!musicOn);
-    setSfxEnabled(sfxOn);
+    const data = await res.json().catch(() => ({}));
+    const serverMusicOn = typeof data.musicEnabled === 'boolean' ? data.musicEnabled : musicOn;
+    const serverSfxOn   = typeof data.sfxEnabled   === 'boolean' ? data.sfxEnabled   : sfxOn;
+    setMusicOn(serverMusicOn);
+    setSfxOn(serverSfxOn);
+    setMusicMuted(!serverMusicOn);
+    setSfxEnabled(serverSfxOn);
     onUpdateProfile(trimmed, avatarId);
     setSaving(false);
     navigation.goBack();

@@ -1,7 +1,7 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, Pressable, Modal, StyleSheet, useWindowDimensions } from 'react-native';
-import { isMusicMuted, setMusicMuted } from '../audio/music';
-import { isSfxEnabled, setSfxEnabled } from '../audio/sfx';
+import { isMusicMuted, setMusicMuted, onMusicMutedChange } from '../audio/music';
+import { isSfxEnabled, setSfxEnabled, onSfxEnabledChange } from '../audio/sfx';
 
 // Sound control — sits inline in a screen's header, next to the hamburger.
 // Tapping the icon opens a small menu: Music on/off + Game sounds on/off.
@@ -16,6 +16,12 @@ export default function SoundButton({ style }) {
   const [musicOn, setMusicOn] = useState(!isMusicMuted());
   const [sfxOn, setSfxOn]     = useState(isSfxEnabled());
   const anyOn = musicOn || sfxOn;
+
+  useEffect(() => {
+    const unsubMusic = onMusicMutedChange(muted => setMusicOn(!muted));
+    const unsubSfx   = onSfxEnabledChange(enabled => setSfxOn(enabled));
+    return () => { unsubMusic(); unsubSfx(); };
+  }, []);
 
   const toggleMusic = () => { const v = !musicOn; setMusicOn(v); setMusicMuted(!v); };
   const toggleSfx   = () => { const v = !sfxOn;   setSfxOn(v);   setSfxEnabled(v); };
