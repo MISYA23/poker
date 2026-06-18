@@ -58,6 +58,9 @@ async function loadMatchAnalytics(m) {
   const playerIds = [m.p1, m.p2].map(p => p.playerId).filter(id => !isBot(id));
   m.analyticsCache = {};
   if (!playerIds.length) return;
+  for (const id of playerIds) {
+    m.analyticsCache[id] = { firstMatchBegun: false, firstMatchComplete: false };
+  }
   try {
     const { rows } = await db.query(
       'SELECT player_id, first_match_begun, first_match_complete FROM analytics WHERE player_id = ANY($1)',
