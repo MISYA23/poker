@@ -227,14 +227,10 @@ function App() {
         return;
       }
       // Navigate to the table immediately so the countdown appears over the felt.
-      // foundDelayRef blocks game-state from re-navigating during the 3s window.
+      // foundDelayRef blocks game-state from re-navigating until the client confirms ready.
       setPreMatch({ opponent });
       foundDelayRef.current = true;
       navigationRef.navigate('Game');
-      setTimeout(() => {
-        foundDelayRef.current = false;
-        setPreMatch(null);
-      }, 3000);
     },
     'match-list':  ({ matches, onlinePlayers: op }) => { setMatchList(matches || []); setOnlinePlayers(op || []); },
     'hand-events': (batch)           => { handEventsRef.current = batch; },
@@ -250,6 +246,12 @@ function App() {
         setTransition(t || null);
         setGameState(state);
         if (state.atTable && !state.gameOver) setMatchOver(null);
+        // If the other player hit LET'S PLAY first, the hand starts before our
+        // local countdown finishes — dismiss the overlay when game-state arrives.
+        if (foundDelayRef.current && state.phase !== 'waiting') {
+          foundDelayRef.current = false;
+          setPreMatch(null);
+        }
         const belongsToUs = state.matchId === matchIdRef.current;
         if (belongsToUs && state.atTable && !foundDelayRef.current) {
           navigationRef.navigate('Game');
@@ -437,6 +439,23 @@ function App() {
     setMeantime(false);
   }, [emit, setSearch, clearBotOfferTimer]);
 
+  // Client confirmed ready — fire first hand immediately.
+  const onMatchReady = useCallback(() => {
+    foundDelayRef.current = false;
+    setPreMatch(null);
+    emit('match-ready', {});
+  }, [emit]);
+
+  // Cancelled during pre-match countdown — forfeit the match (enter-lobby triggers
+  // endMatch server-side with the opponent as winner) and return to lobby.
+  const onPreMatchCancel = useCallback(() => {
+    foundDelayRef.current = false;
+    setPreMatch(null);
+    matchIdRef.current = null;
+    emit('enter-lobby', { playerId: playerIdRef.current });
+    navigationRef.reset({ index: 0, routes: [{ name: 'Lobby' }] });
+  }, [emit]);
+
   // "Keep Waiting" — hide the dialog, restore searching overlay, restart 5s timer
   const onDismissMeantime = useCallback(() => {
     setMeantime(false);
@@ -570,6 +589,8 @@ function App() {
             myElo={myElo}
             incomingChallenges={incomingChallenges}
             onCancelSearch={onCancelMatch}
+            onPreMatchReady={onMatchReady}
+            onPreMatchCancel={onPreMatchCancel}
             onConfirmBot={onConfirmBot}
             onDismissMeantime={onDismissMeantime}
             onAcceptChallenge={onAcceptChallenge}

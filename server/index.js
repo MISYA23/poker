@@ -452,18 +452,19 @@ async function beginHand(m) {
   console.log('[hand] started uuid:', m.currentHandUuid?.slice(0, 8));
 }
 
-function tryAutoStart(m) {
-  if (m.autoStartTimer) return;
-  const ready = m.game.players.filter(p => p.isActive && p.chips > 0);
-  if (ready.length >= 2 && m.game.phase === 'waiting' && !m.game.gameOver) {
-    m.autoStartTimer = setTimeout(async () => {
-      m.autoStartTimer = null;
-      if (m.game.phase === 'waiting' && m.game.canStart()) {
-        await beginHand(m);
-        broadcastMatchState(m, { type: 'MATCH_STARTING' });
-      }
-    }, cfg.auto_start_delay_ms);
-  }
+const READY_SAFETY_MS = 15000;
+
+// Wait for the client to send match-ready before starting the first hand.
+// Safety timer fires automatically if neither client responds within READY_SAFETY_MS.
+function scheduleReadyStart(m) {
+  if (m.readySafetyTimer) return;
+  m.readySafetyTimer = setTimeout(async () => {
+    m.readySafetyTimer = null;
+    if (m.game.phase === 'waiting' && m.game.canStart()) {
+      await beginHand(m);
+      broadcastMatchState(m, { type: 'MATCH_STARTING' });
+    }
+  }, READY_SAFETY_MS);
 }
 
 function scheduleNextHand(m, delay = 5000) {
@@ -585,7 +586,7 @@ function startHumanMatch(p1, p2) {
 
   broadcastMatchState(m);
   broadcastMatchList();
-  tryAutoStart(m);
+  scheduleReadyStart(m);
   return m;
 }
 
@@ -701,7 +702,8 @@ async function endMatch(m, winnerId, bust = false) {
   m.ended = true;
   // Kill every pending timer — a leftover nextHandTimer would deal a zombie
   // hand on this ended match and keep spamming game-state at the players
-  clearTimeout(m.autoStartTimer); m.autoStartTimer = null;
+  clearTimeout(m.autoStartTimer);    m.autoStartTimer    = null;
+  clearTimeout(m.readySafetyTimer);  m.readySafetyTimer  = null;
   clearTimeout(m.nextHandTimer);  m.nextHandTimer  = null;
   clearTimeout(m.turnTimer);      m.turnTimer      = null;
   clearTimeout(m.botTimer);       m.botTimer       = null;
@@ -1030,7 +1032,7 @@ io.on('connection', (socket) => {
     broadcastMatchList();
     // Other searchers re-ask this player in their new in-game (15s) context
     refreshBroadcasts();
-    tryAutoStart(m);
+    scheduleReadyStart(m);
   }
 
   socket.on('play-bot', ({ playerId }) => {
@@ -1048,6 +1050,20 @@ io.on('connection', (socket) => {
     const sp = socketPlayers.get(socket.id);
     if (sp) { dequeue(sp.playerId); clearSearchFor(sp.playerId); }
     socket.emit('queue-cancelled', {});
+  });
+
+  // Client confirmed ready to start — fire the first hand immediately and cancel
+  // the safety timer. First player to send this wins; second is a no-op.
+  socket.on('match-ready', () => {
+    const sp = socketPlayers.get(socket.id);
+    const m  = sp?.matchId ? matches.get(sp.matchId) : null;
+    if (!m || m.ended || m.game.phase !== 'waiting') return;
+    if (m.readySafetyTimer) { clearTimeout(m.readySafetyTimer); m.readySafetyTimer = null; }
+    if (m.game.canStart()) {
+      beginHand(m)
+        .then(() => broadcastMatchState(m, { type: 'MATCH_STARTING' }))
+        .catch(e => console.error('[match-ready] beginHand failed:', e.message));
+    }
   });
 
   socket.on('observe', ({ matchId }) => {
@@ -1163,7 +1179,7 @@ io.on('connection', (socket) => {
           io.to(m.p2.socketId).emit('match-found', { matchId: newMatchId, opponent: opponentInfo(m.p1) });
         }
         broadcastMatchState(newMatch);
-        tryAutoStart(newMatch);
+        scheduleReadyStart(newMatch);
       }
     } else {
       // Player declined — both go back to lobby

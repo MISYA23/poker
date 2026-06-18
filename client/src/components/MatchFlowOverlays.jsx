@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { View, Text, Pressable, StyleSheet, Image, Animated, Easing, Platform } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
 
@@ -137,7 +137,7 @@ function OpponentCard({ name, avatarId, country, elo, isBot }) {
 }
 
 // Pre-match vs card with animated ELO drop + ring countdown. Tap anywhere to skip.
-function PreMatchCountdown({ opponent, playerInfo, myElo, onLeave }) {
+function PreMatchCountdown({ opponent, playerInfo, myElo, onReady, onLeave }) {
   const DURATION = 10000;
   const RING_R = 36;
   const RING_C = 2 * Math.PI * RING_R;
@@ -152,6 +152,14 @@ function PreMatchCountdown({ opponent, playerInfo, myElo, onLeave }) {
   const [myEloDisplay, setMyEloDisplay]   = useState(myEloVal);
   const [oppEloDisplay, setOppEloDisplay] = useState(oppEloVal);
   const ringOffset = useRef(new Animated.Value(0)).current;
+  const firedRef   = useRef(false);
+
+  const fireReady = useCallback(() => {
+    if (firedRef.current) return;
+    firedRef.current = true;
+    setSkipped(true);
+    onReady?.();
+  }, [onReady]);
 
   useEffect(() => {
     Animated.timing(ringOffset, {
@@ -166,7 +174,7 @@ function PreMatchCountdown({ opponent, playerInfo, myElo, onLeave }) {
       const ease = 1 - Math.pow(1 - t, 3);
       setMyEloDisplay(Math.round(myEloVal - myLoss * ease));
       setOppEloDisplay(Math.round(oppEloVal - oppLoss * ease));
-      if (step >= STEPS) clearInterval(id);
+      if (step >= STEPS) { clearInterval(id); fireReady(); }
     }, stepMs);
     return () => clearInterval(id);
   }, []);
@@ -206,7 +214,7 @@ function PreMatchCountdown({ opponent, playerInfo, myElo, onLeave }) {
         <StakePot potElo={potElo} label="Winner takes the pot" />
 
         <Pressable style={[ov.cta, { marginTop: 10, alignSelf: 'stretch' }]}
-          onPress={() => setSkipped(true)}>
+          onPress={fireReady}>
           <Text style={ov.ctaTxt}>LET'S PLAY</Text>
         </Pressable>
 
@@ -260,7 +268,7 @@ function Scrim({ onPress, children }) {
 // Copy convention: opponents are "humans", bots are "🤖 bot" (never "human").
 export default function MatchFlowOverlays({
   searchOverlay, meantime, preMatch, playerInfo, myElo, incomingChallenges,
-  onCancelSearch, onConfirmBot, onDismissMeantime,
+  onCancelSearch, onPreMatchReady, onPreMatchCancel, onConfirmBot, onDismissMeantime,
   onAcceptChallenge, onDeclineChallenge, copy,
 }) {
   // Challenges the user tap-dismissed: hide the dialog, the challenge itself
@@ -287,7 +295,8 @@ export default function MatchFlowOverlays({
 
       {/* Pre-match vs countdown */}
       {preMatch && !challenge && (
-        <PreMatchCountdown opponent={preMatch.opponent} playerInfo={playerInfo} myElo={myElo} onLeave={onCancelSearch} />
+        <PreMatchCountdown opponent={preMatch.opponent} playerInfo={playerInfo} myElo={myElo}
+          onReady={onPreMatchReady} onLeave={onPreMatchCancel} />
       )}
 
       {/* Searching… / Human found! */}
