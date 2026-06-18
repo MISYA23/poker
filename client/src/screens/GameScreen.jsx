@@ -414,7 +414,7 @@ export default function GameScreen({ navigation }) {
     gameState, transition, myId, onAction, onLeave, onRematch, onLogout,
     matchOver, navigationRef, deckStyle, playerInfo, onHandEndAnimDone,
     handEventsRef, bustReveal = null, forfeitReveal = null, uiConfig = {},
-    onBotActionRequest, lives = 3, maxLives = 3,
+    onBotActionRequest, lives = 3, maxLives = 3, myElo = null, opponentElo = null,
   } = useContext(GameContext);
 
   useEffect(() => {
@@ -1084,7 +1084,7 @@ export default function GameScreen({ navigation }) {
             </View>
             <View style={[s.stakeChip, s.stakeChipElo]}>
               <Text style={s.stakeChipEloTxt}>
-                +{me?.elo && opponent?.elo ? calcEloGain(me.elo, opponent.elo) : 16}
+                +{myElo && opponentElo ? calcEloGain(myElo, opponentElo) : '?'}
               </Text>
             </View>
             <Pressable style={s.menuBtn} onPress={() => setMenuOpen(o => !o)}>

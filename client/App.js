@@ -59,6 +59,7 @@ function App() {
   const [matchList, setMatchList]       = useState([]);
   const [onlinePlayers, setOnlinePlayers] = useState([]);
   const [myElo, setMyElo]                   = useState(null);
+  const [opponentElo, setOpponentElo]       = useState(null);
   const [deckStyle, setDeckStyle]           = useState('regular');
   const [matchOver, setMatchOver]           = useState(null);
   const [myRecentMatches, setMyRecentMatches] = useState([]);
@@ -228,6 +229,7 @@ function App() {
       }
       // Navigate to the table immediately so the countdown appears over the felt.
       // foundDelayRef blocks game-state from re-navigating until the client confirms ready.
+      setOpponentElo(opponent?.elo ?? null);
       setPreMatch({ opponent });
       foundDelayRef.current = true;
       navigationRef.navigate('Game');
@@ -331,6 +333,7 @@ function App() {
       releaseHandEndRef.current = null;
       matchOverPendingRef.current = null;
       setGameState(null);
+      setOpponentElo(null);
       setInQueue(false); setMatchOver(null);
       setSearch(null); setMeantime(false);
       matchIdRef.current = null;
@@ -547,10 +550,11 @@ function App() {
     gameState, transition, myId, matchOver, handEventsRef,
     playerInfo, deckStyle, setDeckStyle, uiConfig, bustReveal, forfeitReveal,
     lives, maxLives, lifeRefillAt, fetchLives,
+    myElo, opponentElo,
     emit, onLogin, onLogout, onUpdateProfile,
     onAction, onLeave, onRematch, onHandEndAnimDone, onBotActionRequest, navigationRef,
   }), [gameState, transition, myId, matchOver, playerInfo, deckStyle, uiConfig, bustReveal, forfeitReveal,
-       lives, maxLives, lifeRefillAt, fetchLives,
+       lives, maxLives, lifeRefillAt, fetchLives, myElo, opponentElo,
        emit, onLogin, onLogout, onUpdateProfile, onAction, onLeave, onRematch, onHandEndAnimDone, onBotActionRequest]);
 
   // Lobby context — fast-churning lobby data + lobby-only actions
