@@ -13,8 +13,6 @@ import SoundButton from '../components/SoundButton';
 import AchievementGallery from '../components/AchievementGallery';
 import { ACHIEVEMENTS, mergeAchievements } from '../data/achievements';
 
-const bananaImg = require('../../assets/banana.png');
-
 // HH:MM from ms remaining
 function fmtCountdownShort(ms) {
   if (ms <= 0) return '00:00';
@@ -98,7 +96,7 @@ function LifeCapsule({ lives, lifeRefillAt, onPress }) {
   const spent = lives === 0;
   return (
     <Pressable style={[lc.capsule, spent && lc.capsuleSpent]} onPress={onPress}>
-      <Image source={bananaImg} style={[lc.icon, spent && lc.iconSpent]} />
+      <Text style={[lc.icon, spent && lc.iconSpent]}>🍌</Text>
       <Text style={[lc.txt, spent && lc.txtSpent]}>
         {spent ? fmtCountdownShort(ms) : '1'}
       </Text>
@@ -130,7 +128,7 @@ function LifeDetailSheet({ visible, lives, lifeRefillAt, onClose, onBuy }) {
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <Pressable style={ld.overlay} onPress={onClose}>
         <Pressable style={ld.sheet} onPress={() => {}}>
-          <Image source={bananaImg} style={[ld.bigIcon, spent && ld.bigIconSpent]} />
+          <Text style={[ld.bigIcon, spent && ld.bigIconSpent]}>🍌</Text>
           <Text style={ld.title}>{spent ? 'Out of bananas 🍌' : 'You have a banana! 🍌'}</Text>
           <Text style={ld.copy}>Win to keep it — lose and it's gone.</Text>
           {spent && (
@@ -668,7 +666,7 @@ const lc = StyleSheet.create({
   capsuleSpent: {
     backgroundColor: 'rgba(224,86,77,0.15)', borderColor: '#e0564d',
   },
-  icon: { width: 18, height: 18, resizeMode: 'contain' },
+  icon: { fontSize: 17, lineHeight: 20 },
   iconSpent: { opacity: 0.4 },
   txt: { color: '#e7b23b', fontSize: 14, fontWeight: '900' },
   txtSpent: { color: '#e0564d' },
@@ -685,7 +683,7 @@ const ld = StyleSheet.create({
     width: 300, alignItems: 'center',
     borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)',
   },
-  bigIcon: { width: 64, height: 64, resizeMode: 'contain', marginBottom: 14 },
+  bigIcon: { fontSize: 56, marginBottom: 14 },
   bigIconSpent: { opacity: 0.35 },
   title: { color: colors.white, fontSize: 18, fontWeight: '900', textAlign: 'center', marginBottom: 8 },
   copy: { color: '#8a98aa', fontSize: 13, fontWeight: '700', textAlign: 'center', marginBottom: 16 },
