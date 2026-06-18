@@ -1,5 +1,5 @@
 import React, { useCallback, useContext, useEffect, useRef, useState } from 'react';
-import { View, Text, Pressable, ScrollView, StyleSheet, Platform, Share, Image } from 'react-native';
+import { View, Text, Pressable, ScrollView, StyleSheet, Platform, Share, Image, Modal } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { GameContext } from '../context/GameContext';
 import { LobbyContext } from '../context/LobbyContext';
@@ -12,6 +12,39 @@ import { AvatarBadge } from '../components/MatchFlowOverlays';
 import SoundButton from '../components/SoundButton';
 import AchievementGallery from '../components/AchievementGallery';
 import { ACHIEVEMENTS, mergeAchievements } from '../data/achievements';
+
+const bananaImg = require('../../assets/banana.png');
+
+// HH:MM from ms remaining
+function fmtCountdownShort(ms) {
+  if (ms <= 0) return '00:00';
+  const totalSec = Math.floor(ms / 1000);
+  const h = Math.floor(totalSec / 3600);
+  const m = Math.floor((totalSec % 3600) / 60);
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+}
+
+// HH:MM:SS from ms remaining
+function fmtCountdownFull(ms) {
+  if (ms <= 0) return '00:00:00';
+  const totalSec = Math.floor(ms / 1000);
+  const h = Math.floor(totalSec / 3600);
+  const m = Math.floor((totalSec % 3600) / 60);
+  const s = totalSec % 60;
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+}
+
+function useCountdown(targetIso) {
+  const [ms, setMs] = useState(() => targetIso ? Math.max(0, new Date(targetIso) - Date.now()) : 0);
+  useEffect(() => {
+    if (!targetIso) { setMs(0); return; }
+    const tick = () => setMs(Math.max(0, new Date(targetIso) - Date.now()));
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [targetIso]);
+  return ms;
+}
 
 const INVITE_BASE = 'https://pokermonkey.app';
 
@@ -60,8 +93,68 @@ function PlayerRow({ p, incoming, issued, onChallenge, onCancelChallenge, onAcce
   );
 }
 
+function LifeCapsule({ lives, lifeRefillAt, onPress }) {
+  const ms = useCountdown(lives === 0 ? lifeRefillAt : null);
+  const spent = lives === 0;
+  return (
+    <Pressable style={[lc.capsule, spent && lc.capsuleSpent]} onPress={onPress}>
+      <Image source={bananaImg} style={[lc.icon, spent && lc.iconSpent]} />
+      <Text style={[lc.txt, spent && lc.txtSpent]}>
+        {spent ? fmtCountdownShort(ms) : '1'}
+      </Text>
+    </Pressable>
+  );
+}
+
+function TopBar({ playerInfo, myElo, lives, lifeRefillAt, onBanana, onMenu }) {
+  return (
+    <View style={tb.bar}>
+      <AvatarBadge avatarId={playerInfo?.avatarId} size={42} />
+      <View style={tb.identity}>
+        <Text style={tb.name} numberOfLines={1}>{(playerInfo?.name || '').slice(0, 16)}</Text>
+        <Text style={tb.elo}>ELO {myElo ?? 1200}</Text>
+      </View>
+      <View style={{ flex: 1 }} />
+      <LifeCapsule lives={lives} lifeRefillAt={lifeRefillAt} onPress={onBanana} />
+      <Pressable style={tb.menuBtn} onPress={onMenu}>
+        <Text style={tb.menuTxt}>☰</Text>
+      </Pressable>
+    </View>
+  );
+}
+
+function LifeDetailSheet({ visible, lives, lifeRefillAt, onClose, onBuy }) {
+  const ms = useCountdown(lives === 0 ? lifeRefillAt : null);
+  const spent = lives === 0;
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <Pressable style={ld.overlay} onPress={onClose}>
+        <Pressable style={ld.sheet} onPress={() => {}}>
+          <Image source={bananaImg} style={[ld.bigIcon, spent && ld.bigIconSpent]} />
+          <Text style={ld.title}>{spent ? 'Out of bananas 🍌' : 'You have a banana! 🍌'}</Text>
+          <Text style={ld.copy}>Win to keep it — lose and it's gone.</Text>
+          {spent && (
+            <>
+              <Text style={ld.countdown}>{fmtCountdownFull(ms)}</Text>
+              <Text style={ld.countdownLabel}>until a free banana</Text>
+            </>
+          )}
+          <View style={ld.btns}>
+            <Pressable style={ld.waitBtn} onPress={onClose}>
+              <Text style={ld.waitTxt}>Wait</Text>
+            </Pressable>
+            <Pressable style={ld.buyBtn} onPress={onBuy}>
+              <Text style={ld.buyTxt}>🍌 Buy a banana</Text>
+            </Pressable>
+          </View>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
 export default function LobbyScreen({ navigation }) {
-  const { onLogout, playerInfo, navigationRef, emit } = useContext(GameContext);
+  const { onLogout, playerInfo, navigationRef, emit, lives, lifeRefillAt, fetchLives } = useContext(GameContext);
   const { onFindMatch, onObserve, error, matchList, onlinePlayers, myElo,
           incomingChallenges, outgoingChallenges,
           onChallenge, onAcceptChallenge, onWithdrawChallenge } = useContext(LobbyContext);
@@ -77,11 +170,13 @@ export default function LobbyScreen({ navigation }) {
   useEffect(() => {
     const unsub = navigation.addListener('focus', () => {
       if (playerInfo?.playerId) emit('enter-lobby', { playerId: playerInfo.playerId });
+      fetchLives();
     });
     return unsub;
-  }, [navigation, playerInfo?.playerId, emit]);
+  }, [navigation, playerInfo?.playerId, emit, fetchLives]);
 
   const [menuOpen, setMenuOpen] = useState(false);
+  const [lifeSheetOpen, setLifeSheetOpen] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
   const [lbData, setLbData] = useState(null);
   const [achievements, setAchievements] = useState(() => mergeAchievements([]));
@@ -177,35 +272,52 @@ export default function LobbyScreen({ navigation }) {
       <SafeAreaView style={s.safe}>
 
         {/* Header */}
-        <View style={s.topbar}>
-          <View style={s.who}>
-            <Text style={s.hi} numberOfLines={1}>{(playerInfo?.name || '').slice(0, 10)}</Text>
-            <View style={s.eloPill}>
-              <Text style={s.eloLbl}>ELO </Text>
-              <Text style={s.eloVal}>{myElo ?? 1200}</Text>
-            </View>
-          </View>
-          <View style={s.topbarBtns}>
-            <SoundButton style={s.ham} />
-            <Pressable style={s.ham} onPress={() => setMenuOpen(o => !o)}>
-              <Text style={s.hamTxt}>☰</Text>
-            </Pressable>
-          </View>
-        </View>
+        <TopBar
+          playerInfo={playerInfo}
+          myElo={myElo}
+          lives={lives}
+          lifeRefillAt={lifeRefillAt}
+          onBanana={() => setLifeSheetOpen(true)}
+          onMenu={() => setMenuOpen(o => !o)}
+        />
 
         {/* Hamburger menu */}
         {menuOpen && (
           <Pressable style={s.menuOverlay} onPress={() => setMenuOpen(false)}>
             <View style={s.menuPanel}>
+              <View style={s.menuSoundRow}>
+                <Text style={s.menuItemTxt}>🔊 Sound</Text>
+                <SoundButton style={s.menuSoundBtn} />
+              </View>
+              <View style={s.menuDivider} />
               <Pressable style={s.menuItem} onPress={() => { setMenuOpen(false); navigationRef.navigate('Profile'); }}>
                 <Text style={s.menuItemTxt}>👤 Profile</Text>
               </Pressable>
+              <Pressable style={s.menuItem} onPress={() => { setMenuOpen(false); /* TODO: how to play */ }}>
+                <Text style={s.menuItemTxt}>❓ How to play</Text>
+              </Pressable>
               <Pressable style={[s.menuItem, { borderBottomWidth: 0 }]} onPress={() => { setMenuOpen(false); onLogout(); }}>
-                <Text style={s.menuItemTxt}>🚪 Log Out</Text>
+                <Text style={s.menuItemTxt}>🚪 Sign out</Text>
               </Pressable>
             </View>
           </Pressable>
         )}
+
+        {/* Life detail sheet */}
+        <LifeDetailSheet
+          visible={lifeSheetOpen}
+          lives={lives}
+          lifeRefillAt={lifeRefillAt}
+          onClose={() => setLifeSheetOpen(false)}
+          onBuy={() => {
+            const pid = playerInfo?.playerId;
+            if (!pid) return;
+            fetch(`${SERVER_URL}/api/player/${encodeURIComponent(pid)}/buy-life`, { method: 'POST' })
+              .then(r => r.json())
+              .then(() => { fetchLives(); setLifeSheetOpen(false); })
+              .catch(() => {});
+          }}
+        />
 
         <ScrollView contentContainerStyle={s.scroll} keyboardShouldPersistTaps="handled">
           <View style={s.col}>
@@ -225,7 +337,7 @@ export default function LobbyScreen({ navigation }) {
 
             {/* QUICK MATCH */}
             <Pressable style={({ pressed }) => [s.hero, pressed && { transform: [{ scale: 0.985 }] }]}
-              onPress={() => onFindMatch(myPlayerId)}>
+              onPress={() => lives === 0 ? setLifeSheetOpen(true) : onFindMatch(myPlayerId)}>
               <View style={s.heroBolt}><Text style={s.heroBoltTxt}>⚡</Text></View>
               <Text style={s.heroTxt}>QUICK MATCH</Text>
               <Text style={s.heroChev}>›</Text>
@@ -376,32 +488,21 @@ const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#0b1420' },
   safe: { flex: 1 },
 
-  topbar: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 20, paddingTop: 14, paddingBottom: 4,
-    width: '100%', maxWidth: 460, alignSelf: 'center',
-  },
-  who: { flexDirection: 'row', alignItems: 'center', gap: 10, flexShrink: 1, minWidth: 0 },
-  hi: { fontSize: 25, fontWeight: '900', color: colors.white, letterSpacing: -0.2, flexShrink: 1 },
-  eloPill: {
-    flexDirection: 'row', alignItems: 'center',
-    backgroundColor: 'rgba(240,192,64,0.12)', borderWidth: 1, borderColor: 'rgba(240,192,64,0.3)',
-    borderRadius: 999, paddingVertical: 3, paddingHorizontal: 9,
-  },
-  eloLbl: { color: '#8a98aa', fontSize: 12, fontWeight: '700' },
-  eloVal: { color: colors.goldLight, fontSize: 12, fontWeight: '800' },
-  topbarBtns: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  ham: {
-    width: 42, height: 42, borderRadius: 13, backgroundColor: 'rgba(255,255,255,0.06)',
-    borderWidth: 1, borderColor: 'rgba(255,255,255,0.16)', alignItems: 'center', justifyContent: 'center',
-  },
-  hamTxt: { color: colors.white, fontSize: 18 },
   menuOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 50 },
   menuPanel: {
-    position: 'absolute', top: 64, right: 16, width: 180, backgroundColor: '#111',
+    position: 'absolute', top: 72, right: 16, width: 200, backgroundColor: '#111',
     borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)', borderRadius: 14, overflow: 'hidden', elevation: 8,
   },
-  menuItem: { paddingHorizontal: 16, paddingVertical: 14 },
+  menuSoundRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 16, paddingVertical: 10,
+  },
+  menuSoundBtn: {
+    width: 36, height: 36, borderRadius: 10,
+    backgroundColor: 'rgba(255,255,255,0.08)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.16)',
+  },
+  menuDivider: { height: 1, backgroundColor: 'rgba(255,255,255,0.08)' },
+  menuItem: { paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.08)' },
   menuItemTxt: { color: 'rgba(255,255,255,0.9)', fontSize: 14 },
 
   scroll: { flexGrow: 1, paddingHorizontal: 18, paddingBottom: 40 },
@@ -538,4 +639,67 @@ const s = StyleSheet.create({
   lbSeeAllTxt: { color: colors.goldLight, fontSize: 13, fontWeight: '800' },
 
   version: { color: 'rgba(255,255,255,0.25)', fontSize: 11, fontWeight: '600', textAlign: 'center', marginTop: 24 },
+});
+
+// TopBar styles
+const tb = StyleSheet.create({
+  bar: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    paddingHorizontal: 16, paddingTop: 12, paddingBottom: 6,
+    width: '100%', maxWidth: 460, alignSelf: 'center',
+  },
+  identity: { flexShrink: 1, minWidth: 0 },
+  name: { fontSize: 17, fontWeight: '900', color: colors.white, letterSpacing: -0.2 },
+  elo: { fontSize: 11.5, color: '#8a98aa', fontWeight: '700', marginTop: 1 },
+  menuBtn: {
+    width: 42, height: 42, borderRadius: 13, backgroundColor: 'rgba(255,255,255,0.06)',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.16)', alignItems: 'center', justifyContent: 'center',
+  },
+  menuTxt: { color: colors.white, fontSize: 18 },
+});
+
+// LifeCapsule styles
+const lc = StyleSheet.create({
+  capsule: {
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    paddingVertical: 6, paddingHorizontal: 13, borderRadius: 11,
+    backgroundColor: 'rgba(231,178,59,0.15)', borderWidth: 1, borderColor: '#e7b23b',
+  },
+  capsuleSpent: {
+    backgroundColor: 'rgba(224,86,77,0.15)', borderColor: '#e0564d',
+  },
+  icon: { width: 18, height: 18, resizeMode: 'contain' },
+  iconSpent: { opacity: 0.4 },
+  txt: { color: '#e7b23b', fontSize: 14, fontWeight: '900' },
+  txtSpent: { color: '#e0564d' },
+});
+
+// LifeDetailSheet styles
+const ld = StyleSheet.create({
+  overlay: {
+    flex: 1, backgroundColor: 'rgba(0,0,0,0.7)',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  sheet: {
+    backgroundColor: '#111a2a', borderRadius: 22, padding: 28,
+    width: 300, alignItems: 'center',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)',
+  },
+  bigIcon: { width: 64, height: 64, resizeMode: 'contain', marginBottom: 14 },
+  bigIconSpent: { opacity: 0.35 },
+  title: { color: colors.white, fontSize: 18, fontWeight: '900', textAlign: 'center', marginBottom: 8 },
+  copy: { color: '#8a98aa', fontSize: 13, fontWeight: '700', textAlign: 'center', marginBottom: 16 },
+  countdown: { color: colors.white, fontSize: 36, fontWeight: '900', letterSpacing: 1, marginBottom: 4 },
+  countdownLabel: { color: '#8a98aa', fontSize: 12, fontWeight: '700', marginBottom: 20 },
+  btns: { flexDirection: 'row', gap: 10, marginTop: 8 },
+  waitBtn: {
+    flex: 1, paddingVertical: 14, borderRadius: 14, alignItems: 'center',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.16)', backgroundColor: 'rgba(255,255,255,0.05)',
+  },
+  waitTxt: { color: '#8a98aa', fontSize: 14, fontWeight: '800' },
+  buyBtn: {
+    flex: 2, paddingVertical: 14, borderRadius: 14, alignItems: 'center',
+    backgroundColor: '#e7b23b',
+  },
+  buyTxt: { color: '#0c151f', fontSize: 14, fontWeight: '900' },
 });

@@ -794,6 +794,19 @@ async function persistMatchResult(m, winner, loser, wEloBefore, lEloBefore, wElo
     achiever.checkMatchAchievements(winnerId, m.isBotMatch)
       .catch(e => console.error('[achievement] match check failed:', e.message));
   }
+
+  // Spend the loser's banana
+  try {
+    const refillAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    await db.query(
+      `UPDATE players SET lives=0, life_refill_at=$1 WHERE id=$2 AND lives>0`,
+      [refillAt, loser.playerId]
+    );
+    const loserSid = socketIdOf(loser.playerId);
+    if (loserSid) io.to(loserSid).emit('lives-update', { lives: 0, lifeRefillAt: refillAt.toISOString() });
+  } catch (e) {
+    console.error('[lives] spend failed:', e.message);
+  }
 }
 
 // ── Identity & placement ──────────────────────────────────────────────────────
@@ -1368,6 +1381,30 @@ app.get('/api/player/:playerId/achievements', async (req, res) => {
     if (!achiever) return res.json({ achievements: [] });
     const list = await achiever.getPlayerAchievements(req.params.playerId);
     res.json({ achievements: list });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.get('/api/player/:playerId/lives', async (req, res) => {
+  try {
+    const { playerId } = req.params;
+    // Auto-restore if refill time has passed
+    await db.query(
+      `UPDATE players SET lives=1, life_refill_at=NULL WHERE id=$1 AND lives=0 AND life_refill_at IS NOT NULL AND life_refill_at <= NOW()`,
+      [playerId]
+    );
+    const { rows } = await db.query(`SELECT lives, life_refill_at FROM players WHERE id=$1`, [playerId]);
+    if (!rows.length) return res.json({ lives: 1, lifeRefillAt: null });
+    res.json({ lives: rows[0].lives, lifeRefillAt: rows[0].life_refill_at });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.post('/api/player/:playerId/buy-life', async (req, res) => {
+  try {
+    const { playerId } = req.params;
+    await db.query(`UPDATE players SET lives=1, life_refill_at=NULL WHERE id=$1`, [playerId]);
+    const loserSid = socketIdOf(playerId);
+    if (loserSid) io.to(loserSid).emit('lives-update', { lives: 1, lifeRefillAt: null });
+    res.json({ lives: 1, lifeRefillAt: null });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -3124,6 +3161,16 @@ async function ensureAcquisitionTable() {
   }
 }
 
+async function runLivesMigration() {
+  try {
+    await db.query(`ALTER TABLE players ADD COLUMN IF NOT EXISTS lives INTEGER NOT NULL DEFAULT 1`);
+    await db.query(`ALTER TABLE players ADD COLUMN IF NOT EXISTS life_refill_at TIMESTAMPTZ`);
+    console.log('[lives] migration ok');
+  } catch (e) {
+    console.error('[lives] migration failed:', e.message);
+  }
+}
+
 async function start() {
   await redis.connect().catch(e => console.error('[redis] connect failed:', e.message));
   await ensureFeedbackTable();
@@ -3135,6 +3182,7 @@ async function start() {
   await initBots();
   await runAchievementsMigration();
   await ensureAcquisitionTable();
+  await runLivesMigration();
   achiever = initAchievements(db, io, socketPlayers);
   server.listen(PORT, () => console.log(`Poker server on port ${PORT}`));
 }
