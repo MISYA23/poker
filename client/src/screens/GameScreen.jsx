@@ -1217,7 +1217,6 @@ export default function GameScreen({ navigation }) {
                 </>
               ) : (
                 <>
-                  <Text style={s.modalSub}>One more for the road?</Text>
                   <View style={s.modalBtns}>
                     <Pressable style={[s.modalBtn, s.modalBtnNo]} onPress={() => onRematch(false)}>
                       <Text style={s.modalBtnTxt}>Leave</Text>
