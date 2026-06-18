@@ -149,3 +149,4 @@ and log [START] / [DONE] entries for every task. See global CLAUDE.md for protoc
 [05:06 UTC] [DONE] v1.26: top nav redesign + banana lives mechanic — feature/topnav-lives pushed, NOT merged
 [05:30 UTC] [DONE] wallet table for bananas — feature/topnav-lives pushed, NOT merged
 [05:44 UTC] [START] v1.27: music + game sound toggles in hamburger menu
+[05:45 UTC] [DONE] v1.27: music + game sounds toggles in hamburger menu — feature/topnav-lives pushed, NOT merged
