@@ -1291,9 +1291,10 @@ export default function GameScreen({ navigation }) {
               {/* Pot block */}
               <Animated.View style={[s.moPot, iWon ? s.moPotWin : s.moPotLose, { opacity: moElo }]}>
                 <Text style={s.moPotLabel}>{iWon ? 'You win' : 'You lose'}</Text>
-                <Text style={s.moPotLine}>
-                  {'🍌 1 banana · '}<Text style={s.moPotLineElo}>{iWon ? `+${eloAmt}` : `−${eloAmt}`} ELO</Text>
-                </Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                  <Text style={s.moPotLine}>🍌 1 banana</Text>
+                  <Text style={s.moPotLineElo}>{iWon ? `+${eloAmt}` : `−${eloAmt}`} ELO</Text>
+                </View>
               </Animated.View>
 
               {/* Buttons */}

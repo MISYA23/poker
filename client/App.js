@@ -246,10 +246,11 @@ function App() {
         setTransition(t || null);
         setGameState(state);
         if (state.atTable && !state.gameOver) setMatchOver(null);
-        // If the other player hit LET'S PLAY first, the hand starts before our
-        // local countdown finishes — dismiss the overlay when game-state arrives.
-        if (foundDelayRef.current && state.phase !== 'waiting') {
-          foundDelayRef.current = false;
+        // Dismiss the pre-match overlay only after the user has confirmed ready
+        // (foundDelayRef cleared) AND the hand is actually live on the server.
+        // This prevents the dialog from closing early if the server fires for
+        // any reason before the user has had a chance to act.
+        if (!foundDelayRef.current && state.phase !== 'waiting') {
           setPreMatch(null);
         }
         const belongsToUs = state.matchId === matchIdRef.current;
@@ -440,9 +441,10 @@ function App() {
   }, [emit, setSearch, clearBotOfferTimer]);
 
   // Client confirmed ready — fire first hand immediately.
+  // Don't clear preMatch here; game-state with phase !== 'waiting' will do it
+  // once the hand is actually live, so the dialog stays up until the game starts.
   const onMatchReady = useCallback(() => {
     foundDelayRef.current = false;
-    setPreMatch(null);
     emit('match-ready', {});
   }, [emit]);
 
