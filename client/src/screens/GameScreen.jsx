@@ -1292,7 +1292,7 @@ export default function GameScreen({ navigation }) {
               <Animated.View style={[s.moPot, iWon ? s.moPotWin : s.moPotLose, { opacity: moElo }]}>
                 <Text style={s.moPotLabel}>{iWon ? 'You win' : 'You lose'}</Text>
                 <Text style={s.moPotLine}>
-                  {iWon ? '🍌 banana kept' : '🍌 banana gone'} · {iWon ? `+${eloAmt}` : `−${eloAmt}`} ELO
+                  {'🍌 1 banana · '}<Text style={s.moPotLineElo}>{iWon ? `+${eloAmt}` : `−${eloAmt}`} ELO</Text>
                 </Text>
               </Animated.View>
 
@@ -1581,6 +1581,7 @@ const s = StyleSheet.create({
   moPotLose: { backgroundColor: 'rgba(224,86,77,0.1)', borderColor: 'rgba(224,86,77,0.35)' },
   moPotLabel:{ color: '#8a98aa', fontSize: 11, fontWeight: '800', letterSpacing: 0.8, textTransform: 'uppercase', marginBottom: 4 },
   moPotLine: { color: colors.white, fontSize: 14, fontWeight: '800', textAlign: 'center' },
+  moPotLineElo: { color: '#a9d0f5', fontSize: 14, fontWeight: '800' },
   moRefill:  { alignItems: 'center', gap: 2 },
   moRefillTimer: { color: '#e7b23b', fontSize: 22, fontWeight: '900', letterSpacing: 1 },
   moRefillLabel: { color: '#8a98aa', fontSize: 12, fontWeight: '700' },

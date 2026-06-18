@@ -102,13 +102,17 @@ function LifeCapsule({ lives, onPress }) {
   );
 }
 
-function TopBar({ playerInfo, myElo, lives, onBanana, onMenu }) {
+function TopBar({ playerInfo, myElo, myRank, lives, onBanana, onMenu, onEloTap }) {
   return (
     <View style={tb.bar}>
       <AvatarBadge avatarId={playerInfo?.avatarId} size={42} />
       <View style={tb.identity}>
         <Text style={tb.name} numberOfLines={1}>{(playerInfo?.name || '').slice(0, 16)}</Text>
-        <Text style={tb.elo}>ELO {myElo ?? 1200}</Text>
+        <Pressable style={tb.eloChip} onPress={onEloTap}>
+          <Text style={tb.eloChipTxt}>
+            🏆 {myElo ?? 1200}{myRank ? ` · #${myRank}` : ''} ›
+          </Text>
+        </Pressable>
       </View>
       <View style={{ flex: 1 }} />
       <LifeCapsule lives={lives} onPress={onBanana} />
@@ -206,6 +210,8 @@ export default function LobbyScreen({ navigation }) {
   const [lbData, setLbData] = useState(null);
   const [achievements, setAchievements] = useState(() => mergeAchievements([]));
   const [lbTab, setLbTab]   = useState('global');   // 'global' | 'country'
+  const [lbCardY, setLbCardY] = useState(0);
+  const scrollRef = useRef(null);
   const copiedTimer = useRef(null);
 
   const myPlayerId = playerInfo?.playerId;
@@ -276,6 +282,7 @@ export default function LobbyScreen({ navigation }) {
   const lbMyRow   = lbActive.find(e => e.playerId === myPlayerId);
   const lbMeInTop = lbTop5.some(p => p.playerId === myPlayerId);
   const lbAhead   = lbMyRow ? lbActive.find(e => e.rank === lbMyRow.rank - 1) : null;  // the player just above me
+  const myGlobalRank = myPlayerId ? (lbEntries.findIndex(e => e.playerId === myPlayerId) + 1) || null : null;
 
   // Everyone online is implicitly looking to play — challengeable unless in a
   // human match. Bot-game players stay listed (15s to answer a challenge).
@@ -300,9 +307,11 @@ export default function LobbyScreen({ navigation }) {
         <TopBar
           playerInfo={playerInfo}
           myElo={myElo}
+          myRank={myGlobalRank}
           lives={lives}
           onBanana={() => setLifeSheetOpen(true)}
           onMenu={() => setMenuOpen(o => !o)}
+          onEloTap={() => scrollRef.current?.scrollTo({ y: lbCardY, animated: true })}
         />
 
         {/* Hamburger menu */}
@@ -349,7 +358,7 @@ export default function LobbyScreen({ navigation }) {
           onBought={fetchLives}
         />
 
-        <ScrollView contentContainerStyle={s.scroll} keyboardShouldPersistTaps="handled">
+        <ScrollView ref={scrollRef} contentContainerStyle={s.scroll} keyboardShouldPersistTaps="handled">
           <View style={s.col}>
 
             {/* Presence chip — only when MORE THAN 3 humans online */}
@@ -444,7 +453,7 @@ export default function LobbyScreen({ navigation }) {
             {/* Leaderboard preview card */}
             {lbData && (
               <>
-                <View style={s.sec}>
+                <View style={s.sec} onLayout={e => setLbCardY(e.nativeEvent.layout.y)}>
                   <Text style={s.secIcGold}>🏆</Text>
                   <Text style={[s.secTitle, s.secTitleGold]}>Leaderboard</Text>
                 </View>
@@ -671,7 +680,12 @@ const tb = StyleSheet.create({
   },
   identity: { flexShrink: 1, minWidth: 0 },
   name: { fontSize: 17, fontWeight: '900', color: colors.white, letterSpacing: -0.2 },
-  elo: { fontSize: 11.5, color: '#8a98aa', fontWeight: '700', marginTop: 1 },
+  eloChip: {
+    alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center',
+    backgroundColor: 'rgba(91,155,213,0.14)', borderWidth: 1, borderColor: 'rgba(91,155,213,0.45)',
+    borderRadius: 8, paddingVertical: 3, paddingHorizontal: 9, marginTop: 3,
+  },
+  eloChipTxt: { fontSize: 11.5, fontWeight: '900', color: '#a9d0f5' },
   menuBtn: {
     width: 42, height: 42, borderRadius: 13, backgroundColor: 'rgba(255,255,255,0.06)',
     borderWidth: 1, borderColor: 'rgba(255,255,255,0.16)', alignItems: 'center', justifyContent: 'center',

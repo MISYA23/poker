@@ -44,13 +44,13 @@ function StakePot({ potElo, label, winElo, loseElo }) {
           <Text style={ov.stakePotIcon}>📈</Text>
           {winElo != null && loseElo != null ? (
             <>
-              <Text style={ov.stakePotBig}>+{winElo} / −{loseElo}</Text>
+              <Text style={ov.stakePotElo}>+{winElo} / −{loseElo}</Text>
               <Text style={ov.stakePotSmall}>ELO win/lose</Text>
             </>
           ) : (
             <>
-              <Text style={ov.stakePotBig}>{potElo ?? '?'} ELO</Text>
-              <Text style={ov.stakePotSmall}>winner takes it</Text>
+              <Text style={ov.stakePotElo}>{potElo ?? '?'} ELO</Text>
+              <Text style={ov.stakePotSmall}>on the line</Text>
             </>
           )}
         </View>
@@ -84,7 +84,7 @@ export function AvatarBadge({ avatarId, country, isBot = false, size = 74 }) {
         style={{ width: size, height: size, borderRadius: size * 0.26, backgroundColor: '#1b2a3b' }}
         resizeMode="cover"
       />
-      <Text style={[ov.flagBadge, { fontSize: size * 0.38 }]}>{isBot ? '🤖' : flagEmoji(country)}</Text>
+      {!isBot && country ? <Text style={[ov.flagBadge, { fontSize: size * 0.38 }]}>{flagEmoji(country)}</Text> : null}
     </View>
   );
 }
@@ -315,7 +315,7 @@ export default function MatchFlowOverlays({
           <Text style={ov.title}>{copy?.botTitle ?? 'No humans yet…'}</Text>
           <BotOpponentBlock />
           <View style={ov.stakeBar}>
-            <Text style={ov.stakeBarTxt}>🍌 1 banana + ELO on the line · Win to keep it · lose it's gone</Text>
+            <Text style={ov.stakeBarTxt}>🍌 1 banana · ELO on the line</Text>
           </View>
           <View style={ov.actsRow}>
             <Pressable style={ov.declineBtn} onPress={onDismissMeantime}>
@@ -422,6 +422,7 @@ const ov = StyleSheet.create({
   stakePotItem:  { alignItems: 'center', gap: 2 },
   stakePotIcon:  { fontSize: 20 },
   stakePotBig:   { color: colors.white, fontSize: 15, fontWeight: '900' },
+  stakePotElo:   { color: '#a9d0f5', fontSize: 15, fontWeight: '900' },
   stakePotSmall: { color: '#8a98aa', fontSize: 11, fontWeight: '700' },
   stakePotSep:   { color: '#8a98aa', fontSize: 18, fontWeight: '700' },
 
