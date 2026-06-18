@@ -12,7 +12,6 @@ import { ChipStack } from '../components/PokerChip';
 import { calcEquity } from '../utils/equity';
 import BettingControls from '../components/BettingControls';
 import PreviousHandDialog from '../components/PreviousHandDialog';
-import SoundButton from '../components/SoundButton';
 import { colors } from '../theme';
 import { SERVER_URL } from '../config';
 import { playSfx } from '../audio/sfx';
@@ -62,7 +61,7 @@ import {
   FOLD_REVEAL_PAUSE, SHOWDOWN_REVEAL_PAUSE, CHIP_FLIGHT_MS,
 } from '../timings';
 
-const TOP_BAR_H    = 50;
+const TOP_BAR_H    = 56;
 const ACTION_BAR_H = 125;
 
 // ─── Group A reference canvas ─────────────────────────────────────────────────
@@ -391,7 +390,7 @@ export default function GameScreen({ navigation }) {
     gameState, transition, myId, onAction, onLeave, onRematch, onLogout,
     matchOver, navigationRef, deckStyle, playerInfo, onHandEndAnimDone,
     handEventsRef, bustReveal = null, forfeitReveal = null, uiConfig = {},
-    onBotActionRequest,
+    onBotActionRequest, lives = 1,
   } = useContext(GameContext);
 
   useEffect(() => {
@@ -986,21 +985,31 @@ export default function GameScreen({ navigation }) {
               <Text style={s.menuBtnTxt}>↺</Text>
             </Pressable>
           </View>
+          {/* Center — absolute so it never displaces the side buttons */}
           {gameState?.handNumber > 0 && (() => {
             const next = blindsForHand(gameState.handNumber + 1, blindFmt);
             const goingUp = gameState.phase === 'showdown' && next.bb > gameState.bigBlind;
             return (
               <View style={s.blindsPill} pointerEvents="none">
                 {goingUp ? (
-                  <Text style={s.blindsUpTxt}>Blinds going up · <Text style={s.blindsUpLevel}>{next.sb}/{next.bb}</Text></Text>
+                  <>
+                    <Text style={s.blindsHandTxt}>Hand {gameState.handNumber}</Text>
+                    <Text style={s.blindsUpTxt}>Blinds going up · <Text style={s.blindsUpLevel}>{next.sb}/{next.bb}</Text></Text>
+                  </>
                 ) : (
-                  <Text style={s.blindsTxt}>Hand {gameState.handNumber} · Blinds {gameState.smallBlind}/{gameState.bigBlind}</Text>
+                  <>
+                    <Text style={s.blindsHandTxt}>Hand {gameState.handNumber}</Text>
+                    <Text style={s.blindsTxt}>Blinds {gameState.smallBlind} / {gameState.bigBlind}</Text>
+                  </>
                 )}
               </View>
             );
           })()}
           <View style={s.topBarRight}>
-            <SoundButton style={s.menuBtn} />
+            <View style={s.bananaRisk}>
+              <Text style={s.bananaRiskEmoji}>🍌</Text>
+              <Text style={s.bananaRiskTxt}>at risk</Text>
+            </View>
             <Pressable style={s.menuBtn} onPress={() => setMenuOpen(o => !o)}>
               <Text style={s.menuBtnTxt}>☰</Text>
             </Pressable>
@@ -1378,13 +1387,25 @@ const s = StyleSheet.create({
   version:    { color: 'rgba(255,255,255,0.2)', fontSize: 11 },
   blindsPill: {
     position: 'absolute', left: 0, right: 0, top: 0, height: TOP_BAR_H,
+    alignItems: 'center', justifyContent: 'center', gap: 2,
+  },
+  blindsHandTxt: { color: colors.white, fontSize: 15, fontWeight: '900' },
+  blindsTxt:     { color: 'rgba(255,255,255,0.45)', fontSize: 12, fontWeight: '600' },
+  blindsUpTxt:   { color: colors.gold, fontSize: 12, fontWeight: '700', letterSpacing: 0.4 },
+  blindsUpLevel: { color: colors.goldLight, fontWeight: '700' },
+  menuBtn: {
+    width: 40, height: 40, borderRadius: 12,
+    backgroundColor: 'rgba(0,0,0,0.5)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)',
     alignItems: 'center', justifyContent: 'center',
   },
-  blindsTxt:  { color: 'rgba(255,255,255,0.45)', fontSize: 12, fontWeight: '600' },
-  blindsUpTxt:   { color: colors.gold, fontSize: 13, fontWeight: '700', letterSpacing: 0.6, textShadowColor: 'rgba(0,0,0,0.5)', textShadowRadius: 3 },
-  blindsUpLevel: { color: colors.goldLight, fontSize: 13, fontWeight: '700', letterSpacing: 0.6 },
-  menuBtn:    { width: 36, height: 36, borderRadius: 8, backgroundColor: 'rgba(0,0,0,0.5)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)', alignItems: 'center', justifyContent: 'center' },
-  menuBtnTxt: { color: colors.white, fontSize: 16 },
+  menuBtnTxt: { color: colors.white, fontSize: 17 },
+  bananaRisk: {
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    paddingVertical: 7, paddingHorizontal: 11, borderRadius: 11,
+    backgroundColor: 'rgba(224,86,77,0.15)', borderWidth: 1, borderColor: 'rgba(224,86,77,0.55)',
+  },
+  bananaRiskEmoji: { fontSize: 16, lineHeight: 19 },
+  bananaRiskTxt:   { color: '#e8897f', fontSize: 13, fontWeight: '800' },
   observingBanner: { alignSelf: 'center', marginTop: 4, backgroundColor: 'rgba(0,0,0,0.5)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)', borderRadius: 8, paddingVertical: 4, paddingHorizontal: 12 },
   observingTxt:    { color: 'rgba(255,255,255,0.7)', fontSize: 12, fontWeight: '700' },
   disconnectBanner: { marginHorizontal: 12, marginTop: 4, backgroundColor: 'rgba(251,146,60,0.18)', borderWidth: 1, borderColor: 'rgba(251,146,60,0.5)', borderRadius: 8, paddingVertical: 6, paddingHorizontal: 12 },
