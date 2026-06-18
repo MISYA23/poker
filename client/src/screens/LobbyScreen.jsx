@@ -135,11 +135,11 @@ function LifeDetailSheet({ visible, lives, maxLives, onClose, onOpenStore }) {
               <Text style={ld.title}>Out of bananas</Text>
               <Text style={ld.copy}>Buy one in the store to keep playing.</Text>
               <View style={ld.btns}>
-                <Pressable style={ld.waitBtn} onPress={onClose}>
-                  <Text style={ld.waitTxt}>Later</Text>
-                </Pressable>
                 <Pressable style={ld.buyBtn} onPress={onOpenStore}>
                   <Text style={ld.buyTxt}>🍌 Buy a banana</Text>
+                </Pressable>
+                <Pressable style={ld.waitBtn} onPress={onClose}>
+                  <Text style={ld.waitTxt}>Later</Text>
                 </Pressable>
               </View>
             </>
@@ -167,11 +167,11 @@ function NoLifeAlert({ visible, onClose, onGetOne }) {
           <Text style={ld.title}>No banana, no match</Text>
           <Text style={ld.copy}>Sorry, you need a banana to play.</Text>
           <View style={ld.btns}>
-            <Pressable style={ld.waitBtn} onPress={onClose}>
-              <Text style={ld.waitTxt}>Cancel</Text>
-            </Pressable>
             <Pressable style={ld.buyBtn} onPress={onGetOne}>
               <Text style={ld.buyTxt}>🍌 Get a banana</Text>
+            </Pressable>
+            <Pressable style={ld.waitBtn} onPress={onClose}>
+              <Text style={ld.waitTxt}>Cancel</Text>
             </Pressable>
           </View>
         </Pressable>
@@ -725,15 +725,15 @@ const ld = StyleSheet.create({
   title: { color: colors.white, fontSize: 18, fontWeight: '900', textAlign: 'center', marginBottom: 8 },
   countdown: { color: '#e7b23b', fontSize: 32, fontWeight: '900', letterSpacing: 1, marginBottom: 4 },
   copy: { color: '#8a98aa', fontSize: 13, fontWeight: '700', textAlign: 'center', marginBottom: 16 },
-  btns: { flexDirection: 'row', gap: 10, marginTop: 8 },
+  btns: { flexDirection: 'column', gap: 10, marginTop: 8, alignSelf: 'stretch' },
   waitBtn: {
-    flex: 1, paddingVertical: 14, borderRadius: 14, alignItems: 'center',
+    paddingVertical: 14, borderRadius: 14, alignItems: 'center',
     borderWidth: 1, borderColor: 'rgba(255,255,255,0.16)', backgroundColor: 'rgba(255,255,255,0.05)',
   },
   waitTxt: { color: '#8a98aa', fontSize: 14, fontWeight: '800' },
   buyBtn: {
-    flex: 2, paddingVertical: 14, borderRadius: 14, alignItems: 'center',
+    paddingVertical: 14, borderRadius: 14, alignItems: 'center',
     backgroundColor: '#e7b23b',
   },
-  buyTxt: { color: '#0c151f', fontSize: 14, fontWeight: '900' },
+  buyTxt: { color: '#0c151f', fontSize: 15, fontWeight: '900' },
 });
