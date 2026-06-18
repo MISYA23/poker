@@ -325,13 +325,19 @@ function useActionFlash(player, lastAction) {
 }
 
 // ─── PlayerPod — avatar + nameplate only (hole cards are now separate) ────────
-function PlayerPod({ player, isMe, observing, turnDeadline, turnDurationMs, lastAction, win, splitPot, displayChips, deckStyle, avatarOverride, sittingOut }) {
+function PlayerPod({ player, isMe, observing, turnDeadline, turnDurationMs, lastAction, win, splitPot, allInLocked, displayChips, deckStyle, avatarOverride, sittingOut }) {
   const actionLbl = useActionFlash(player, lastAction);
   const present   = !!player;
   const isActive  = present && !!player.isCurrentPlayer;
   const displayName = present ? player.name : (isMe && !observing ? 'You' : 'Waiting…');
+  // A player who is all-in shows "All In" on the nameplate until the hand
+  // resolves (win → chips back / Split Pot, or elimination). The red "life or
+  // death" treatment clears as soon as they're revealed as a winner.
+  const showAllin = allInLocked && !win;
   const chipLabel = !present ? '—'
-    : (win ? (splitPot ? 'Split Pot' : '🏆 Winner!') : (actionLbl || (displayChips ?? player.chips).toLocaleString()));
+    : win ? (splitPot ? 'Split Pot' : '🏆 Winner!')
+    : allInLocked ? 'All In'
+    : (actionLbl || (displayChips ?? player.chips).toLocaleString());
 
   const avatar = (
     <View style={[
@@ -341,6 +347,10 @@ function PlayerPod({ player, isMe, observing, turnDeadline, turnDurationMs, last
       !present && s.avatarPlaceholder,
     ]}>
       <Avatar size={AVATAR_SZ} avatarId={avatarOverride || player?.avatarId} />
+      {/* All-in "life or death" — very light red wash + dark-red ring over the avatar */}
+      {showAllin && (
+        <View pointerEvents="none" style={[StyleSheet.absoluteFill, s.allinWash, s.allinRing, { borderRadius: AVATAR_SZ / 2 }]} />
+      )}
     </View>
   );
 
@@ -361,7 +371,10 @@ function PlayerPod({ player, isMe, observing, turnDeadline, turnDurationMs, last
       present && player.folded && s.nameplateFolded,
       !present && s.nameplateWaiting,
       sittingOut && s.nameplateSittingOut,
+      showAllin && s.nameplateAllin,
     ]}>
+      {/* All-in "life or death" — very light red wash behind the text */}
+      {showAllin && <View pointerEvents="none" style={[StyleSheet.absoluteFill, s.allinWash]} />}
       <View style={s.nameRow}>
         <Text style={[s.podName, present && player.folded && s.podTextFolded]} numberOfLines={1}>{displayName}</Text>
         {present && player.isSmallBlind && <Text style={[s.badge, s.badgeSB]}>SB</Text>}
@@ -369,7 +382,10 @@ function PlayerPod({ player, isMe, observing, turnDeadline, turnDurationMs, last
         {sittingOut && <Text style={[s.badge, s.badgeSitOut]}>Sitting Out</Text>}
       </View>
       <View style={s.chipsRow}>
-        <Text style={[s.podChips, win && (splitPot ? s.podChipsSplit : s.podChipsWin), !!actionLbl && s.podChipsAction,
+        <Text style={[s.podChips,
+          win && (splitPot ? s.podChipsSplit : s.podChipsWin),
+          showAllin && s.podChipsAllin,
+          !win && !allInLocked && !!actionLbl && s.podChipsAction,
           present && player.folded && s.podTextFolded]}
           numberOfLines={1}>{chipLabel}</Text>
       </View>
@@ -730,6 +746,12 @@ export default function GameScreen({ navigation }) {
   const winnerPot = gameState?.winners?.reduce((s, w) => s + (w.amount || 0), 0) || 0;
   // Split pot — both players chop (heads-up: >1 winner). Not during a bust/forfeit reveal.
   const isSplit  = !bustWinId && (gameState?.winners?.length || 0) > 1;
+  // All-in (nothing behind) → red treatment + "All In" on the nameplate. The
+  // server sets allIn exactly when chips hit 0 and clears it if an uncalled bet
+  // is returned, so allIn alone is the signal. If both players are all-in, both
+  // light up red. A player who still has chips just shows their stack.
+  const oppAllInLocked = !!opponent?.allIn;
+  const myAllInLocked  = !!me?.allIn;
   const animPot  = locked ? winnerPot : null;
   // After showdown, server resets pot to 0 — fall back to winner sum so the
   // pot label stays visible until the chip-flight animation completes.
@@ -747,6 +769,9 @@ export default function GameScreen({ navigation }) {
   // While collecting, pills show the final street bets and ride collectProg
   const oppBetShown = collecting ? (collect.bets[opponent?.id] || 0) : (opponent?.roundBet || 0);
   const myBetShown  = collecting ? (collect.bets[me?.id] || 0)      : (me?.roundBet || 0);
+  // Equity % only after the bets/chips have collected into the middle (pot):
+  // not mid-collect and no bet chips still sitting in front of either player.
+  const showEquity  = !!allInEquity && !collecting && !oppBetShown && !myBetShown;
   const collectOpacity = collectProg.interpolate({ inputRange: [0, 0.8, 1], outputRange: [1, 1, 0] });
   const oppCollectStyle = {
     opacity: collectOpacity,
@@ -889,6 +914,7 @@ export default function GameScreen({ navigation }) {
               turnDeadline={oppDeadline} turnDurationMs={gameState?.turnDurationMs} lastAction={gameState?.lastAction}
               win={bustWinId ? opponent?.id === bustWinId : (opponent ? activeWinners[opponent.id] : null)}
               splitPot={isSplit}
+              allInLocked={oppAllInLocked}
               displayChips={forfeitReveal?.loserId === opponent?.id && forfeitChipDisplay != null ? forfeitChipDisplay : (opponent ? chipsFor(opponent) : 0)}
               deckStyle={deckStyle} sittingOut={oppSittingOut} />
           </View>
@@ -898,17 +924,12 @@ export default function GameScreen({ navigation }) {
 
           {/* Opponent bet */}
           <View style={[s.betSlot, { top: OPP_BET_T }]} pointerEvents="none">
-            {(oppBetShown > 0 || opponent?.allIn || allInEquity) && (
+            {oppBetShown > 0 && (
               <View style={s.betPill}>
-                {opponent?.allIn
-                  ? <Text style={s.allInTag}>{allInEquity ? `ALL IN: ${allInEquity.opp}%` : 'ALL IN'}</Text>
-                  : allInEquity ? <Text style={s.allInTag}>{allInEquity.opp}%</Text> : null}
-                {oppBetShown > 0 && (
-                  <Animated.View style={[s.betPillChips, collecting && oppCollectStyle]}>
-                    <ChipStack amount={oppBetShown} size={33} />
-                    <Text style={s.betAmt}>{oppBetShown.toLocaleString()}</Text>
-                  </Animated.View>
-                )}
+                <Animated.View style={[s.betPillChips, collecting && oppCollectStyle]}>
+                  <ChipStack amount={oppBetShown} size={33} />
+                  <Text style={s.betAmt}>{oppBetShown.toLocaleString()}</Text>
+                </Animated.View>
               </View>
             )}
           </View>
@@ -935,20 +956,28 @@ export default function GameScreen({ navigation }) {
 
           {/* Player bet — bottom-anchored, grows up toward the pot (clears hole cards) */}
           <View style={[s.betSlot, { top: MY_BET_BASE - MY_BET_SLOT_H, height: MY_BET_SLOT_H, left: MY_BET_L, justifyContent: 'flex-end' }]} pointerEvents="none">
-            {(myBetShown > 0 || me?.allIn || allInEquity) && (
+            {myBetShown > 0 && (
               <View style={s.betPill}>
-                {me?.allIn
-                  ? <Text style={s.allInTag}>{allInEquity ? `ALL IN: ${allInEquity.me}%` : 'ALL IN'}</Text>
-                  : allInEquity ? <Text style={s.allInTag}>{allInEquity.me}%</Text> : null}
-                {myBetShown > 0 && (
-                  <Animated.View style={[s.betPillChips, collecting && myCollectStyle]}>
-                    <ChipStack amount={myBetShown} size={33} />
-                    <Text style={s.betAmt}>{myBetShown.toLocaleString()}</Text>
-                  </Animated.View>
-                )}
+                <Animated.View style={[s.betPillChips, collecting && myCollectStyle]}>
+                  <ChipStack amount={myBetShown} size={33} />
+                  <Text style={s.betAmt}>{myBetShown.toLocaleString()}</Text>
+                </Animated.View>
               </View>
             )}
           </View>
+
+          {/* All-in equity % — shown only AFTER bets have collected to the middle,
+              both centred on the table width at the same heights as the bet rows */}
+          {showEquity && (
+            <>
+              <View pointerEvents="none" style={[s.betSlot, { top: OPP_BET_T }]}>
+                <Text style={s.equityTag}>{allInEquity.opp}%</Text>
+              </View>
+              <View pointerEvents="none" style={[s.betSlot, { top: MY_BET_BASE - MY_BET_SLOT_H, height: MY_BET_SLOT_H, justifyContent: 'flex-end' }]}>
+                <Text style={s.equityTag}>{allInEquity.me}%</Text>
+              </View>
+            </>
+          )}
 
           {/* Dealer button */}
           {opponent?.isDealer && (
@@ -1002,6 +1031,7 @@ export default function GameScreen({ navigation }) {
               turnDeadline={myDeadline} turnDurationMs={gameState?.turnDurationMs} lastAction={gameState?.lastAction}
               win={bustWinId ? me?.id === bustWinId : (me ? activeWinners[me.id] : null)}
               splitPot={isSplit}
+              allInLocked={myAllInLocked}
               displayChips={forfeitReveal?.loserId === me?.id && forfeitChipDisplay != null ? forfeitChipDisplay : (me ? chipsFor(me) : 0)}
               avatarOverride={observing ? undefined : playerInfo?.avatarId}
               deckStyle={deckStyle} sittingOut={meSittingOut} />
@@ -1339,6 +1369,11 @@ const s = StyleSheet.create({
   nameplateSittingOut: { backgroundColor: '#1a1a2e', borderColor: 'rgba(255,255,255,0.12)' },
   podTextFolded:       { color: 'rgba(255,255,255,0.42)' },
   nameplateWaiting:    {},
+  // All-in "life or death" — deep-red frame + soft glow on the nameplate,
+  // matching dark-red ring on the avatar, with a very light red interior wash.
+  nameplateAllin: { borderColor: '#991b1b', shadowColor: '#dc2626', shadowOpacity: 0.4, shadowRadius: 9, elevation: 6 },
+  allinWash:      { backgroundColor: 'rgba(220,38,38,0.14)' },
+  allinRing:      { borderWidth: 2.5, borderColor: '#991b1b' },
 
   // Turn-timer gauge — a clip box that mirrors the nameplate's shape exactly
   // (same width + corner radii); the bar sits at its bottom so its ends follow
@@ -1366,6 +1401,7 @@ const s = StyleSheet.create({
   podChips:  { color: '#facc15', fontSize: 18, fontWeight: '900' },
   podChipsWin:    { color: '#4ade80' },
   podChipsSplit:  { color: '#60a5fa' },                                     // blue — split pot
+  podChipsAllin:  { color: '#f87171' },                                     // red — all-in (no chips behind)
   podChipsAction: { color: colors.orange, fontSize: 14, fontWeight: '800' },
   badge:   { fontSize: 10, color: '#fff', backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 4, paddingHorizontal: 5, paddingVertical: 1, fontWeight: '700' },
   badgeSB:     { backgroundColor: '#2563eb' },
@@ -1391,6 +1427,8 @@ const s = StyleSheet.create({
   betPillChips: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   betAmt:  { color: '#f5d061', fontSize: 15, fontWeight: '900', letterSpacing: 0.3, backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 9, paddingHorizontal: 9, paddingVertical: 2, overflow: 'hidden', borderWidth: 1, borderColor: 'rgba(240,192,64,0.4)' },
   allInTag: { color: '#fff', backgroundColor: '#dc2626', fontSize: 13, fontWeight: '900', letterSpacing: 0.5, paddingHorizontal: 9, paddingVertical: 2, borderRadius: 8, overflow: 'hidden', borderWidth: 1, borderColor: '#fca5a5' },
+  // Showdown equity % — a neutral info chip (not the old red ALL IN alert).
+  equityTag: { color: '#fff', backgroundColor: 'rgba(15,23,42,0.85)', fontSize: 13, fontWeight: '900', letterSpacing: 0.3, paddingHorizontal: 9, paddingVertical: 2, borderRadius: 8, overflow: 'hidden', borderWidth: 1, borderColor: 'rgba(255,255,255,0.35)' },
 
   // Dealer button
   dealerBtn: { position: 'absolute', width: DEALER_SZ, height: DEALER_SZ, borderRadius: DEALER_SZ / 2, backgroundColor: '#f5f5dc', alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: '#888', shadowColor: '#000', shadowOpacity: 0.4, shadowRadius: 3, shadowOffset: { width: 0, height: 2 }, elevation: 4, zIndex: 5 },
