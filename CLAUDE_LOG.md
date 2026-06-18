@@ -133,3 +133,12 @@ and log [START] / [DONE] entries for every task. See global CLAUDE.md for protoc
 
 [17:36 UTC] [DONE] v5.171 deployed (e6f7a46) — removed medal emojis from lobby leaderboard card
 [17:44 UTC] [DONE] v5.172: Meta Conversions API wired for FirstMatchBegun/FirstMatchComplete (SHA256 external_id, Railway env vars set)
+
+[21:54 UTC] [DONE] gameplay-fix b30.43: fixed bot not acting post-flop (botTurnRequestedRef cross-street bug + premature ref set); fixed nameplate chip spoiler during all-in runout
+
+[22:15 UTC] [DONE] merged gameplay-fix into main (b30.44) — bot trigger + nameplate chip fix deployed to Railway
+[04:03 UTC] [DONE] all-in branch: badge stays pinned during chip collect animation; equity recalculates only at flop(3)/turn(4)/river(5) — pushed to origin/all-in (NOT merged)
+[04:22 UTC] [DONE] v1.19: covering player shows equity % without ALL IN text; all-in player keeps ALL IN: X% badge
+[04:23] [DONE] v1.20: return uncalled bet immediately when larger stack goes all-in (pot invariant fix) — PokerGame.js _returnUncalledBet() called before _collectBets()
+[04:26] [DONE] v1.21: sound icon syncs with profile save — listener pattern in music.js/sfx.js, SoundButton subscribes, handleSave reads server response
+[04:27 UTC] [START] v1.22: /admin/dialogs copy editor + dialogCopy.json + wire copy prop to MatchFlowOverlays

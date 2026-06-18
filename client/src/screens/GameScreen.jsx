@@ -9,6 +9,7 @@ import { GameContext } from '../context/GameContext';
 import Card from '../components/Card';
 import Avatar from '../components/Avatar';
 import { ChipStack } from '../components/PokerChip';
+import { calcEquity } from '../utils/equity';
 import BettingControls from '../components/BettingControls';
 import PreviousHandDialog from '../components/PreviousHandDialog';
 import SoundButton from '../components/SoundButton';
@@ -514,6 +515,19 @@ export default function GameScreen({ navigation }) {
   const collecting  = !!collect;
   const collectProg = useRef(new Animated.Value(0)).current;
   const prevSnapRef = useRef(null);
+
+  // When the match changes (rematch), force-clear mid-animation state so it
+  // doesn't bleed into the new match's first hand.
+  const prevMatchIdRef = useRef(null);
+  useEffect(() => {
+    const mid = gameState?.matchId;
+    if (!mid || mid === prevMatchIdRef.current) return;
+    prevMatchIdRef.current = mid;
+    setCollect(null);
+    setShowWinners(false);
+    setWinDone(false);
+    prevSnapRef.current = null;
+  }, [gameState?.matchId]);
   useEffect(() => {
     const prev = prevSnapRef.current;
     prevSnapRef.current = gameState;
@@ -647,6 +661,24 @@ export default function GameScreen({ navigation }) {
     }, 100);
     return () => clearInterval(id);
   }, [myDeadline]);
+
+  // All-in equity — run Monte Carlo when both hands are visible during a showdown runout.
+  // Only recalculates at street boundaries: flop (3), turn (4), river (5).
+  const [allInEquity, setAllInEquity] = useState(null); // { me: 0-100, opp: 0-100 } | null
+  useEffect(() => {
+    if (!isShowdown) { setAllInEquity(null); return; }
+    const anyAllIn = gameState?.players?.some(p => p.allIn);
+    if (!anyAllIn) { setAllInEquity(null); return; }
+    if (revealedCC !== 0 && revealedCC !== 3 && revealedCC !== 4 && revealedCC !== 5) return;
+    const meP  = gameState?.players?.find(p => p.id === (observing ? gameState.players[0]?.id : myId));
+    const oppP = gameState?.players?.find(p => p.id !== (observing ? gameState.players[0]?.id : myId));
+    const h1 = meP?.holeCards;
+    const h2 = oppP?.holeCards;
+    if (!h1?.length || !h2?.length || h1[0]?.hidden || h2[0]?.hidden) { setAllInEquity(null); return; }
+    const board = (gameState?.communityCards || []).slice(0, revealedCC);
+    const meEq = calcEquity(h1, h2, board);
+    setAllInEquity({ me: meEq, opp: 100 - meEq });
+  }, [isShowdown, revealedCC]);
 
   const [winDone, setWinDone] = useState(false);
   useEffect(() => {
@@ -843,12 +875,18 @@ export default function GameScreen({ navigation }) {
 
           {/* Opponent bet */}
           <View style={[s.betSlot, { top: OPP_BET_T }]} pointerEvents="none">
-            {(oppBetShown > 0 || opponent?.allIn) && (
-              <Animated.View style={[s.betPill, collecting && oppCollectStyle]}>
-                {opponent?.allIn && <Text style={s.allInTag}>ALL IN</Text>}
-                {oppBetShown > 0 && <ChipStack amount={oppBetShown} size={33} />}
-                {oppBetShown > 0 && <Text style={s.betAmt}>{oppBetShown.toLocaleString()}</Text>}
-              </Animated.View>
+            {(oppBetShown > 0 || opponent?.allIn || allInEquity) && (
+              <View style={s.betPill}>
+                {opponent?.allIn
+                  ? <Text style={s.allInTag}>{allInEquity ? `ALL IN: ${allInEquity.opp}%` : 'ALL IN'}</Text>
+                  : allInEquity ? <Text style={s.allInTag}>{allInEquity.opp}%</Text> : null}
+                {oppBetShown > 0 && (
+                  <Animated.View style={[s.betPillChips, collecting && oppCollectStyle]}>
+                    <ChipStack amount={oppBetShown} size={33} />
+                    <Text style={s.betAmt}>{oppBetShown.toLocaleString()}</Text>
+                  </Animated.View>
+                )}
+              </View>
             )}
           </View>
 
@@ -874,12 +912,18 @@ export default function GameScreen({ navigation }) {
 
           {/* Player bet — bottom-anchored, grows up toward the pot (clears hole cards) */}
           <View style={[s.betSlot, { top: MY_BET_BASE - MY_BET_SLOT_H, height: MY_BET_SLOT_H, left: MY_BET_L, justifyContent: 'flex-end' }]} pointerEvents="none">
-            {(myBetShown > 0 || me?.allIn) && (
-              <Animated.View style={[s.betPill, collecting && myCollectStyle]}>
-                {me?.allIn && <Text style={s.allInTag}>ALL IN</Text>}
-                {myBetShown > 0 && <ChipStack amount={myBetShown} size={33} />}
-                {myBetShown > 0 && <Text style={s.betAmt}>{myBetShown.toLocaleString()}</Text>}
-              </Animated.View>
+            {(myBetShown > 0 || me?.allIn || allInEquity) && (
+              <View style={s.betPill}>
+                {me?.allIn
+                  ? <Text style={s.allInTag}>{allInEquity ? `ALL IN: ${allInEquity.me}%` : 'ALL IN'}</Text>
+                  : allInEquity ? <Text style={s.allInTag}>{allInEquity.me}%</Text> : null}
+                {myBetShown > 0 && (
+                  <Animated.View style={[s.betPillChips, collecting && myCollectStyle]}>
+                    <ChipStack amount={myBetShown} size={33} />
+                    <Text style={s.betAmt}>{myBetShown.toLocaleString()}</Text>
+                  </Animated.View>
+                )}
+              </View>
             )}
           </View>
 
@@ -1173,7 +1217,6 @@ export default function GameScreen({ navigation }) {
                 </>
               ) : (
                 <>
-                  <Text style={s.modalSub}>One more for the road?</Text>
                   <View style={s.modalBtns}>
                     <Pressable style={[s.modalBtn, s.modalBtnNo]} onPress={() => onRematch(false)}>
                       <Text style={s.modalBtnTxt}>Leave</Text>
@@ -1309,7 +1352,8 @@ const s = StyleSheet.create({
   potPill: { backgroundColor: 'rgba(0,0,0,0.45)', borderRadius: 11, paddingHorizontal: 16, paddingVertical: 5, borderWidth: 1, borderColor: 'rgba(240,192,64,0.45)' },
   potAmt:  { color: '#f5d061', fontSize: 18, fontWeight: '900', letterSpacing: 0.5 },
   betSlot: { position: 'absolute', left: 0, right: 0, alignItems: 'center', height: 40, justifyContent: 'flex-start', zIndex: 20 },
-  betPill: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  betPill:      { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  betPillChips: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   betAmt:  { color: '#f5d061', fontSize: 15, fontWeight: '900', letterSpacing: 0.3, backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 9, paddingHorizontal: 9, paddingVertical: 2, overflow: 'hidden', borderWidth: 1, borderColor: 'rgba(240,192,64,0.4)' },
   allInTag: { color: '#fff', backgroundColor: '#dc2626', fontSize: 13, fontWeight: '900', letterSpacing: 0.5, paddingHorizontal: 9, paddingVertical: 2, borderRadius: 8, overflow: 'hidden', borderWidth: 1, borderColor: '#fca5a5' },
 

@@ -289,6 +289,7 @@ class PokerGame {
   }
 
   _advancePhase() {
+    this._returnUncalledBet();
     this._collectBets();
 
     const nonFolded = this.players.filter(p => p.isActive && !p.folded);
@@ -332,6 +333,21 @@ class PokerGame {
     }
 
     this._startBettingRound();
+  }
+
+  _returnUncalledBet() {
+    const active = this.players.filter(p => p.isActive && !p.folded);
+    if (active.length < 2) return;
+    const sorted = [...active].sort((a, b) => b.roundBet - a.roundBet);
+    const top = sorted[0];
+    const secondBet = sorted[1].roundBet;
+    if (top.roundBet <= secondBet) return;
+    const excess = top.roundBet - secondBet;
+    top.chips += excess;
+    top.roundBet -= excess;
+    top.totalBet -= excess;
+    this.pot -= excess;
+    if (top.chips > 0) top.allIn = false;
   }
 
   _collectBets() {
