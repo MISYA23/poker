@@ -13,23 +13,13 @@ import SoundButton from '../components/SoundButton';
 import AchievementGallery from '../components/AchievementGallery';
 import { ACHIEVEMENTS, mergeAchievements } from '../data/achievements';
 
-// HH:MM from ms remaining
+// HH:MM from ms remaining (used in LifeCapsule for spent state)
 function fmtCountdownShort(ms) {
   if (ms <= 0) return '00:00';
   const totalSec = Math.floor(ms / 1000);
   const h = Math.floor(totalSec / 3600);
   const m = Math.floor((totalSec % 3600) / 60);
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
-}
-
-// HH:MM:SS from ms remaining
-function fmtCountdownFull(ms) {
-  if (ms <= 0) return '00:00:00';
-  const totalSec = Math.floor(ms / 1000);
-  const h = Math.floor(totalSec / 3600);
-  const m = Math.floor((totalSec % 3600) / 60);
-  const s = totalSec % 60;
-  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 }
 
 function useCountdown(targetIso) {
@@ -121,36 +111,57 @@ function TopBar({ playerInfo, myElo, lives, lifeRefillAt, onBanana, onMenu }) {
   );
 }
 
-function LifeDetailSheet({ visible, lives, lifeRefillAt, onClose, onBuy }) {
-  const ms = useCountdown(lives === 0 ? lifeRefillAt : null);
+function LifeDetailSheet({ visible, lives, onClose, onGetOne }) {
   const spent = lives === 0;
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <Pressable style={ld.overlay} onPress={onClose}>
         <Pressable style={ld.sheet} onPress={() => {}}>
           <Text style={[ld.bigIcon, spent && ld.bigIconSpent]}>🍌</Text>
-          <Text style={ld.title}>{spent ? 'Out of bananas 🍌' : 'You have a banana! 🍌'}</Text>
-          <Text style={ld.copy}>Win to keep it — lose and it's gone.</Text>
-          {spent && (
+          {spent ? (
             <>
-              <Text style={ld.countdown}>{fmtCountdownFull(ms)}</Text>
-              <Text style={ld.countdownLabel}>until a free banana</Text>
+              <Text style={ld.title}>Want another banana?</Text>
+              <Text style={ld.copy}>One banana gets you back in the game.</Text>
+              <View style={ld.btns}>
+                <Pressable style={ld.waitBtn} onPress={onClose}>
+                  <Text style={ld.waitTxt}>No thanks</Text>
+                </Pressable>
+                <Pressable style={ld.buyBtn} onPress={onGetOne}>
+                  <Text style={ld.buyTxt}>🍌 Yes!</Text>
+                </Pressable>
+              </View>
+            </>
+          ) : (
+            <>
+              <Text style={ld.title}>Your banana is at risk 🍌</Text>
+              <Text style={ld.copy}>If you lose, it's gone.</Text>
+              <Pressable style={[ld.waitBtn, { alignSelf: 'stretch', marginTop: 8 }]} onPress={onClose}>
+                <Text style={ld.waitTxt}>Got it</Text>
+              </Pressable>
             </>
           )}
-          {spent ? (
-            <View style={ld.btns}>
-              <Pressable style={ld.waitBtn} onPress={onClose}>
-                <Text style={ld.waitTxt}>Wait</Text>
-              </Pressable>
-              <Pressable style={ld.buyBtn} onPress={onBuy}>
-                <Text style={ld.buyTxt}>🍌 Buy a banana</Text>
-              </Pressable>
-            </View>
-          ) : (
-            <Pressable style={[ld.waitBtn, { alignSelf: 'stretch', marginTop: 8 }]} onPress={onClose}>
-              <Text style={ld.waitTxt}>Close</Text>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
+function NoLifeAlert({ visible, onClose, onGetOne }) {
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <Pressable style={ld.overlay} onPress={onClose}>
+        <Pressable style={ld.sheet} onPress={() => {}}>
+          <Text style={ld.bigIcon}>🍌</Text>
+          <Text style={ld.title}>No banana, no match</Text>
+          <Text style={ld.copy}>Sorry, you need a banana to play.</Text>
+          <View style={ld.btns}>
+            <Pressable style={ld.waitBtn} onPress={onClose}>
+              <Text style={ld.waitTxt}>Cancel</Text>
             </Pressable>
-          )}
+            <Pressable style={ld.buyBtn} onPress={onGetOne}>
+              <Text style={ld.buyTxt}>🍌 Get a banana</Text>
+            </Pressable>
+          </View>
         </Pressable>
       </Pressable>
     </Modal>
@@ -181,6 +192,7 @@ export default function LobbyScreen({ navigation }) {
 
   const [menuOpen, setMenuOpen] = useState(false);
   const [lifeSheetOpen, setLifeSheetOpen] = useState(false);
+  const [noLifeOpen, setNoLifeOpen] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
   const [lbData, setLbData] = useState(null);
   const [achievements, setAchievements] = useState(() => mergeAchievements([]));
@@ -307,18 +319,31 @@ export default function LobbyScreen({ navigation }) {
           </Pressable>
         )}
 
-        {/* Life detail sheet */}
+        {/* Life detail sheet (banana tap) */}
         <LifeDetailSheet
           visible={lifeSheetOpen}
           lives={lives}
-          lifeRefillAt={lifeRefillAt}
           onClose={() => setLifeSheetOpen(false)}
-          onBuy={() => {
+          onGetOne={() => {
             const pid = playerInfo?.playerId;
             if (!pid) return;
             fetch(`${SERVER_URL}/api/player/${encodeURIComponent(pid)}/buy-life`, { method: 'POST' })
               .then(r => r.json())
               .then(() => { fetchLives(); setLifeSheetOpen(false); })
+              .catch(() => {});
+          }}
+        />
+
+        {/* No banana — tried to play without one */}
+        <NoLifeAlert
+          visible={noLifeOpen}
+          onClose={() => setNoLifeOpen(false)}
+          onGetOne={() => {
+            const pid = playerInfo?.playerId;
+            if (!pid) return;
+            fetch(`${SERVER_URL}/api/player/${encodeURIComponent(pid)}/buy-life`, { method: 'POST' })
+              .then(r => r.json())
+              .then(() => { fetchLives(); setNoLifeOpen(false); })
               .catch(() => {});
           }}
         />
@@ -341,7 +366,7 @@ export default function LobbyScreen({ navigation }) {
 
             {/* QUICK MATCH */}
             <Pressable style={({ pressed }) => [s.hero, pressed && { transform: [{ scale: 0.985 }] }]}
-              onPress={() => lives === 0 ? setLifeSheetOpen(true) : onFindMatch(myPlayerId)}>
+              onPress={() => lives === 0 ? setNoLifeOpen(true) : onFindMatch(myPlayerId)}>
               <View style={s.heroBolt}><Text style={s.heroBoltTxt}>⚡</Text></View>
               <Text style={s.heroTxt}>QUICK MATCH</Text>
               <Text style={s.heroChev}>›</Text>
@@ -693,8 +718,6 @@ const ld = StyleSheet.create({
   bigIconSpent: { opacity: 0.35 },
   title: { color: colors.white, fontSize: 18, fontWeight: '900', textAlign: 'center', marginBottom: 8 },
   copy: { color: '#8a98aa', fontSize: 13, fontWeight: '700', textAlign: 'center', marginBottom: 16 },
-  countdown: { color: colors.white, fontSize: 36, fontWeight: '900', letterSpacing: 1, marginBottom: 4 },
-  countdownLabel: { color: '#8a98aa', fontSize: 12, fontWeight: '700', marginBottom: 20 },
   btns: { flexDirection: 'row', gap: 10, marginTop: 8 },
   waitBtn: {
     flex: 1, paddingVertical: 14, borderRadius: 14, alignItems: 'center',
