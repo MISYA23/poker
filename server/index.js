@@ -798,10 +798,15 @@ async function persistMatchResult(m, winner, loser, wEloBefore, lEloBefore, wElo
   // Spend the loser's banana
   try {
     const refillAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
-    await db.query(
-      `UPDATE players SET lives=0, life_refill_at=$1 WHERE id=$2 AND lives>0`,
-      [refillAt, loser.playerId]
-    );
+    // Upsert: create row if first match, only spend if bananas > 0
+    await db.query(`
+      INSERT INTO wallet (player_id, bananas, banana_refill_at, updated_at)
+      VALUES ($1, 0, $2, NOW())
+      ON CONFLICT (player_id) DO UPDATE SET
+        bananas          = CASE WHEN wallet.bananas > 0 THEN 0 ELSE wallet.bananas END,
+        banana_refill_at = CASE WHEN wallet.bananas > 0 THEN EXCLUDED.banana_refill_at ELSE wallet.banana_refill_at END,
+        updated_at       = NOW()
+    `, [loser.playerId, refillAt]);
     const loserSid = socketIdOf(loser.playerId);
     if (loserSid) io.to(loserSid).emit('lives-update', { lives: 0, lifeRefillAt: refillAt.toISOString() });
   } catch (e) {
@@ -1387,23 +1392,34 @@ app.get('/api/player/:playerId/achievements', async (req, res) => {
 app.get('/api/player/:playerId/lives', async (req, res) => {
   try {
     const { playerId } = req.params;
-    // Auto-restore if refill time has passed
+    // Ensure row exists (new players get 1 banana by default)
     await db.query(
-      `UPDATE players SET lives=1, life_refill_at=NULL WHERE id=$1 AND lives=0 AND life_refill_at IS NOT NULL AND life_refill_at <= NOW()`,
+      `INSERT INTO wallet (player_id) VALUES ($1) ON CONFLICT DO NOTHING`,
       [playerId]
     );
-    const { rows } = await db.query(`SELECT lives, life_refill_at FROM players WHERE id=$1`, [playerId]);
-    if (!rows.length) return res.json({ lives: 1, lifeRefillAt: null });
-    res.json({ lives: rows[0].lives, lifeRefillAt: rows[0].life_refill_at });
+    // Auto-restore if refill time has passed
+    await db.query(
+      `UPDATE wallet SET bananas=1, banana_refill_at=NULL, updated_at=NOW()
+       WHERE player_id=$1 AND bananas=0 AND banana_refill_at IS NOT NULL AND banana_refill_at <= NOW()`,
+      [playerId]
+    );
+    const { rows } = await db.query(`SELECT bananas, banana_refill_at FROM wallet WHERE player_id=$1`, [playerId]);
+    const row = rows[0] || { bananas: 1, banana_refill_at: null };
+    res.json({ lives: row.bananas, lifeRefillAt: row.banana_refill_at });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 app.post('/api/player/:playerId/buy-life', async (req, res) => {
   try {
     const { playerId } = req.params;
-    await db.query(`UPDATE players SET lives=1, life_refill_at=NULL WHERE id=$1`, [playerId]);
-    const loserSid = socketIdOf(playerId);
-    if (loserSid) io.to(loserSid).emit('lives-update', { lives: 1, lifeRefillAt: null });
+    await db.query(
+      `INSERT INTO wallet (player_id, bananas, banana_refill_at, updated_at)
+       VALUES ($1, 1, NULL, NOW())
+       ON CONFLICT (player_id) DO UPDATE SET bananas=1, banana_refill_at=NULL, updated_at=NOW()`,
+      [playerId]
+    );
+    const sid = socketIdOf(playerId);
+    if (sid) io.to(sid).emit('lives-update', { lives: 1, lifeRefillAt: null });
     res.json({ lives: 1, lifeRefillAt: null });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -3163,8 +3179,29 @@ async function ensureAcquisitionTable() {
 
 async function runLivesMigration() {
   try {
+    // Keep old players columns so the column add is idempotent on prod
     await db.query(`ALTER TABLE players ADD COLUMN IF NOT EXISTS lives INTEGER NOT NULL DEFAULT 1`);
     await db.query(`ALTER TABLE players ADD COLUMN IF NOT EXISTS life_refill_at TIMESTAMPTZ`);
+
+    // Canonical store
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS wallet (
+        player_id        TEXT PRIMARY KEY REFERENCES players(id),
+        bananas          INTEGER NOT NULL DEFAULT 1,
+        banana_refill_at TIMESTAMPTZ,
+        created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+
+    // One-time data migration: copy any non-default banana state from players → wallet
+    await db.query(`
+      INSERT INTO wallet (player_id, bananas, banana_refill_at)
+      SELECT id, lives, life_refill_at FROM players
+      WHERE lives IS NOT NULL
+      ON CONFLICT (player_id) DO NOTHING
+    `);
+
     console.log('[lives] migration ok');
   } catch (e) {
     console.error('[lives] migration failed:', e.message);
