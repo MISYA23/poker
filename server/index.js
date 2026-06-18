@@ -17,6 +17,10 @@ const { initAchievements } = require('./achievements');
 let achiever = null; // set in start() after io + socketPlayers are ready
 
 const path = require('path');
+const fs   = require('fs');
+
+const DIALOG_COPY_PATH = path.join(__dirname, 'dialogCopy.json');
+let dialogCopy = JSON.parse(fs.readFileSync(DIALOG_COPY_PATH, 'utf8'));
 
 const app = express();
 app.use(cors());
@@ -2372,6 +2376,10 @@ app.get('/admin', (_, res) => res.send(ADMIN_SHELL('Admin', `
         <div style="font-size:1rem;font-weight:700;margin-bottom:4px">💬 In-Game Feedback</div>
         <div style="font-size:0.82rem;color:#8b949e">Player-submitted bug reports, game issues, and feedback</div>
       </a>
+      <a href="/admin/dialogs" style="display:block;background:#161b22;border:1px solid #30363d;border-radius:10px;padding:20px 24px;text-decoration:none;color:#e6edf3">
+        <div style="font-size:1rem;font-weight:700;margin-bottom:4px">✏️ Dialog Copy</div>
+        <div style="font-size:0.82rem;color:#8b949e">Edit pre-match overlay text — searching, bot offer, challenge, VS card</div>
+      </a>
     </div>
   </div>`, `function onLogin() {}`)));
 
@@ -2570,6 +2578,123 @@ app.put('/admin/ui-config/:key', async (req, res) => {
     res.json({ ok: true, key, value: uiCfg[key] });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
+
+// ── Dialog copy ───────────────────────────────────────────────────────────────
+
+app.get('/api/dialog-copy', (_, res) => res.json(dialogCopy));
+
+app.put('/api/admin/dialog-copy', (req, res) => {
+  const allowed = new Set(Object.keys(dialogCopy));
+  const updates = req.body;
+  if (!updates || typeof updates !== 'object') return res.status(400).json({ error: 'expected object' });
+  for (const k of Object.keys(updates)) {
+    if (!allowed.has(k)) return res.status(400).json({ error: `unknown key: ${k}` });
+    if (typeof updates[k] !== 'string') return res.status(400).json({ error: `${k} must be a string` });
+  }
+  dialogCopy = { ...dialogCopy, ...updates };
+  fs.writeFileSync(DIALOG_COPY_PATH, JSON.stringify(dialogCopy, null, 2), 'utf8');
+  res.json({ ok: true, copy: dialogCopy });
+});
+
+app.get('/admin/dialogs', (_, res) => res.send(ADMIN_SHELL('Dialog Copy', `
+  <h1>♠ Dialog Copy Editor</h1>
+  <div class="nav"><a href="/admin">← Admin</a></div>
+  ${ADMIN_AUTH_BLOCK}
+  <div id="main" style="max-width:960px">
+    <p style="color:#8b949e;font-size:0.85rem;margin-bottom:24px">Edit the text shown in pre-match overlays. Changes go live immediately — no deploy needed.</p>
+
+    <div id="dialogs-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:20px"></div>
+
+    <div style="margin-top:28px;display:flex;align-items:center;gap:14px">
+      <button onclick="saveAll()" style="background:#f0c040;color:#0d1117;border:none;border-radius:8px;padding:12px 28px;font-size:1rem;font-weight:800;cursor:pointer">Save all changes</button>
+      <span id="save-status" style="color:#3fb950;font-size:0.9rem;font-weight:700;display:none">✓ Saved</span>
+    </div>
+  </div>`, `
+  const FIELDS = [
+    { group: '🔍 Searching', fields: [
+      { key:'searchingTitle',     label:'Title',        hint:'Main heading while searching' },
+      { key:'searchingSub',       label:'Subtitle',     hint:'Smaller text below title' },
+      { key:'searchingCancelBtn', label:'Cancel button',hint:'' },
+    ]},
+    { group: '🎯 Human found', fields: [
+      { key:'foundTitle', label:'Title', hint:'Shown when a real opponent is matched' },
+    ]},
+    { group: '🤖 Bot offer', fields: [
+      { key:'botTitle',          label:'Title',            hint:'Shown ~5s after search starts with no match' },
+      { key:'botSub',            label:'Subtitle',         hint:'Can include emoji' },
+      { key:'botKeepWaitingBtn', label:'Keep waiting btn', hint:'' },
+      { key:'botPlayBtn',        label:'Play bot btn',     hint:'' },
+    ]},
+    { group: '⚔️ Match starting', fields: [
+      { key:'preMatchHeading', label:'Heading',   hint:'Above the VS card' },
+      { key:'preMatchVs',      label:'VS label',  hint:'' },
+      { key:'preMatchGo',      label:'GO! label', hint:'Shown after the 3-2-1 countdown' },
+    ]},
+    { group: '🥊 Incoming challenge', fields: [
+      { key:'challengeBadge',      label:'Badge text',    hint:'' },
+      { key:'challengeSub',        label:'Subtitle',      hint:'Use {name} for opponent name' },
+      { key:'challengeDeclineBtn', label:'Decline button',hint:'' },
+      { key:'challengeAcceptBtn',  label:'Accept button', hint:'' },
+    ]},
+  ];
+
+  let current = {};
+
+  async function onLogin() {
+    current = await fetch('/api/dialog-copy').then(r => r.json());
+    renderGrid();
+  }
+
+  function renderGrid() {
+    const grid = document.getElementById('dialogs-grid');
+    grid.innerHTML = '';
+    for (const group of FIELDS) {
+      const card = document.createElement('div');
+      card.style.cssText = 'background:#161b22;border:1px solid #30363d;border-radius:12px;padding:20px';
+      let html = '<div style="font-size:0.9rem;font-weight:800;color:#f0c040;margin-bottom:16px">' + group.group + '</div>';
+      for (const f of group.fields) {
+        html += '<div style="margin-bottom:14px">';
+        html += '<label style="display:block;font-size:0.75rem;color:#8b949e;margin-bottom:5px">' + f.label + (f.hint ? ' <span style=\\'font-weight:400\\'> — ' + f.hint + '</span>' : '') + '</label>';
+        html += '<input id="field-' + f.key + '" type="text" value="' + escHtml(current[f.key] || '') + '" style="width:100%;background:#0d1117;border:1px solid #30363d;border-radius:6px;color:#e6edf3;font-size:0.9rem;padding:8px 10px;outline:none" />';
+        html += '</div>';
+      }
+      card.innerHTML = html;
+      grid.appendChild(card);
+    }
+    // add focus highlight on inputs
+    for (const inp of document.querySelectorAll('#dialogs-grid input')) {
+      inp.addEventListener('focus', () => inp.style.borderColor = '#f0c040');
+      inp.addEventListener('blur',  () => inp.style.borderColor = '#30363d');
+    }
+  }
+
+  function escHtml(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+  async function saveAll() {
+    const updates = {};
+    for (const group of FIELDS) {
+      for (const f of group.fields) {
+        const el = document.getElementById('field-' + f.key);
+        if (el) updates[f.key] = el.value;
+      }
+    }
+    const res = await fetch('/api/admin/dialog-copy', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updates),
+    });
+    const status = document.getElementById('save-status');
+    if (res.ok) {
+      current = (await res.json()).copy;
+      status.textContent = '✓ Saved';
+      status.style.color = '#3fb950';
+    } else {
+      status.textContent = '✗ Error';
+      status.style.color = '#f85149';
+    }
+    status.style.display = 'inline';
+    setTimeout(() => { status.style.display = 'none'; }, 3000);
+  }`)));
 
 // ── Legal pages ───────────────────────────────────────────────────────────────
 app.get('/privacy-policy', (_, res) => res.send(`<!DOCTYPE html>

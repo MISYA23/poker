@@ -87,7 +87,7 @@ function OpponentCard({ name, avatarId, country, elo, isBot }) {
 
 // Pre-match vs card with 3-2-1 countdown. Shown for exactly 3s (matching the
 // server's auto_start_delay_ms) so the hand deals right as we land on the table.
-function PreMatchCountdown({ opponent, playerInfo, myElo }) {
+function PreMatchCountdown({ opponent, playerInfo, myElo, copy }) {
   const [count, setCount] = useState(3);
   const scaleAnim = useRef(new Animated.Value(1)).current;
 
@@ -106,14 +106,14 @@ function PreMatchCountdown({ opponent, playerInfo, myElo }) {
 
   return (
     <Scrim onPress={() => {}}>
-      <Text style={ov.vsHeading}>Match Starting</Text>
+      <Text style={ov.vsHeading}>{copy?.preMatchHeading ?? 'Match Starting'}</Text>
       <View style={ov.vsRow}>
         <View style={ov.vsPlayer}>
           <AvatarBadge avatarId={playerInfo?.avatarId} size={74} />
           <Text style={ov.vsName} numberOfLines={1}>{playerInfo?.name || 'You'}</Text>
           <Text style={ov.vsElo}>{myElo ?? 1200}</Text>
         </View>
-        <Text style={ov.vsVs}>VS</Text>
+        <Text style={ov.vsVs}>{copy?.preMatchVs ?? 'VS'}</Text>
         <View style={ov.vsPlayer}>
           <AvatarBadge avatarId={opponent?.avatarId} country={opponent?.country} isBot={!!opponent?.isBot} size={74} />
           <Text style={ov.vsName} numberOfLines={1}>{opponent?.name || '…'}</Text>
@@ -121,7 +121,7 @@ function PreMatchCountdown({ opponent, playerInfo, myElo }) {
         </View>
       </View>
       <Animated.Text style={[ov.countdown, { transform: [{ scale: scaleAnim }] }]}>
-        {count > 0 ? count : 'GO!'}
+        {count > 0 ? count : (copy?.preMatchGo ?? 'GO!')}
       </Animated.Text>
     </Scrim>
   );
@@ -169,7 +169,7 @@ function Scrim({ onPress, children }) {
 export default function MatchFlowOverlays({
   searchOverlay, meantime, preMatch, playerInfo, myElo, incomingChallenges,
   onCancelSearch, onConfirmBot, onDismissMeantime,
-  onAcceptChallenge, onDeclineChallenge,
+  onAcceptChallenge, onDeclineChallenge, copy,
 }) {
   // Challenges the user tap-dismissed: hide the dialog, the challenge itself
   // stays pending (lobby rows keep an Accept affordance until it expires)
@@ -195,7 +195,7 @@ export default function MatchFlowOverlays({
 
       {/* Pre-match vs countdown */}
       {preMatch && !challenge && (
-        <PreMatchCountdown opponent={preMatch.opponent} playerInfo={playerInfo} myElo={myElo} />
+        <PreMatchCountdown opponent={preMatch.opponent} playerInfo={playerInfo} myElo={myElo} copy={copy} />
       )}
 
       {/* Searching… / Human found! */}
@@ -204,15 +204,15 @@ export default function MatchFlowOverlays({
           <Radar />
           {searchOverlay.status === 'found' ? (
             <>
-              <Text style={ov.title}>Human found!</Text>
+              <Text style={ov.title}>{copy?.foundTitle ?? 'Human found!'}</Text>
               <OpponentCard {...(searchOverlay.opponent || {})} />
             </>
           ) : (
             <>
-              <Text style={ov.title}>Searching…</Text>
-              <Text style={ov.sub}>Looking for a human to play</Text>
+              <Text style={ov.title}>{copy?.searchingTitle ?? 'Searching…'}</Text>
+              <Text style={ov.sub}>{copy?.searchingSub ?? 'Looking for a human to play'}</Text>
               <Pressable style={ov.ghostBtn} onPress={onCancelSearch}>
-                <Text style={ov.ghostBtnTxt}>Cancel</Text>
+                <Text style={ov.ghostBtnTxt}>{copy?.searchingCancelBtn ?? 'Cancel'}</Text>
               </Pressable>
             </>
           )}
@@ -223,14 +223,14 @@ export default function MatchFlowOverlays({
       {!preMatch && !searchOverlay && meantime && !challenge && (
         <Scrim onPress={() => {}}>
           <Radar />
-          <Text style={ov.title}>No humans yet…</Text>
-          <Text style={ov.sub}>Play a <Text style={ov.bold}>🤖 bot</Text> while we keep searching for a human?</Text>
+          <Text style={ov.title}>{copy?.botTitle ?? 'No humans yet…'}</Text>
+          <Text style={ov.sub}>{copy?.botSub ?? 'Play a 🤖 bot while we keep searching for a human?'}</Text>
           <View style={ov.actsRow}>
             <Pressable style={ov.declineBtn} onPress={onDismissMeantime}>
-              <Text style={ov.declineTxt}>Keep waiting</Text>
+              <Text style={ov.declineTxt}>{copy?.botKeepWaitingBtn ?? 'Keep waiting'}</Text>
             </Pressable>
             <Pressable style={[ov.cta, { flex: 1, marginTop: 0 }]} onPress={onConfirmBot}>
-              <Text style={ov.ctaTxt}>Play a bot →</Text>
+              <Text style={ov.ctaTxt}>{copy?.botPlayBtn ?? 'Play a bot →'}</Text>
             </Pressable>
           </View>
         </Scrim>
@@ -239,7 +239,7 @@ export default function MatchFlowOverlays({
       {/* Incoming challenge — countdown ring only for in-game (15s) challenges */}
       {challenge && (
         <Scrim onPress={() => dismissChallenge(challenge)}>
-          <View style={ov.badge}><Text style={ov.badgeTxt}>⚔️ CHALLENGE</Text></View>
+          <View style={ov.badge}><Text style={ov.badgeTxt}>{copy?.challengeBadge ?? '⚔️ CHALLENGE'}</Text></View>
           <View style={ov.oppRow}>
             {inGameChallenge ? (
               <CountdownAvatar key={challenge.fromId} avatarId={challenge.fromAvatarId}
@@ -252,13 +252,16 @@ export default function MatchFlowOverlays({
               <Text style={ov.oppMeta}>ELO <Text style={ov.oppElo}>{challenge.fromElo ?? 1200}</Text></Text>
             </View>
           </View>
-          <Text style={ov.sub}><Text style={ov.bold}>{challenge.fromName}</Text> wants to play you.</Text>
+          <Text style={ov.sub}>
+            <Text style={ov.bold}>{challenge.fromName}</Text>
+            {(copy?.challengeSub ?? ' {name} wants to play you.').replace('{name}', '').trimStart()}
+          </Text>
           <View style={ov.actsRow}>
             <Pressable style={ov.declineBtn} onPress={() => { onDeclineChallenge(challenge.fromId); }}>
-              <Text style={ov.declineTxt}>Decline</Text>
+              <Text style={ov.declineTxt}>{copy?.challengeDeclineBtn ?? 'Decline'}</Text>
             </Pressable>
             <Pressable style={[ov.cta, { flex: 1, marginTop: 0 }]} onPress={() => onAcceptChallenge(challenge.fromId)}>
-              <Text style={ov.ctaTxt}>Accept</Text>
+              <Text style={ov.ctaTxt}>{copy?.challengeAcceptBtn ?? 'Accept'}</Text>
             </Pressable>
           </View>
         </Scrim>

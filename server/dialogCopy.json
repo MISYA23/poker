@@ -1,0 +1,17 @@
+{
+  "searchingTitle": "Searching…",
+  "searchingSub": "Looking for a human to play",
+  "searchingCancelBtn": "Cancel",
+  "foundTitle": "Human found!",
+  "botTitle": "No humans yet…",
+  "botSub": "Play a 🤖 bot while we keep searching for a human?",
+  "botKeepWaitingBtn": "Keep waiting",
+  "botPlayBtn": "Play a bot →",
+  "preMatchHeading": "Match Starting",
+  "preMatchVs": "VS",
+  "preMatchGo": "GO!",
+  "challengeBadge": "⚔️ CHALLENGE",
+  "challengeSub": "{name} wants to play you.",
+  "challengeDeclineBtn": "Decline",
+  "challengeAcceptBtn": "Accept"
+}

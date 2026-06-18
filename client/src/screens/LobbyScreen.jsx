@@ -200,6 +200,9 @@ export default function LobbyScreen({ navigation }) {
               <Pressable style={s.menuItem} onPress={() => { setMenuOpen(false); navigationRef.navigate('Profile'); }}>
                 <Text style={s.menuItemTxt}>👤 Profile</Text>
               </Pressable>
+              <Pressable style={s.menuItem} onPress={() => { setMenuOpen(false); if (typeof window !== 'undefined') { const base = window.location.hostname === 'localhost' ? 'http://localhost:3843' : window.location.origin; window.open(base + '/admin/dialogs', '_blank'); } }}>
+                <Text style={s.menuItemTxt}>✏️ Dialog Copy</Text>
+              </Pressable>
               <Pressable style={[s.menuItem, { borderBottomWidth: 0 }]} onPress={() => { setMenuOpen(false); onLogout(); }}>
                 <Text style={s.menuItemTxt}>🚪 Log Out</Text>
               </Pressable>
