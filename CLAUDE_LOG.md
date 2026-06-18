@@ -142,3 +142,11 @@ and log [START] / [DONE] entries for every task. See global CLAUDE.md for protoc
 [04:23] [DONE] v1.20: return uncalled bet immediately when larger stack goes all-in (pot invariant fix) — PokerGame.js _returnUncalledBet() called before _collectBets()
 [04:26] [DONE] v1.21: sound icon syncs with profile save — listener pattern in music.js/sfx.js, SoundButton subscribes, handleSave reads server response
 [04:27 UTC] [START] v1.22: /admin/dialogs copy editor + dialogCopy.json + wire copy prop to MatchFlowOverlays
+[] [DONE] v1.25: removed 'One more for the road?' from rematch dialog — pushed to all-in
+[04:44 UTC] [DONE] v1.25: removed 'One more for the road?' from rematch dialog — pushed to all-in
+[04:45 UTC] [DONE] merged all-in → main, pushed (Railway deploy)
+[05:01 UTC] [START] feature/topnav-lives — new top nav (avatar + identity stack + banana life capsule) + lives mechanic (spend on loss, refill 24h)
+[05:06 UTC] [DONE] v1.26: top nav redesign + banana lives mechanic — feature/topnav-lives pushed, NOT merged
+[05:30 UTC] [DONE] wallet table for bananas — feature/topnav-lives pushed, NOT merged
+[05:44 UTC] [START] v1.27: music + game sound toggles in hamburger menu
+[05:45 UTC] [DONE] v1.27: music + game sounds toggles in hamburger menu — feature/topnav-lives pushed, NOT merged

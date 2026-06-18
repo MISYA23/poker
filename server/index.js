@@ -172,7 +172,7 @@ async function lookupCountry(ip) {
 // Always shown online in the lobby. Each has a fixed personality profile.
 
 const BOTS = {
-  bot_rickdeckard: { name: 'Rick Deckard', avatarId: 'cigar', country: null, isBot: true, profile: getProfile('tag') },
+  bot_rickdeckard: { name: 'Rick Deckard', avatarId: 'rickdeckard', country: null, isBot: true, profile: getProfile('tag') },
   bot_hal:         { name: 'HAL 9000',     avatarId: 'queen', country: null, isBot: true, profile: getProfile('nit') },
   bot_johnny5:     { name: 'Johnny 5',     avatarId: 'cigar', country: null, isBot: true, profile: getProfile('maniac') },
 };
@@ -540,6 +540,28 @@ function voidMatch(m) {
   console.log(`[match] voided ${m.id.slice(0, 8)} (no rating effect)`);
 }
 
+// Debit one banana from a player's wallet when a match begins.
+// Idempotent: if already 0, no change. Pushes lives-update to the socket.
+async function spendBanana(playerId, socketId) {
+  try {
+    const refillAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    const { rows } = await db.query(`
+      INSERT INTO wallet (player_id, bananas, banana_refill_at, updated_at)
+      VALUES ($1, 0, $2, NOW())
+      ON CONFLICT (player_id) DO UPDATE SET
+        bananas          = CASE WHEN wallet.bananas > 0 THEN 0 ELSE wallet.bananas END,
+        banana_refill_at = CASE WHEN wallet.bananas > 0 THEN EXCLUDED.banana_refill_at ELSE wallet.banana_refill_at END,
+        updated_at       = NOW()
+      RETURNING bananas, banana_refill_at
+    `, [playerId, refillAt]);
+    if (rows[0] && socketId) {
+      io.to(socketId).emit('lives-update', { lives: rows[0].bananas, lifeRefillAt: rows[0].banana_refill_at });
+    }
+  } catch (e) {
+    console.error('[banana] spend failed for', playerId, ':', e.message);
+  }
+}
+
 // Shared by queue pairing, challenge accepts, and human-arrived swaps.
 // p1/p2: { playerId, playerName, avatarId, socketId }
 function startHumanMatch(p1, p2) {
@@ -560,6 +582,9 @@ function startHumanMatch(p1, p2) {
 
   io.to(p1.socketId).emit('match-found', { matchId: m.id, opponent: opponentInfo(p2) });
   io.to(p2.socketId).emit('match-found', { matchId: m.id, opponent: opponentInfo(p1) });
+
+  spendBanana(p1.playerId, p1.socketId);
+  spendBanana(p2.playerId, p2.socketId);
 
   broadcastMatchState(m);
   broadcastMatchList();
@@ -794,6 +819,19 @@ async function persistMatchResult(m, winner, loser, wEloBefore, lEloBefore, wElo
     achiever.checkMatchAchievements(winnerId, m.isBotMatch)
       .catch(e => console.error('[achievement] match check failed:', e.message));
   }
+
+  // Banana was already debited at match start — restore it for the winner only
+  try {
+    await db.query(`
+      INSERT INTO wallet (player_id, bananas, banana_refill_at, updated_at)
+      VALUES ($1, 1, NULL, NOW())
+      ON CONFLICT (player_id) DO UPDATE SET bananas=1, banana_refill_at=NULL, updated_at=NOW()
+    `, [winner.playerId]);
+    const winnerSid = socketIdOf(winner.playerId);
+    if (winnerSid) io.to(winnerSid).emit('lives-update', { lives: 1, lifeRefillAt: null });
+  } catch (e) {
+    console.error('[banana] restore failed:', e.message);
+  }
 }
 
 // ── Identity & placement ──────────────────────────────────────────────────────
@@ -988,6 +1026,7 @@ io.on('connection', (socket) => {
     m.game.addPlayer(p2.playerId, p2.playerName, p2.avatarId);
 
     socket.emit('match-found', { matchId: m.id, opponent: { name: bot.name, avatarId: bot.avatarId, isBot: true, elo: eloCache[m.botId] || 1200 }, fallback });
+    spendBanana(sp.playerId, socket.id);
     broadcastMatchState(m);
     broadcastMatchList();
     // Other searchers re-ask this player in their new in-game (15s) context
@@ -1316,6 +1355,19 @@ app.put('/api/player/:playerId/profile', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+app.patch('/api/player/:playerId/sound', async (req, res) => {
+  try {
+    const { playerId } = req.params;
+    const { musicEnabled, sfxEnabled } = req.body;
+    const sets = [], vals = [playerId];
+    if (typeof musicEnabled === 'boolean') { sets.push(`music_enabled=$${vals.length + 1}`); vals.push(musicEnabled); }
+    if (typeof sfxEnabled === 'boolean') { sets.push(`sfx_enabled=$${vals.length + 1}`); vals.push(sfxEnabled); }
+    if (!sets.length) return res.status(400).json({ error: 'nothing to update' });
+    await db.query(`UPDATE players SET ${sets.join(', ')} WHERE id=$1`, vals);
+    res.json({ ok: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 app.get('/api/player/:playerId/profile', async (req, res) => {
   try {
     const { playerId } = req.params;
@@ -1368,6 +1420,41 @@ app.get('/api/player/:playerId/achievements', async (req, res) => {
     if (!achiever) return res.json({ achievements: [] });
     const list = await achiever.getPlayerAchievements(req.params.playerId);
     res.json({ achievements: list });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.get('/api/player/:playerId/lives', async (req, res) => {
+  try {
+    const { playerId } = req.params;
+    // Ensure row exists (new players get 1 banana by default)
+    await db.query(
+      `INSERT INTO wallet (player_id) VALUES ($1) ON CONFLICT DO NOTHING`,
+      [playerId]
+    );
+    // Auto-restore if refill time has passed
+    await db.query(
+      `UPDATE wallet SET bananas=1, banana_refill_at=NULL, updated_at=NOW()
+       WHERE player_id=$1 AND bananas=0 AND banana_refill_at IS NOT NULL AND banana_refill_at <= NOW()`,
+      [playerId]
+    );
+    const { rows } = await db.query(`SELECT bananas, banana_refill_at FROM wallet WHERE player_id=$1`, [playerId]);
+    const row = rows[0] || { bananas: 1, banana_refill_at: null };
+    res.json({ lives: row.bananas, lifeRefillAt: row.banana_refill_at });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.post('/api/player/:playerId/buy-life', async (req, res) => {
+  try {
+    const { playerId } = req.params;
+    await db.query(
+      `INSERT INTO wallet (player_id, bananas, banana_refill_at, updated_at)
+       VALUES ($1, 1, NULL, NOW())
+       ON CONFLICT (player_id) DO UPDATE SET bananas=1, banana_refill_at=NULL, updated_at=NOW()`,
+      [playerId]
+    );
+    const sid = socketIdOf(playerId);
+    if (sid) io.to(sid).emit('lives-update', { lives: 1, lifeRefillAt: null });
+    res.json({ lives: 1, lifeRefillAt: null });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -1746,6 +1833,7 @@ app.get('/api/admin/players', async (_, res) => {
       SELECT p.id, p.display_name, p.avatar_id, p.is_guest, p.country,
              p.created_at, p.last_seen_at,
              ps.elo, ps.matches_played, ps.matches_won,
+             COALESCE(ps.matches_played, 0) - COALESCE(ps.matches_won, 0) AS matches_lost,
              a.first_match_begun, a.first_match_complete,
              (
                SELECT COUNT(DISTINCT DATE(m.started_at AT TIME ZONE 'UTC'))
@@ -1956,6 +2044,7 @@ app.get('/admin/players', (_, res) => {
       { key: 'elo',          label: 'ELO',       fmt: v => v ?? '—',  cls: 'elo' },
       { key: 'matches_played', label: 'Played',  fmt: v => v ?? 0 },
       { key: 'matches_won',  label: 'Won',       fmt: v => v ?? 0 },
+      { key: 'matches_lost', label: 'Lost',      fmt: v => v ?? 0 },
       { key: 'active_player_days', label: 'Active Days', fmt: v => v ?? 0 },
       { key: 'created_at',   label: 'Joined',    fmt: v => v ? new Date(v).toLocaleString() : '—', cls: 'date' },
       { key: 'last_seen_at', label: 'Last seen', fmt: v => v ? new Date(v).toLocaleString() : '—', cls: 'date' },
@@ -3131,6 +3220,37 @@ async function ensureAcquisitionTable() {
   }
 }
 
+async function runLivesMigration() {
+  try {
+    // Keep old players columns so the column add is idempotent on prod
+    await db.query(`ALTER TABLE players ADD COLUMN IF NOT EXISTS lives INTEGER NOT NULL DEFAULT 1`);
+    await db.query(`ALTER TABLE players ADD COLUMN IF NOT EXISTS life_refill_at TIMESTAMPTZ`);
+
+    // Canonical store
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS wallet (
+        player_id        TEXT PRIMARY KEY REFERENCES players(id),
+        bananas          INTEGER NOT NULL DEFAULT 1,
+        banana_refill_at TIMESTAMPTZ,
+        created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+
+    // One-time data migration: copy any non-default banana state from players → wallet
+    await db.query(`
+      INSERT INTO wallet (player_id, bananas, banana_refill_at)
+      SELECT id, lives, life_refill_at FROM players
+      WHERE lives IS NOT NULL
+      ON CONFLICT (player_id) DO NOTHING
+    `);
+
+    console.log('[lives] migration ok');
+  } catch (e) {
+    console.error('[lives] migration failed:', e.message);
+  }
+}
+
 async function start() {
   await redis.connect().catch(e => console.error('[redis] connect failed:', e.message));
   await ensureFeedbackTable();
@@ -3142,6 +3262,7 @@ async function start() {
   await initBots();
   await runAchievementsMigration();
   await ensureAcquisitionTable();
+  await runLivesMigration();
   achiever = initAchievements(db, io, socketPlayers);
   server.listen(PORT, () => console.log(`Poker server on port ${PORT}`));
 }

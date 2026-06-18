@@ -23,6 +23,18 @@ const AVATAR_IMAGES = {
 
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 
+function BananaBanner() {
+  return (
+    <View style={ov.bananaBanner}>
+      <Text style={ov.bananaEmoji}>🍌</Text>
+      <View>
+        <Text style={ov.bananaTitle}>1 banana on the line</Text>
+        <Text style={ov.bananaSub}>Win to keep it · lose it's gone</Text>
+      </View>
+    </View>
+  );
+}
+
 // Rounded-square avatar with a big flag badge in the corner (design spec:
 // flags are the main at-a-glance identifier, keep them prominent)
 export function AvatarBadge({ avatarId, country, isBot = false, size = 74 }) {
@@ -120,6 +132,7 @@ function PreMatchCountdown({ opponent, playerInfo, myElo }) {
           <Text style={ov.vsElo}>{opponent?.elo ?? 1200}</Text>
         </View>
       </View>
+      <BananaBanner />
       <Animated.Text style={[ov.countdown, { transform: [{ scale: scaleAnim }] }]}>
         {count > 0 ? count : 'GO!'}
       </Animated.Text>
@@ -225,6 +238,7 @@ export default function MatchFlowOverlays({
           <Radar />
           <Text style={ov.title}>{copy?.botTitle ?? 'No humans yet…'}</Text>
           <Text style={ov.sub}>{copy?.botSub ?? 'Play a 🤖 bot while we keep searching for a human?'}</Text>
+          <BananaBanner />
           <View style={ov.actsRow}>
             <Pressable style={ov.declineBtn} onPress={onDismissMeantime}>
               <Text style={ov.declineTxt}>{copy?.botKeepWaitingBtn ?? 'Keep waiting'}</Text>
@@ -256,6 +270,7 @@ export default function MatchFlowOverlays({
             <Text style={ov.bold}>{challenge.fromName}</Text>
             {(copy?.challengeSub ?? ' {name} wants to play you.').replace('{name}', '').trimStart()}
           </Text>
+          <BananaBanner />
           <View style={ov.actsRow}>
             <Pressable style={ov.declineBtn} onPress={() => { onDeclineChallenge(challenge.fromId); }}>
               <Text style={ov.declineTxt}>{copy?.challengeDeclineBtn ?? 'Decline'}</Text>
@@ -336,4 +351,14 @@ const ov = StyleSheet.create({
     paddingVertical: 15, alignItems: 'center',
   },
   declineTxt: { color: '#8a98aa', fontSize: 15, fontWeight: '800' },
+
+  bananaBanner: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    alignSelf: 'stretch', marginBottom: 14,
+    backgroundColor: 'rgba(231,178,59,0.1)', borderWidth: 1, borderColor: 'rgba(231,178,59,0.3)',
+    borderRadius: 14, paddingVertical: 12, paddingHorizontal: 14,
+  },
+  bananaEmoji: { fontSize: 26 },
+  bananaTitle: { color: colors.white, fontSize: 14, fontWeight: '900' },
+  bananaSub: { color: '#8a98aa', fontSize: 12, fontWeight: '700', marginTop: 2 },
 });

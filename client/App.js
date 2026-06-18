@@ -67,6 +67,8 @@ function App() {
   const [outgoingChallenges, setOutgoingChallenges] = useState([]); // [{ toId, toName }]
   const [pendingFriendRequests, setPendingFriendRequests] = useState(0);
   const [uiConfig, setUiConfig] = useState({});
+  const [lives, setLives]               = useState(1);
+  const [lifeRefillAt, setLifeRefillAt] = useState(null);
 
   // Quick Match funnel overlays (see MatchFlowOverlays)
   const [searchOverlay, setSearchOverlay] = useState(null); // null | {status:'searching'} | {status:'found', opponent}
@@ -313,6 +315,7 @@ function App() {
       if (isFirst) track('FirstAchievementEarned');
       if (key === 'back_to_back') track('BackToBackWinningDays');
     },
+    'lives-update': ({ lives: l, lifeRefillAt: r }) => { setLives(l); setLifeRefillAt(r || null); },
     error:         ({ message })     => { clearBotOfferTimer(); setError(message); setSearch(null); setMeantime(false); },
     reset:         ()                => {
       clearBotOfferTimer();
@@ -355,6 +358,10 @@ function App() {
       .then(r => r.json())
       .then(d => { if (Array.isArray(d)) setPendingFriendRequests(d.filter(f => f.status === 'pending' && !f.isRequester).length); })
       .catch(() => {});
+    fetch(`${SERVER_URL}/api/player/${encodeURIComponent(playerId)}/lives`)
+      .then(r => r.json())
+      .then(d => { setLives(d.lives ?? 1); setLifeRefillAt(d.lifeRefillAt || null); })
+      .catch(() => {});
     navigationRef.navigate('Lobby');
   }, [emit]);
 
@@ -368,6 +375,8 @@ function App() {
     setMyId(null);
     setPlayerInfo(null);
     setMyElo(null);
+    setLives(1);
+    setLifeRefillAt(null);
     setInQueue(false);
     setMatchOver(null);
     setGameState(null);
@@ -382,6 +391,15 @@ function App() {
     // enter-lobby implies leaving any table — profile saves use a neutral event
     emit('refresh-profile', {});
   }, [emit]);
+
+  const fetchLives = useCallback(() => {
+    const pid = playerInfo?.playerId;
+    if (!pid) return;
+    fetch(`${SERVER_URL}/api/player/${encodeURIComponent(pid)}/lives`)
+      .then(r => r.json())
+      .then(d => { setLives(d.lives ?? 1); setLifeRefillAt(d.lifeRefillAt || null); })
+      .catch(() => {});
+  }, [playerInfo?.playerId]);
 
   const onFindMatch = useCallback((playerId) => {
     if (isObserverRef.current) {
@@ -505,9 +523,11 @@ function App() {
   const gameValue = useMemo(() => ({
     gameState, transition, myId, matchOver, handEventsRef,
     playerInfo, deckStyle, setDeckStyle, uiConfig, bustReveal, forfeitReveal,
+    lives, lifeRefillAt, fetchLives,
     emit, onLogin, onLogout, onUpdateProfile,
     onAction, onLeave, onRematch, onHandEndAnimDone, onBotActionRequest, navigationRef,
   }), [gameState, transition, myId, matchOver, playerInfo, deckStyle, uiConfig, bustReveal, forfeitReveal,
+       lives, lifeRefillAt, fetchLives,
        emit, onLogin, onLogout, onUpdateProfile, onAction, onLeave, onRematch, onHandEndAnimDone, onBotActionRequest]);
 
   // Lobby context — fast-churning lobby data + lobby-only actions
