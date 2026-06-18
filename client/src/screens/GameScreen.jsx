@@ -15,6 +15,7 @@ import PreviousHandDialog from '../components/PreviousHandDialog';
 import { colors } from '../theme';
 import { SERVER_URL } from '../config';
 import { playSfx } from '../audio/sfx';
+import SoundToggleRows from '../components/SoundToggleRows';
 
 const FEEDBACK_OPTIONS = [
   { value: 'bug',        label: '🐞 Bug' },
@@ -1051,6 +1052,7 @@ export default function GameScreen({ navigation }) {
           <SafeAreaView pointerEvents="box-none">
             <View style={s.menuPanelRow}>
               <Pressable style={s.menuPanel} onPress={() => {}}>
+                <SoundToggleRows playerId={playerInfo?.playerId} itemStyle={s.menuItem} />
                 <Pressable style={s.menuItem}
                   onPress={() => { setMenuOpen(false); navigationRef.navigate('Profile'); }}>
                   <Text style={s.menuItemTxt}>👤 Profile</Text>

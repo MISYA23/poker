@@ -9,7 +9,7 @@ import { track } from '../utils/analytics';
 import { flagEmoji } from '../utils/flag';
 import { continentOf, regionEmoji, GLOBAL_EMOJI } from '../utils/regions';
 import { AvatarBadge } from '../components/MatchFlowOverlays';
-import SoundButton from '../components/SoundButton';
+import SoundToggleRows from '../components/SoundToggleRows';
 import AchievementGallery from '../components/AchievementGallery';
 import { ACHIEVEMENTS, mergeAchievements } from '../data/achievements';
 
@@ -301,11 +301,7 @@ export default function LobbyScreen({ navigation }) {
         {menuOpen && (
           <Pressable style={s.menuOverlay} onPress={() => setMenuOpen(false)}>
             <View style={s.menuPanel}>
-              <View style={s.menuSoundRow}>
-                <Text style={s.menuItemTxt}>🔊 Sound</Text>
-                <SoundButton style={s.menuSoundBtn} />
-              </View>
-              <View style={s.menuDivider} />
+              <SoundToggleRows playerId={myPlayerId} itemStyle={s.menuItem} />
               <Pressable style={s.menuItem} onPress={() => { setMenuOpen(false); navigationRef.navigate('Profile'); }}>
                 <Text style={s.menuItemTxt}>👤 Profile</Text>
               </Pressable>
@@ -522,15 +518,6 @@ const s = StyleSheet.create({
     position: 'absolute', top: 72, right: 16, width: 200, backgroundColor: '#111',
     borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)', borderRadius: 14, overflow: 'hidden', elevation: 8,
   },
-  menuSoundRow: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 16, paddingVertical: 10,
-  },
-  menuSoundBtn: {
-    width: 36, height: 36, borderRadius: 10,
-    backgroundColor: 'rgba(255,255,255,0.08)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.16)',
-  },
-  menuDivider: { height: 1, backgroundColor: 'rgba(255,255,255,0.08)' },
   menuItem: { paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.08)' },
   menuItemTxt: { color: 'rgba(255,255,255,0.9)', fontSize: 14 },
 

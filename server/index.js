@@ -1355,6 +1355,19 @@ app.put('/api/player/:playerId/profile', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+app.patch('/api/player/:playerId/sound', async (req, res) => {
+  try {
+    const { playerId } = req.params;
+    const { musicEnabled, sfxEnabled } = req.body;
+    const sets = [], vals = [playerId];
+    if (typeof musicEnabled === 'boolean') { sets.push(`music_enabled=$${vals.length + 1}`); vals.push(musicEnabled); }
+    if (typeof sfxEnabled === 'boolean') { sets.push(`sfx_enabled=$${vals.length + 1}`); vals.push(sfxEnabled); }
+    if (!sets.length) return res.status(400).json({ error: 'nothing to update' });
+    await db.query(`UPDATE players SET ${sets.join(', ')} WHERE id=$1`, vals);
+    res.json({ ok: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 app.get('/api/player/:playerId/profile', async (req, res) => {
   try {
     const { playerId } = req.params;
