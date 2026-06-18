@@ -1746,7 +1746,13 @@ app.get('/api/admin/players', async (_, res) => {
       SELECT p.id, p.display_name, p.avatar_id, p.is_guest, p.country,
              p.created_at, p.last_seen_at,
              ps.elo, ps.matches_played, ps.matches_won,
-             a.first_match_begun, a.first_match_complete
+             a.first_match_begun, a.first_match_complete,
+             (
+               SELECT COUNT(DISTINCT DATE(m.started_at AT TIME ZONE 'UTC'))
+               FROM matches m
+               WHERE (m.player1_id = p.id OR m.player2_id = p.id)
+                 AND m.status = 'complete'
+             ) AS active_player_days
       FROM players p
       LEFT JOIN player_stats ps ON ps.player_id = p.id
       LEFT JOIN analytics     a  ON a.player_id  = p.id
@@ -1950,6 +1956,7 @@ app.get('/admin/players', (_, res) => {
       { key: 'elo',          label: 'ELO',       fmt: v => v ?? '—',  cls: 'elo' },
       { key: 'matches_played', label: 'Played',  fmt: v => v ?? 0 },
       { key: 'matches_won',  label: 'Won',       fmt: v => v ?? 0 },
+      { key: 'active_player_days', label: 'Active Days', fmt: v => v ?? 0 },
       { key: 'created_at',   label: 'Joined',    fmt: v => v ? new Date(v).toLocaleString() : '—', cls: 'date' },
       { key: 'last_seen_at', label: 'Last seen', fmt: v => v ? new Date(v).toLocaleString() : '—', cls: 'date' },
     ];
