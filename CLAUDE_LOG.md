@@ -159,3 +159,5 @@ and log [START] / [DONE] entries for every task. See global CLAUDE.md for protoc
 [14:02 UTC] [START] v1.48: void pre-match cancel (handCount===0) instead of forfeit — fixes ELO loss on cancel
 [14:03 UTC] [DONE] v1.48: pre-match cancel now voids match (handCount===0 check in enter-lobby) — no ELO or banana effect
 [14:05 UTC] [START] v1.49: hide Cancel in pre-match dialog for challenge matches
+[14:06 UTC] [DONE] v1.49: challenge pre-match dialog has no Cancel — fromChallenge flag on match-found, canCancel prop on PreMatchCountdown
+[14:08 UTC] [START] v1.50: observer post-match dialog fix

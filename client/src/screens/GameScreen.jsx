@@ -1277,6 +1277,37 @@ export default function GameScreen({ navigation }) {
         const myAvatarId = playerInfo?.avatarId ?? me?.avatarId;
         const oppAvatarId = opponent?.avatarId;
         const eloAmt = Math.abs(matchOver.eloChange ?? 0);
+
+        if (matchOver.observer) {
+          const winnerName = matchOver.winnerName || gameState?.players?.find(p => p.id === matchOver.winnerId)?.name || 'Player';
+          return (
+            <Animated.View style={[s.modalOverlay, { opacity: moScrim }]}>
+              <Animated.View style={[s.modal, { opacity: moCard, transform: [{ translateY: moSlide }] }]}>
+                <Animated.Text style={[s.moCrest, { opacity: moAvatar }]}>👁</Animated.Text>
+                <Animated.Text style={[s.moResult, s.moResultWin, { opacity: moTitle }]}>
+                  {winnerName} Won!
+                </Animated.Text>
+                <Animated.View style={[s.moDuelRow, { opacity: moAvatar }]}>
+                  {gameState?.players?.map(p => (
+                    <View key={p.id} style={s.moDuelPlayer}>
+                      <View>
+                        <Avatar size={60} avatarId={p.avatarId} />
+                        {p.id === matchOver.winnerId && <Text style={s.moCrown}>👑</Text>}
+                      </View>
+                      <Text style={s.moDuelName} numberOfLines={1}>{p.name}</Text>
+                    </View>
+                  ))}
+                </Animated.View>
+                <Animated.View style={{ opacity: moBtns, alignSelf: 'stretch', marginTop: 4 }}>
+                  <Pressable style={[s.modalBtn, s.modalBtnYes]} onPress={onLeave}>
+                    <Text style={s.modalBtnTxt}>Back to Lobby</Text>
+                  </Pressable>
+                </Animated.View>
+              </Animated.View>
+            </Animated.View>
+          );
+        }
+
         return (
           <Animated.View style={[s.modalOverlay, { opacity: moScrim }]}>
             <Animated.View style={[s.modal, { opacity: moCard, transform: [{ translateY: moSlide }] }]}>
