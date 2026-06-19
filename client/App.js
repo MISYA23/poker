@@ -80,7 +80,8 @@ function App() {
   const [forfeitReveal, setForfeitReveal] = useState(null);  // null | { loserId, loserChips, loserName } — forfeit countdown animation window
 
   const navigationRef = useNavigationContainerRef();
-  const matchIdRef    = useRef(null);
+  const matchIdRef          = useRef(null);
+  const firstMatchBegunRef  = useRef(null); // null = unknown, true/false from server analytics-status
   // Current player id, mirrored into a ref so the socket 'connect' handler
   // (bound once at mount) can re-announce identity on every reconnect.
   const playerIdRef   = useRef(null);
@@ -221,7 +222,10 @@ function App() {
       // Starting any match voids all challenges (server does the same)
       setIncomingChallenges([]);
       setOutgoingChallenges([]);
-      track('StartMatch');
+      if (firstMatchBegunRef.current === false) {
+        firstMatchBegunRef.current = true;
+        track('StartMatch');
+      }
       if (reconnect) {
         // Re-seated at a live match after disconnect — skip countdown, go straight in
         navigationRef.navigate('Game');
@@ -235,6 +239,7 @@ function App() {
       navigationRef.navigate('Game');
     },
     'match-list':  ({ matches, onlinePlayers: op }) => { setMatchList(matches || []); setOnlinePlayers(op || []); },
+    'analytics-status': ({ firstMatchBegun }) => { firstMatchBegunRef.current = firstMatchBegun; },
     'hand-events': (batch)           => { handEventsRef.current = batch; },
     'game-state':  (payload)         => {
       if (bustRevealRef.current || forfeitRevealRef.current) return;

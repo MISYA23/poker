@@ -927,6 +927,13 @@ io.on('connection', (socket) => {
     if (!playerId) return;
     await bindIdentity(socket, playerId);
     if (reclaimSeat(socket, playerId)) return;   // reconnected mid-match → back to the table
+    if (!isBot(playerId)) {
+      db.query('SELECT first_match_begun FROM analytics WHERE player_id = $1', [playerId])
+        .then(({ rows }) => {
+          socket.emit('analytics-status', { firstMatchBegun: rows.length > 0 && rows[0].first_match_begun });
+        })
+        .catch(() => {});
+    }
     broadcastMatchList();                          // free → repopulate their lobby view
     refreshBroadcasts();
   });
