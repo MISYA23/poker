@@ -265,13 +265,6 @@ class PokerGame {
     }
 
     this._advanceCurrentPlayer();
-
-    // After advancing, check if the new current player actually has a meaningful
-    // action. Edge case: SB goes all-in for exactly the BB amount (raisedThePrice=false),
-    // leaving BB "optioned" but with nothing to call. _noContestedAction catches this.
-    if (this._noContestedAction()) {
-      this._advancePhase();
-    }
   }
 
   _isRoundOver() {
