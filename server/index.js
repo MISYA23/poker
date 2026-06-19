@@ -200,6 +200,7 @@ function createMatch(p1, p2) {
     p1, p2,                  // { playerId, playerName, avatarId, socketId }
     observers: new Set(),    // socketIds watching
     rematchVotes: new Set(),
+    bananasSpent: new Set(), // playerIds who have been debited for this match
     ended: false,
     autoStartTimer: null, nextHandTimer: null,
     turnTimer: null, timerPlayerId: null, turnDeadline: null,
@@ -464,6 +465,7 @@ function scheduleReadyStart(m) {
   m.readySafetyTimer = setTimeout(async () => {
     m.readySafetyTimer = null;
     if (m.game.phase === 'waiting' && m.game.canStart()) {
+      spendBananasForMatch(m);
       await beginHand(m);
       broadcastMatchState(m, { type: 'MATCH_STARTING' });
     }
@@ -563,6 +565,18 @@ async function spendBanana(playerId, socketId) {
   }
 }
 
+// Spend bananas for all human players in a match, exactly once per match.
+// Called when the first hand actually begins (match-ready or safety timer).
+function spendBananasForMatch(m) {
+  const humanPlayers = m.isBotMatch ? [m.p1] : [m.p1, m.p2];
+  for (const p of humanPlayers) {
+    if (m.bananasSpent.has(p.playerId)) continue;
+    m.bananasSpent.add(p.playerId);
+    const sid = socketIdOf(p.playerId) || p.socketId;
+    spendBanana(p.playerId, sid);
+  }
+}
+
 // Shared by queue pairing, challenge accepts, and human-arrived swaps.
 // p1/p2: { playerId, playerName, avatarId, socketId }
 function startHumanMatch(p1, p2) {
@@ -583,9 +597,6 @@ function startHumanMatch(p1, p2) {
 
   io.to(p1.socketId).emit('match-found', { matchId: m.id, opponent: opponentInfo(p2) });
   io.to(p2.socketId).emit('match-found', { matchId: m.id, opponent: opponentInfo(p1) });
-
-  spendBanana(p1.playerId, p1.socketId);
-  spendBanana(p2.playerId, p2.socketId);
 
   broadcastMatchState(m);
   broadcastMatchList();
@@ -822,19 +833,21 @@ async function persistMatchResult(m, winner, loser, wEloBefore, lEloBefore, wElo
       .catch(e => console.error('[achievement] match check failed:', e.message));
   }
 
-  // Banana was already debited at match start — restore it for the winner only (capped at their max)
-  try {
-    const { rows: wr } = await db.query(`
-      UPDATE wallet SET
-        bananas    = LEAST(bananas + 1, max_bananas),
-        updated_at = NOW()
-      WHERE player_id = $1
-      RETURNING bananas, max_bananas
-    `, [winner.playerId]);
-    const winnerSid = socketIdOf(winner.playerId);
-    if (winnerSid && wr[0]) io.to(winnerSid).emit('lives-update', { lives: wr[0].bananas, maxLives: wr[0].max_bananas });
-  } catch (e) {
-    console.error('[banana] restore failed:', e.message);
+  // Restore the banana for the winner — only if it was actually debited (not a pre-match cancel forfeit)
+  if (m.bananasSpent && m.bananasSpent.has(winner.playerId)) {
+    try {
+      const { rows: wr } = await db.query(`
+        UPDATE wallet SET
+          bananas    = LEAST(bananas + 1, max_bananas),
+          updated_at = NOW()
+        WHERE player_id = $1
+        RETURNING bananas, max_bananas
+      `, [winner.playerId]);
+      const winnerSid = socketIdOf(winner.playerId);
+      if (winnerSid && wr[0]) io.to(winnerSid).emit('lives-update', { lives: wr[0].bananas, maxLives: wr[0].max_bananas });
+    } catch (e) {
+      console.error('[banana] restore failed:', e.message);
+    }
   }
 }
 
@@ -1037,7 +1050,6 @@ io.on('connection', (socket) => {
     m.game.addPlayer(p2.playerId, p2.playerName, p2.avatarId);
 
     socket.emit('match-found', { matchId: m.id, opponent: { name: bot.name, avatarId: bot.avatarId, isBot: true, elo: eloCache[m.botId] || 1200 }, fallback });
-    spendBanana(sp.playerId, socket.id);
     broadcastMatchState(m);
     broadcastMatchList();
     // Other searchers re-ask this player in their new in-game (15s) context
@@ -1070,6 +1082,7 @@ io.on('connection', (socket) => {
     if (!m || m.ended || m.game.phase !== 'waiting') return;
     if (m.readySafetyTimer) { clearTimeout(m.readySafetyTimer); m.readySafetyTimer = null; }
     if (m.game.canStart()) {
+      spendBananasForMatch(m);
       beginHand(m)
         .then(() => broadcastMatchState(m, { type: 'MATCH_STARTING' }))
         .catch(e => console.error('[match-ready] beginHand failed:', e.message));
