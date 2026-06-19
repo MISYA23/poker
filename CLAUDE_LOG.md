@@ -163,3 +163,5 @@ and log [START] / [DONE] entries for every task. See global CLAUDE.md for protoc
 [14:08 UTC] [START] v1.50: observer post-match dialog fix
 [14:09 UTC] [DONE] v1.50: observer post-match dialog — eyeball crest, winner name, both avatars, Back to Lobby only
 [14:56 UTC] [START] v1.51: all-in action prompt bug fix
+[14:56 UTC] [DONE] v1.51: all-in action prompt bug fix — client !me?.allIn guard + server _startBettingRound null safety
+[15:28 UTC] [START] v1.52: fix phantom BB option when SB goes all-in for exactly the BB amount
