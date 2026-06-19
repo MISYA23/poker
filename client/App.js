@@ -98,6 +98,9 @@ function App() {
   const releaseHandEndRef  = useRef(null); // set while locked; the client animation calls this to release
   const matchOverPendingRef = useRef(null); // queued match-over to apply when the hand-end animation finishes
   const [route, setRoute] = useState('Login');   // current screen (gates music start)
+  const [myConnected,       setMyConnected]       = useState(true);
+  const [opponentConnected, setOpponentConnected] = useState(true);
+  const wasDisconnectedRef = useRef(false); // true between disconnect and next connect
 
   // Capture ?ref= from the URL on first load (web only) and persist it so it
   // survives OAuth redirects. Sent to the server on first enter-lobby.
@@ -196,7 +199,19 @@ function App() {
     // we belong (lobby, or re-seated at a live match within its grace window).
     // Without it the server rejects our next action with "Not in lobby" and a
     // brief blip at the table lapses into a forfeit.
-    connect:           ()            => { if (playerIdRef.current) emit('session', { playerId: playerIdRef.current }); },
+    connect: () => {
+      if (wasDisconnectedRef.current) {
+        wasDisconnectedRef.current = false;
+        setMyConnected(true);
+      }
+      if (playerIdRef.current) emit('session', { playerId: playerIdRef.current });
+    },
+    disconnect: () => {
+      wasDisconnectedRef.current = true;
+      setMyConnected(false);
+    },
+    'opponent-disconnected': () => setOpponentConnected(false),
+    'opponent-connected':    () => setOpponentConnected(true),
     'in-queue':        ()            => { setInQueue(true); setError(null); },
     'queue-cancelled': ()            => { clearBotOfferTimer(); setInQueue(false); setSearch(null); setMeantime(false); },
     'match-found':     ({ matchId, opponent, fallback, reconnect }) => {
@@ -220,6 +235,7 @@ function App() {
       bustRevealRef.current = null;
       forfeitRevealRef.current = null;
       // Starting any match voids all challenges (server does the same)
+      setOpponentConnected(true);
       setIncomingChallenges([]);
       setOutgoingChallenges([]);
       if (firstMatchBegunRef.current === false) {
@@ -556,10 +572,12 @@ function App() {
     playerInfo, deckStyle, setDeckStyle, uiConfig, bustReveal, forfeitReveal,
     lives, maxLives, lifeRefillAt, fetchLives,
     myElo, opponentElo,
+    myConnected, opponentConnected,
     emit, onLogin, onLogout, onUpdateProfile,
     onAction, onLeave, onRematch, onHandEndAnimDone, onBotActionRequest, navigationRef,
   }), [gameState, transition, myId, matchOver, playerInfo, deckStyle, uiConfig, bustReveal, forfeitReveal,
        lives, maxLives, lifeRefillAt, fetchLives, myElo, opponentElo,
+       myConnected, opponentConnected,
        emit, onLogin, onLogout, onUpdateProfile, onAction, onLeave, onRematch, onHandEndAnimDone, onBotActionRequest]);
 
   // Lobby context — fast-churning lobby data + lobby-only actions

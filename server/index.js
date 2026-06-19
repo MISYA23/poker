@@ -911,6 +911,7 @@ function reclaimSeat(socket, playerId) {
     if (sp) sp.matchId = m.id;
     const other = matchPlayers(m).find(p => p.playerId !== playerId);
     io.to(socket.id).emit('match-found', { matchId: m.id, opponent: { name: other?.playerName || '' }, reconnect: true });
+    if (other) io.to(other.socketId).emit('opponent-connected');
     broadcastMatchState(m);
     broadcastMatchList();
     console.log(`[match] ${sp?.playerName || playerId} re-seated at ${m.id.slice(0, 8)} after reconnect`);
@@ -1250,6 +1251,8 @@ io.on('connection', (socket) => {
       if (seat) {
         seat.vacant = true;
         console.log(`[match] ${sp.playerName} vacated seat at ${m.id.slice(0, 8)}`);
+        const other = matchPlayers(m).find(p => p.playerId !== sp.playerId);
+        if (other) io.to(other.socketId).emit('opponent-disconnected');
         broadcastMatchState(m);
       }
     }

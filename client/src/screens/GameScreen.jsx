@@ -332,7 +332,7 @@ function useActionFlash(player, lastAction) {
 }
 
 // ─── PlayerPod — avatar + nameplate only (hole cards are now separate) ────────
-function PlayerPod({ player, isMe, observing, turnDeadline, turnDurationMs, lastAction, win, splitPot, allInLocked, displayChips, deckStyle, avatarOverride, sittingOut }) {
+function PlayerPod({ player, isMe, observing, turnDeadline, turnDurationMs, lastAction, win, splitPot, allInLocked, displayChips, deckStyle, avatarOverride, sittingOut, connected = true }) {
   const actionLbl = useActionFlash(player, lastAction);
   const present   = !!player;
   const isActive  = present && !!player.isCurrentPlayer;
@@ -387,6 +387,7 @@ function PlayerPod({ player, isMe, observing, turnDeadline, turnDurationMs, last
         {present && player.isSmallBlind && <Text style={[s.badge, s.badgeSB]}>SB</Text>}
         {present && player.isBigBlind   && <Text style={[s.badge, s.badgeBB]}>BB</Text>}
         {sittingOut && <Text style={[s.badge, s.badgeSitOut]}>Sitting Out</Text>}
+        <View style={[s.connDot, connected ? s.connDotOn : s.connDotOff]} />
       </View>
       <View style={s.chipsRow}>
         <Text style={[s.podChips,
@@ -415,6 +416,7 @@ export default function GameScreen({ navigation }) {
     matchOver, navigationRef, deckStyle, playerInfo, onHandEndAnimDone,
     handEventsRef, bustReveal = null, forfeitReveal = null, uiConfig = {},
     onBotActionRequest, lives = 3, maxLives = 3, myElo = null, opponentElo = null,
+    myConnected = true, opponentConnected = true,
   } = useContext(GameContext);
 
   useEffect(() => {
@@ -426,6 +428,23 @@ export default function GameScreen({ navigation }) {
   const [menuOpen,      setMenuOpen]      = useState(false);
   const [leaveWarning,  setLeaveWarning]  = useState(false);
   const [replayOpen,    setReplayOpen]    = useState(false);
+
+  // Connection toast: null | 'lost' | 'restored'
+  const [connToast, setConnToast] = useState(null);
+  const connToastTimerRef  = useRef(null);
+  const prevConnectedRef   = useRef(true);
+  useEffect(() => {
+    const prev = prevConnectedRef.current;
+    prevConnectedRef.current = myConnected;
+    if (!myConnected) {
+      if (connToastTimerRef.current) { clearTimeout(connToastTimerRef.current); connToastTimerRef.current = null; }
+      setConnToast('lost');
+    } else if (!prev) {
+      setConnToast('restored');
+      connToastTimerRef.current = setTimeout(() => { setConnToast(null); connToastTimerRef.current = null; }, 2500);
+    }
+    return () => { if (connToastTimerRef.current) clearTimeout(connToastTimerRef.current); };
+  }, [myConnected]);
 
   // Real blind schedule from the server (so the "blinds go up" notice is accurate)
   const [blindFmt, setBlindFmt] = useState(BLIND_SCHEDULE);
@@ -924,7 +943,7 @@ export default function GameScreen({ navigation }) {
               splitPot={isSplit}
               allInLocked={oppAllInLocked}
               displayChips={forfeitReveal?.loserId === opponent?.id && forfeitChipDisplay != null ? forfeitChipDisplay : (opponent ? chipsFor(opponent) : 0)}
-              deckStyle={deckStyle} sittingOut={oppSittingOut} />
+              deckStyle={deckStyle} sittingOut={oppSittingOut} connected={opponentConnected} />
           </View>
 
           {/* Opponent hole cards — spec §5 opponentCards: (0.50, 0.305) */}
@@ -1042,7 +1061,7 @@ export default function GameScreen({ navigation }) {
               allInLocked={myAllInLocked}
               displayChips={forfeitReveal?.loserId === me?.id && forfeitChipDisplay != null ? forfeitChipDisplay : (me ? chipsFor(me) : 0)}
               avatarOverride={observing ? undefined : playerInfo?.avatarId}
-              deckStyle={deckStyle} sittingOut={meSittingOut} />
+              deckStyle={deckStyle} sittingOut={meSittingOut} connected={myConnected} />
           </View>
 
         </View>
@@ -1104,6 +1123,15 @@ export default function GameScreen({ navigation }) {
         {observing && (
           <View style={s.observingBanner} pointerEvents="none">
             <Text style={s.observingTxt}>👁 Spectating</Text>
+          </View>
+        )}
+
+        {/* Connection toast */}
+        {connToast && (
+          <View style={[s.connToast, connToast === 'restored' && s.connToastRestored]} pointerEvents="none">
+            <Text style={s.connToastTxt}>
+              {connToast === 'lost' ? 'Connection lost — reconnecting…' : 'Reconnected'}
+            </Text>
           </View>
         )}
 
@@ -1545,6 +1573,12 @@ const s = StyleSheet.create({
   observingTxt:    { color: 'rgba(255,255,255,0.7)', fontSize: 12, fontWeight: '700' },
   disconnectBanner: { marginHorizontal: 12, marginTop: 4, backgroundColor: 'rgba(251,146,60,0.18)', borderWidth: 1, borderColor: 'rgba(251,146,60,0.5)', borderRadius: 8, paddingVertical: 6, paddingHorizontal: 12 },
   disconnectTxt:    { color: '#fb923c', fontSize: 12, fontWeight: '700', textAlign: 'center' },
+  connDot:         { width: 7, height: 7, borderRadius: 4, marginLeft: 'auto' },
+  connDotOn:       { backgroundColor: '#4ade80' },
+  connDotOff:      { backgroundColor: '#f87171' },
+  connToast:        { alignSelf: 'center', marginTop: 4, backgroundColor: 'rgba(239,68,68,0.85)', borderRadius: 8, paddingVertical: 5, paddingHorizontal: 14 },
+  connToastRestored:{ backgroundColor: 'rgba(74,222,128,0.85)' },
+  connToastTxt:     { color: '#fff', fontSize: 12, fontWeight: '700' },
   bottomChrome: { paddingHorizontal: 12, paddingBottom: 10, paddingTop: 6, alignItems: 'center' },
 
   // Disconnect banner

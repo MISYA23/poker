@@ -153,3 +153,5 @@ and log [START] / [DONE] entries for every task. See global CLAUDE.md for protoc
 [22:03 UTC] [DONE] fix: FirstMatchBegun analytics cache race — feature/topnav-lives merged to main (v1.44)
 [13:28 UTC] [DONE] v1.45: StartMatch client-side event fires only once per player lifetime — server emits analytics-status on session handshake (queries analytics.first_match_begun), client gates track(StartMatch) on firstMatchBegunRef
 [START] fix: defer spendBanana to match-begin (match-ready / safety timer) — banana and ELO no longer debited during pre-match cancel window
+[13:57 UTC] [DONE] v1.46: defer spendBanana to match-begin — banana no longer debited during pre-match cancel window; bananasSpent Set on match obj, spendBananasForMatch() called in match-ready handler + safety timer; persistMatchResult guards restore behind bananasSpent check; covers bot/human/rematch
+[13:58 UTC] [START] v1.47: connection dots + reconnect toast (features 1+3 from persistence UX plan)
