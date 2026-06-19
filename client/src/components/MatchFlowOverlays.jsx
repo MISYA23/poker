@@ -137,7 +137,7 @@ function OpponentCard({ name, avatarId, country, elo, isBot }) {
 }
 
 // Pre-match vs card with animated ELO drop + ring countdown. Tap anywhere to skip.
-function PreMatchCountdown({ opponent, playerInfo, myElo, onReady, onLeave }) {
+function PreMatchCountdown({ opponent, playerInfo, myElo, onReady, onLeave, canCancel = true }) {
   const DURATION = 10000;
   const RING_R = 36;
   const RING_C = 2 * Math.PI * RING_R;
@@ -218,10 +218,12 @@ function PreMatchCountdown({ opponent, playerInfo, myElo, onReady, onLeave }) {
           <Text style={ov.ctaTxt}>LET'S PLAY</Text>
         </Pressable>
 
-        <Pressable style={[ov.ghostBtn, { marginTop: 8, alignSelf: 'stretch' }]}
-          onPress={() => { onLeave?.(); setSkipped(true); }}>
-          <Text style={[ov.ghostBtnTxt, { fontSize: 13 }]}>Cancel</Text>
-        </Pressable>
+        {canCancel && (
+          <Pressable style={[ov.ghostBtn, { marginTop: 8, alignSelf: 'stretch' }]}
+            onPress={() => { onLeave?.(); setSkipped(true); }}>
+            <Text style={[ov.ghostBtnTxt, { fontSize: 13 }]}>Cancel</Text>
+          </Pressable>
+        )}
       </Pressable>
     </Pressable>
   );
@@ -296,7 +298,7 @@ export default function MatchFlowOverlays({
       {/* Pre-match vs countdown */}
       {preMatch && !challenge && (
         <PreMatchCountdown opponent={preMatch.opponent} playerInfo={playerInfo} myElo={myElo}
-          onReady={onPreMatchReady} onLeave={onPreMatchCancel} />
+          onReady={onPreMatchReady} onLeave={onPreMatchCancel} canCancel={!preMatch.fromChallenge} />
       )}
 
       {/* Searching… / Human found! */}

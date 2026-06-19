@@ -157,3 +157,5 @@ and log [START] / [DONE] entries for every task. See global CLAUDE.md for protoc
 [13:58 UTC] [START] v1.47: connection dots + reconnect toast (features 1+3 from persistence UX plan)
 [14:00 UTC] [DONE] v1.47: connection dots + reconnect toast — server emits opponent-disconnected/connected, client dots in nameplates + toast banner
 [14:02 UTC] [START] v1.48: void pre-match cancel (handCount===0) instead of forfeit — fixes ELO loss on cancel
+[14:03 UTC] [DONE] v1.48: pre-match cancel now voids match (handCount===0 check in enter-lobby) — no ELO or banana effect
+[14:05 UTC] [START] v1.49: hide Cancel in pre-match dialog for challenge matches

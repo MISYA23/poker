@@ -214,7 +214,7 @@ function App() {
     'opponent-connected':    () => setOpponentConnected(true),
     'in-queue':        ()            => { setInQueue(true); setError(null); },
     'queue-cancelled': ()            => { clearBotOfferTimer(); setInQueue(false); setSearch(null); setMeantime(false); },
-    'match-found':     ({ matchId, opponent, fallback, reconnect }) => {
+    'match-found':     ({ matchId, opponent, fallback, reconnect, fromChallenge }) => {
       clearBotOfferTimer();
       if (isObserverRef.current) {
         emit('unobserve', { matchId: matchIdRef.current });
@@ -250,7 +250,7 @@ function App() {
       // Navigate to the table immediately so the countdown appears over the felt.
       // foundDelayRef blocks game-state from re-navigating until the client confirms ready.
       setOpponentElo(opponent?.elo ?? null);
-      setPreMatch({ opponent });
+      setPreMatch({ opponent, fromChallenge: !!fromChallenge });
       foundDelayRef.current = true;
       navigationRef.navigate('Game');
     },

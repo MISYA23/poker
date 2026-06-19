@@ -579,7 +579,7 @@ function spendBananasForMatch(m) {
 
 // Shared by queue pairing, challenge accepts, and human-arrived swaps.
 // p1/p2: { playerId, playerName, avatarId, socketId }
-function startHumanMatch(p1, p2) {
+function startHumanMatch(p1, p2, { fromChallenge = false } = {}) {
   clearSearchFor(p1.playerId);
   clearSearchFor(p2.playerId);
   voidChallengesFor(p1.playerId);
@@ -595,8 +595,8 @@ function startHumanMatch(p1, p2) {
   m.game.addPlayer(p1.playerId, p1.playerName, p1.avatarId);
   m.game.addPlayer(p2.playerId, p2.playerName, p2.avatarId);
 
-  io.to(p1.socketId).emit('match-found', { matchId: m.id, opponent: opponentInfo(p2) });
-  io.to(p2.socketId).emit('match-found', { matchId: m.id, opponent: opponentInfo(p1) });
+  io.to(p1.socketId).emit('match-found', { matchId: m.id, opponent: opponentInfo(p2), fromChallenge });
+  io.to(p2.socketId).emit('match-found', { matchId: m.id, opponent: opponentInfo(p1), fromChallenge });
 
   broadcastMatchState(m);
   broadcastMatchList();
@@ -1340,6 +1340,7 @@ io.on('connection', (socket) => {
     startHumanMatch(
       { playerId: fromSp.playerId, playerName: fromSp.playerName, avatarId: fromSp.avatarId, socketId: ch.fromSocketId },
       { playerId: sp.playerId,     playerName: sp.playerName,     avatarId: sp.avatarId,     socketId: socket.id },
+      { fromChallenge: true },
     );
   });
 
