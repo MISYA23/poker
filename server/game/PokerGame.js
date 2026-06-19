@@ -374,6 +374,9 @@ class PokerGame {
       }
       checkIdx = (checkIdx + 1) % this.players.length;
     }
+    // No eligible player found (all all-in) — should have been caught by
+    // _advancePhase, but clear the stale pointer as a safety net.
+    this.currentPlayerId = null;
   }
 
   _calculateSidePots() {

@@ -618,7 +618,7 @@ export default function GameScreen({ navigation }) {
   // Gate actions on all streets: buttons/bot are suppressed until every community
   // card on the current street has finished animating in. Preflop is always open
   // because targetCC === 0 → 0 >= 0 is true.
-  const isMyTurn    = !observing && gameState?.currentPlayerId === myId && !['waiting','showdown'].includes(gameState?.phase) && revealedCC >= targetCC;
+  const isMyTurn    = !observing && gameState?.currentPlayerId === myId && !me?.allIn && !['waiting','showdown'].includes(gameState?.phase) && revealedCC >= targetCC;
   const myDeadline  = (observing ? me?.isCurrentPlayer : isMyTurn) ? gameState?.turnDeadline : null;
   const oppDeadline = opponent?.isCurrentPlayer ? gameState?.turnDeadline : null;
   useEffect(() => {

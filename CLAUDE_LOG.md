@@ -161,3 +161,5 @@ and log [START] / [DONE] entries for every task. See global CLAUDE.md for protoc
 [14:05 UTC] [START] v1.49: hide Cancel in pre-match dialog for challenge matches
 [14:06 UTC] [DONE] v1.49: challenge pre-match dialog has no Cancel — fromChallenge flag on match-found, canCancel prop on PreMatchCountdown
 [14:08 UTC] [START] v1.50: observer post-match dialog fix
+[14:09 UTC] [DONE] v1.50: observer post-match dialog — eyeball crest, winner name, both avatars, Back to Lobby only
+[14:56 UTC] [START] v1.51: all-in action prompt bug fix
