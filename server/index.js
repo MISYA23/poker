@@ -976,8 +976,13 @@ io.on('connection', (socket) => {
       const sp = socketPlayers.get(socket.id);
       const live = liveMatchOf(sp);
       if (live) {
-        const otherId = matchPlayers(live).find(p => p.playerId !== playerId)?.playerId;
-        endMatch(live, otherId ?? playerId);
+        if (live.handCount === 0) {
+          // Pre-match cancel — no hand was ever played, void with no ELO/banana effect
+          voidMatch(live);
+        } else {
+          const otherId = matchPlayers(live).find(p => p.playerId !== playerId)?.playerId;
+          endMatch(live, otherId ?? playerId);
+        }
       }
       sp.matchId = null;
       // Arriving at the lobby always means "not searching anymore"
