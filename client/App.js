@@ -247,6 +247,7 @@ function App() {
         startSessionFiredRef.current = true;
         track('StartSession');
       }
+      if (!reconnect) track('StartAnyMatch');
       if (reconnect) {
         // Re-seated at a live match after disconnect — skip countdown, go straight in
         navigationRef.navigate('Game');
