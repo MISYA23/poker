@@ -82,6 +82,7 @@ function App() {
   const navigationRef = useNavigationContainerRef();
   const matchIdRef          = useRef(null);
   const firstMatchBegunRef  = useRef(null); // null = unknown, true/false from server analytics-status
+  const startSessionFiredRef = useRef(false); // resets each app session; fires StartSession on first match-found
   // Current player id, mirrored into a ref so the socket 'connect' handler
   // (bound once at mount) can re-announce identity on every reconnect.
   const playerIdRef   = useRef(null);
@@ -241,6 +242,10 @@ function App() {
       if (firstMatchBegunRef.current === false) {
         firstMatchBegunRef.current = true;
         track('StartMatch');
+      }
+      if (!startSessionFiredRef.current) {
+        startSessionFiredRef.current = true;
+        track('StartSession');
       }
       if (reconnect) {
         // Re-seated at a live match after disconnect — skip countdown, go straight in
