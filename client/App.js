@@ -103,13 +103,17 @@ function App() {
   const [opponentConnected, setOpponentConnected] = useState(true);
   const wasDisconnectedRef = useRef(false); // true between disconnect and next connect
 
-  // Capture ?ref= from the URL on first load (web only) and persist it so it
-  // survives OAuth redirects. Sent to the server on first enter-lobby.
+  // Capture ?ref= / UTM params on first load (web only). Skips OAuth callbacks
+  // (state+code) and never overwrites an already-stored value (first visit wins).
   useEffect(() => {
     if (Platform.OS !== 'web') return;
     const params = new URLSearchParams(window.location.search);
-    const ref = params.get('ref') || window.location.search.slice(1) || null;
-    if (ref) AsyncStorage.setItem('referrer', ref).catch(() => {});
+    if (params.has('state') && params.has('code')) return;
+    const ref = params.get('ref') || (window.location.search.length > 1 ? window.location.search.slice(1) : null);
+    if (!ref) return;
+    AsyncStorage.getItem('referrer').then(existing => {
+      if (!existing) AsyncStorage.setItem('referrer', ref).catch(() => {});
+    }).catch(() => {});
   }, []);
 
   const setSearch = useCallback((v) => { searchRef.current = v; setSearchOverlay(v); }, []);

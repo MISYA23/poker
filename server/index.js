@@ -1007,6 +1007,14 @@ io.on('connection', (socket) => {
     broadcastMatchList();
   });
 
+  const ANALYTICS_BOOL_FIELDS = new Set(['clicked_achievements', 'clicked_nav_menu']);
+  socket.on('analytics-mark', ({ field } = {}) => {
+    if (!ANALYTICS_BOOL_FIELDS.has(field)) return;
+    const sp = socketPlayers.get(socket.id);
+    if (!sp?.playerId) return;
+    markAnalytics(sp.playerId, field).catch(() => {});
+  });
+
   socket.on('find-match', ({ playerId }) => {
     if (!playerId) { socket.emit('error', { message: 'Missing player ID.' }); return; }
 
@@ -1473,8 +1481,7 @@ app.get('/api/player/:playerId/achievements', async (req, res) => {
 app.get('/api/player/:playerId/lives', async (req, res) => {
   try {
     const { playerId } = req.params;
-    // Randomly give new players 1 or 3 starting bananas; log to acquisition
-    const startBananas = Math.random() < 0.5 ? 1 : 3;
+    const startBananas = 1;
     const { rows: inserted } = await db.query(
       `INSERT INTO wallet (player_id, bananas, max_bananas, updated_at)
        VALUES ($1, $2, $2, NOW())
@@ -1484,9 +1491,9 @@ app.get('/api/player/:playerId/lives', async (req, res) => {
     );
     if (inserted.length > 0) {
       db.query(
-        `INSERT INTO acquisition (uuid, first_visit_referrer, starting_lives)
-         VALUES ($1, 'organic', $2)
-         ON CONFLICT (uuid) DO UPDATE SET starting_lives = EXCLUDED.starting_lives`,
+        `INSERT INTO acquisition (uuid, first_visit_referrer, starting_lives, starting_bananas)
+         VALUES ($1, 'organic', $2, $2)
+         ON CONFLICT (uuid) DO UPDATE SET starting_lives = EXCLUDED.starting_lives, starting_bananas = EXCLUDED.starting_bananas`,
         [playerId, startBananas]
       ).catch(e => console.error('[acquisition] starting_lives log failed:', e.message));
     }
@@ -1508,6 +1515,11 @@ app.post('/api/player/:playerId/buy-life', async (req, res) => {
       [playerId]
     );
     const row = rows[0] || { bananas: 1, max_bananas: 3 };
+    db.query(
+      `INSERT INTO analytics (player_id, purchased_bananas) VALUES ($1, 1)
+       ON CONFLICT (player_id) DO UPDATE SET purchased_bananas = analytics.purchased_bananas + 1`,
+      [playerId]
+    ).catch(() => {});
     const sid = socketIdOf(playerId);
     if (sid) io.to(sid).emit('lives-update', { lives: row.bananas, maxLives: row.max_bananas });
     res.json({ lives: row.bananas, maxLives: row.max_bananas });
@@ -3309,8 +3321,13 @@ async function runLivesMigration() {
 
     // Add starting_lives to acquisition table
     await db.query(`ALTER TABLE acquisition ADD COLUMN IF NOT EXISTS starting_lives INTEGER`);
-    // Mark existing acquisition rows as having 3 starting lives
     await db.query(`UPDATE acquisition SET starting_lives=3 WHERE starting_lives IS NULL`);
+    await db.query(`ALTER TABLE acquisition ADD COLUMN IF NOT EXISTS starting_bananas INTEGER`);
+
+    // Analytics: new columns
+    await db.query(`ALTER TABLE analytics ADD COLUMN IF NOT EXISTS purchased_bananas INTEGER NOT NULL DEFAULT 0`);
+    await db.query(`ALTER TABLE analytics ADD COLUMN IF NOT EXISTS clicked_achievements BOOLEAN NOT NULL DEFAULT false`);
+    await db.query(`ALTER TABLE analytics ADD COLUMN IF NOT EXISTS clicked_nav_menu BOOLEAN NOT NULL DEFAULT false`);
 
     console.log('[lives] migration ok');
   } catch (e) {

@@ -3,7 +3,7 @@ import { View, Text, Pressable, Modal, ScrollView, StyleSheet } from 'react-nati
 import { colors } from '../theme';
 import { track } from '../utils/analytics';
 
-export default function AchievementGallery({ achievements }) {
+export default function AchievementGallery({ achievements, onOpen }) {
   const [selected, setSelected] = useState(null);
   const trackedOpen = useRef(false);
   const earnedCount = achievements.filter(a => a.earned).length;
@@ -11,6 +11,7 @@ export default function AchievementGallery({ achievements }) {
   const onTile = (a) => {
     if (!trackedOpen.current) {
       track('AchievementGalleryOpened');
+      onOpen?.();
       trackedOpen.current = true;
     }
     setSelected(a);

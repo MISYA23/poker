@@ -310,7 +310,10 @@ export default function LobbyScreen({ navigation }) {
           myRank={myGlobalRank}
           lives={lives}
           onBanana={() => setLifeSheetOpen(true)}
-          onMenu={() => setMenuOpen(o => !o)}
+          onMenu={() => setMenuOpen(o => {
+            if (!o) emit('analytics-mark', { field: 'clicked_nav_menu' });
+            return !o;
+          })}
           onEloTap={() => scrollRef.current?.scrollTo({ y: lbCardY, animated: true })}
         />
 
@@ -383,7 +386,7 @@ export default function LobbyScreen({ navigation }) {
             </Pressable>
 
             {/* Achievements */}
-            <AchievementGallery achievements={achievements} />
+            <AchievementGallery achievements={achievements} onOpen={() => emit('analytics-mark', { field: 'clicked_achievements' })} />
 
             {/* Looking to play */}
             <View style={s.sec}>
