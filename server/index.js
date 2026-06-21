@@ -1891,6 +1891,7 @@ app.get('/api/admin/players', async (_, res) => {
              ps.elo, ps.matches_played, ps.matches_won,
              COALESCE(ps.matches_played, 0) - COALESCE(ps.matches_won, 0) AS matches_lost,
              a.first_match_begun, a.first_match_complete,
+             w.bananas,
              (
                SELECT COUNT(DISTINCT DATE(m.started_at AT TIME ZONE 'UTC'))
                FROM matches m
@@ -1900,6 +1901,7 @@ app.get('/api/admin/players', async (_, res) => {
       FROM players p
       LEFT JOIN player_stats ps ON ps.player_id = p.id
       LEFT JOIN analytics     a  ON a.player_id  = p.id
+      LEFT JOIN wallet        w  ON w.player_id  = p.id
       ORDER BY p.created_at DESC
     `);
     res.json(rows);
@@ -2099,6 +2101,7 @@ app.get('/admin/players', (_, res) => {
       { key: 'is_guest',     label: 'Type',      fmt: v => v ? 'guest' : 'registered', cls: 'guest' },
       { key: 'elo',          label: 'ELO',       fmt: v => v ?? '—',  cls: 'elo' },
       { key: 'matches_played', label: 'Played',  fmt: v => v ?? 0 },
+      { key: 'bananas',      label: '🍌',        fmt: v => v ?? '—' },
       { key: 'matches_won',  label: 'Won',       fmt: v => v ?? 0 },
       { key: 'matches_lost', label: 'Lost',      fmt: v => v ?? 0 },
       { key: 'active_player_days', label: 'Active Days', fmt: v => v ?? 0 },
