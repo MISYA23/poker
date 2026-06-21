@@ -12,6 +12,7 @@ import { GameContext } from '../context/GameContext';
 import { colors } from '../theme';
 import { SERVER_URL, VERSION_DISPLAY } from '../config';
 import { getUser, setUser, getOrCreatePlayerId } from '../utils/user';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import ScreenBackground from '../components/ScreenBackground';
 
 WebBrowser.maybeCompleteAuthSession();
@@ -62,9 +63,10 @@ export default function AdLandingScreen() {
       headers: { Authorization: `Bearer ${accessToken}` },
     }).then(r => r.json());
 
+    const referrer = await AsyncStorage.getItem('referrer').catch(() => null);
     const serverRes = await fetch(`${SERVER_URL}/auth/google`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ token: accessToken }),
+      body: JSON.stringify({ token: accessToken, referrer: referrer || undefined }),
     }).then(r => r.json()).catch(() => null);
 
     const playerId   = serverRes?.playerId || `g_${profile.id}`;
@@ -133,10 +135,11 @@ export default function AdLandingScreen() {
     const trimmed = name.trim();
     if (!trimmed) return;
     const playerId = await getOrCreatePlayerId();
+    const referrer = await AsyncStorage.getItem('referrer').catch(() => null);
     await fetch(`${SERVER_URL}/api/player/guest`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ playerId, name: trimmed }),
+      body: JSON.stringify({ playerId, name: trimmed, referrer: referrer || undefined }),
     });
     trackAdEvent('Lead', { content_name: 'guest_join' });
     await setUser({ name: trimmed, playerId });

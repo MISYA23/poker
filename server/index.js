@@ -1806,7 +1806,7 @@ app.delete('/api/friends/:requesterId/:addresseeId', async (req, res) => {
 // Guest registration — upsert into players
 app.post('/api/player/guest', async (req, res) => {
   try {
-    const { playerId, name, avatarId } = req.body;
+    const { playerId, name, avatarId, referrer } = req.body;
     if (!playerId) return res.status(400).json({ error: 'Missing playerId' });
     await db.query(
       `INSERT INTO players (id, display_name, avatar_id, is_guest)
@@ -1815,6 +1815,12 @@ app.post('/api/player/guest', async (req, res) => {
          display_name=$2, avatar_id=$3, last_seen_at=NOW()`,
       [playerId, (name || 'Guest').trim().slice(0, 20), avatarId || 'captain']
     );
+    if (referrer && typeof referrer === 'string') {
+      db.query(
+        `INSERT INTO acquisition (uuid, first_visit_referrer) VALUES ($1, $2) ON CONFLICT (uuid) DO NOTHING`,
+        [playerId, referrer]
+      ).catch(() => {});
+    }
     res.json({ ok: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -1822,7 +1828,7 @@ app.post('/api/player/guest', async (req, res) => {
 // Google auth — upsert into players with is_guest=false
 app.post('/auth/google', async (req, res) => {
   try {
-    const { token } = req.body;
+    const { token, referrer } = req.body;
     const r = await fetch('https://www.googleapis.com/userinfo/v2/me', {
       headers: { Authorization: `Bearer ${token}` },
     });
@@ -1838,6 +1844,12 @@ app.post('/auth/google', async (req, res) => {
        RETURNING avatar_id`,
       [playerId, name.trim().slice(0, 20)]
     );
+    if (referrer && typeof referrer === 'string') {
+      db.query(
+        `INSERT INTO acquisition (uuid, first_visit_referrer) VALUES ($1, $2) ON CONFLICT (uuid) DO NOTHING`,
+        [playerId, referrer]
+      ).catch(() => {});
+    }
     const avatarId = rows[0].avatar_id;
     res.json({ playerId, name, avatarId });
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -1846,7 +1858,7 @@ app.post('/auth/google', async (req, res) => {
 // Facebook auth — upsert into players with is_guest=false
 app.post('/auth/facebook', async (req, res) => {
   try {
-    const { token } = req.body;
+    const { token, referrer } = req.body;
     const r = await fetch(`https://graph.facebook.com/me?fields=id,name,email&access_token=${token}`);
     const profile = await r.json();
     if (profile.error) return res.status(401).json({ error: profile.error.message });
@@ -1862,6 +1874,12 @@ app.post('/auth/facebook', async (req, res) => {
        RETURNING avatar_id`,
       [playerId, name]
     );
+    if (referrer && typeof referrer === 'string') {
+      db.query(
+        `INSERT INTO acquisition (uuid, first_visit_referrer) VALUES ($1, $2) ON CONFLICT (uuid) DO NOTHING`,
+        [playerId, referrer]
+      ).catch(() => {});
+    }
     res.json({ playerId, name, email: profile.email || null, avatarId: rows[0].avatar_id });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
