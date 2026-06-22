@@ -67,7 +67,6 @@ function App() {
   const [incomingChallenges, setIncomingChallenges] = useState([]); // [{ fromId, fromName, fromAvatarId }]
   const [outgoingChallenges, setOutgoingChallenges] = useState([]); // [{ toId, toName }]
   const [pendingFriendRequests, setPendingFriendRequests] = useState(0);
-  const [uiConfig, setUiConfig] = useState({});
   const [lives, setLives]               = useState(3);
   const [maxLives, setMaxLives]         = useState(3);
   const [lifeRefillAt, setLifeRefillAt] = useState(null); // kept for socket compat, always null now
@@ -145,13 +144,6 @@ function App() {
   // Observers only navigate to Game on that first state — later broadcasts must
   // not yank them back if they've navigated away (Profile, Lobby).
   const pendingObserveRef = useRef(false);
-
-  useEffect(() => {
-    fetch(`${SERVER_URL}/api/config/ui`)
-      .then(r => r.json())
-      .then(setUiConfig)
-      .catch(() => {});
-  }, []);
 
   // Keep the player id available to the mount-bound socket handlers below.
   useEffect(() => { playerIdRef.current = playerInfo?.playerId ?? null; }, [playerInfo]);
@@ -562,7 +554,16 @@ function App() {
   // chip flight) has fully finished, releasing the buffered next-hand state.
   const onHandEndAnimDone = useCallback(() => {
     releaseHandEndRef.current?.();
-  }, []);
+    // Hand-end animation is done → tell the server it can deal the next hand now,
+    // ahead of its force-deal clamp (see docs/protocol-fsm.md §3). Idempotent server-side.
+    emit('hand-end-ready', {});
+  }, [emit]);
+
+  // Actor is synced and ready to act → ask the server to start our turn clock now,
+  // ahead of its settle clamp (see docs/protocol-fsm.md §7). Idempotent server-side.
+  const onActionReady = useCallback(() => {
+    emit('action-ready', {});
+  }, [emit]);
 
   const onRematch = useCallback((vote) => {
     emit('rematch-vote', { vote });
@@ -579,16 +580,16 @@ function App() {
   // lobby broadcasts (match-list, challenges) don't re-render mid-game screens.
   const gameValue = useMemo(() => ({
     gameState, transition, myId, matchOver, handEventsRef,
-    playerInfo, deckStyle, setDeckStyle, uiConfig, bustReveal, forfeitReveal,
+    playerInfo, deckStyle, setDeckStyle, bustReveal, forfeitReveal,
     lives, maxLives, lifeRefillAt, fetchLives,
     myElo, opponentElo,
     myConnected, opponentConnected,
     emit, onLogin, onLogout, onUpdateProfile,
-    onAction, onLeave, onRematch, onHandEndAnimDone, onBotActionRequest, navigationRef,
-  }), [gameState, transition, myId, matchOver, playerInfo, deckStyle, uiConfig, bustReveal, forfeitReveal,
+    onAction, onLeave, onRematch, onHandEndAnimDone, onBotActionRequest, onActionReady, navigationRef,
+  }), [gameState, transition, myId, matchOver, playerInfo, deckStyle, bustReveal, forfeitReveal,
        lives, maxLives, lifeRefillAt, fetchLives, myElo, opponentElo,
        myConnected, opponentConnected,
-       emit, onLogin, onLogout, onUpdateProfile, onAction, onLeave, onRematch, onHandEndAnimDone, onBotActionRequest]);
+       emit, onLogin, onLogout, onUpdateProfile, onAction, onLeave, onRematch, onHandEndAnimDone, onBotActionRequest, onActionReady]);
 
   // Lobby context — fast-churning lobby data + lobby-only actions
   const lobbyValue = useMemo(() => ({

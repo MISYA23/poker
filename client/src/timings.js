@@ -17,8 +17,6 @@ export const FOLD_REVEAL_PAUSE       =   500; // pause after fold before chip fl
 export const SHOWDOWN_REVEAL_PAUSE   =  1000; // pause after cards shown before chip flight
 export const CHIP_FLIGHT_MS          =  1000; // chip flight duration (winDone fires here)
 export const HAND_END_MAX_MS         = 12000; // safety cap: release next-hand state if the hand-end animation never signals done
-export const DEAL_LOCK_MS            =  1800; // bot-match only: blocks bot actions during deal animation + 1s buffer
-export const STREET_DEAL_MAX_MS      =  6000; // bot-match only: safety cap on the street-deal (flop/turn/river) reveal lock
 
 // Match end
 export const BUST_REVEAL_MS          =  3000; // match ending — cards + winner badge shown before modal

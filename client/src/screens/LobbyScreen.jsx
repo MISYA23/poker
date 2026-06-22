@@ -4,7 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { GameContext } from '../context/GameContext';
 import { LobbyContext } from '../context/LobbyContext';
 import { colors } from '../theme';
-import { VERSION_DISPLAY, SERVER_URL } from '../config';
+import { VERSION_DISPLAY, SERVER_URL, IS_DEV_SERVER } from '../config';
 import { track } from '../utils/analytics';
 import { flagEmoji } from '../utils/flag';
 import { continentOf, regionEmoji, GLOBAL_EMOJI } from '../utils/regions';
@@ -117,7 +117,7 @@ function TopBar({ playerInfo, myElo, myRank, lives, onBanana, onMenu, onEloTap }
       <View style={{ flex: 1 }} />
       <LifeCapsule lives={lives} onPress={onBanana} />
       <Pressable style={tb.menuBtn} onPress={onMenu}>
-        <Text style={tb.menuTxt}>☰</Text>
+        <Text style={[tb.menuTxt, IS_DEV_SERVER && { color: '#ff3b30' }]}>☰</Text>
       </Pressable>
     </View>
   );

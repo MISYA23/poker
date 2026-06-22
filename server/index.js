@@ -32,9 +32,6 @@ let validAvatars = ['captain', 'queen'];
 // Populated from game_config table on startup — never mutate directly
 let cfg = {};
 
-// Populated from ui_config table on startup — client fetches once per session
-let uiCfg = {};
-
 // Populated from match_format table on startup — { handsPerLevel, levels: [{sb,bb}] }
 let fmt = DEFAULT_FORMAT;
 
@@ -202,9 +199,9 @@ function createMatch(p1, p2) {
     rematchVotes: new Set(),
     bananasSpent: new Set(), // playerIds who have been debited for this match
     ended: false,
-    autoStartTimer: null, nextHandTimer: null,
-    turnTimer: null, timerPlayerId: null, turnDeadline: null,
-    botTimer: null, isBotMatch: false, botId: null,
+    nextHandTimer: null, awaitingDeal: false,
+    turnTimer: null, settleTimer: null, timerPlayerId: null, turnDeadline: null,
+    isBotMatch: false, botId: null,
     seq: 0,
     handCount: 0, handEventSeq: 0, currentHandUuid: null,
     maxPlayers: 2, name: `match:${id.slice(0, 8)}`, emoji: '♠',
@@ -219,27 +216,52 @@ function matchPlayers(m) {
 
 
 function resetRoom(m) {
-  clearTimeout(m.autoStartTimer);
   clearTimeout(m.nextHandTimer);
   clearTimeout(m.turnTimer);
-  clearTimeout(m.botTimer);
-  m.autoStartTimer = m.nextHandTimer = m.turnTimer = m.botTimer = null;
+  clearTimeout(m.settleTimer);
+  m.nextHandTimer = m.turnTimer = m.settleTimer = null;
+  m.awaitingDeal = false;
   m.timerPlayerId = null;
   m.turnDeadline = null;
   m.rematchVotes = new Set();
   m.game = new PokerGame(m.id, { startingChips: cfg.starting_chips, smallBlind: fmt.levels[0].sb, bigBlind: fmt.levels[0].bb });
 }
 
-// ── Turn timer ────────────────────────────────────────────────────────────────
+// ── Turn timer (ack-gated, see docs/protocol-fsm.md §7) ─────────────────────────
 
+// Safety ceiling: the turn clock starts no later than this after a decision point is
+// reached, even if the actor's client never sends `action-ready`. Sized to cover the
+// worst-case client settle (all-in runout reveal + deal animation) so an honest client
+// is never forfeited mid-animation. The normal path is the ack, which fires far sooner.
+const TURN_SETTLE_CLAMP_MS = 10000;
+
+// Called from broadcastMatchState on every push. On a NEW decision point it arms the
+// settle clamp but does NOT start the clock — the clock starts on the actor's
+// `action-ready` ack (startTurnClock) or when the clamp elapses, whichever is first.
 function startTurnTimer(m) {
   if (m.isBotMatch) return; // no clock in bot matches — human can pause indefinitely
   const pid = m.game.currentPlayerId;
-  if (pid === m.timerPlayerId) return;
-  if (m.turnTimer) { clearTimeout(m.turnTimer); m.turnTimer = null; }
+  if (pid === m.timerPlayerId) return;            // same decision point, already armed
+  if (m.turnTimer)   { clearTimeout(m.turnTimer);   m.turnTimer   = null; }
+  if (m.settleTimer) { clearTimeout(m.settleTimer); m.settleTimer = null; }
   m.timerPlayerId = pid;
-  m.turnDeadline  = null;
+  m.turnDeadline  = null;                          // clock not started yet
   if (!pid || m.game.phase === 'waiting' || m.game.phase === 'showdown') return;
+
+  m.settleTimer = setTimeout(() => {
+    m.settleTimer = null;
+    startTurnClock(m, pid);
+  }, TURN_SETTLE_CLAMP_MS);
+}
+
+// Start the actual N-second forfeit clock for pid's decision point and re-broadcast so
+// both clients see the now-live deadline. Idempotent per decision point — the ack and
+// the clamp can race, and a stale call after the turn moved on is ignored.
+function startTurnClock(m, pid) {
+  if (m.isBotMatch || m.ended) return;
+  if (m.game.currentPlayerId !== pid) return;      // decision point already moved on
+  if (m.turnDeadline) return;                       // clock already started
+  if (m.settleTimer) { clearTimeout(m.settleTimer); m.settleTimer = null; }
 
   m.turnDeadline = Date.now() + cfg.turn_seconds * 1000;
   m.turnTimer = setTimeout(() => {
@@ -250,6 +272,8 @@ function startTurnTimer(m) {
     const opponent = matchPlayers(m).find(p => p.playerId !== pid);
     endMatch(m, opponent?.playerId ?? pid);
   }, cfg.turn_seconds * 1000);
+
+  broadcastMatchState(m); // re-push so clients pick up the started deadline (pid unchanged → no re-arm)
 }
 
 // ── Bot play ──────────────────────────────────────────────────────────────────
@@ -287,7 +311,7 @@ function executeBotAction(m) {
       .catch(e => console.error('[bot] logAction:', e.message));
     emitHandEvents(m, rows);
     broadcastMatchState(m, buildActionTransition(m.game, m.botId, d.action, d.amount, preBoardLen));
-    if (m.game.phase === 'showdown') scheduleNextHand(m, cfg.inter_hand_delay_ms);
+    if (m.game.phase === 'showdown') enterInterHand(m);
   } catch (err) {
     console.error('[bot] action failed:', err.message);
   }
@@ -330,6 +354,19 @@ function emitHandEvents(m, rows) {
   for (const sid of m.observers) io.to(sid).emit('hand-events', payload);
 }
 
+// Server game-FSM lifecycle phase (see docs/protocol-fsm.md §3). Distinct from
+// m.game.phase, which is the betting STREET (waiting/pre-flop/.../showdown). Derived
+// — not yet authoritative state — so this stays non-breaking until Phase 2b makes
+// INTER_HAND a real state. Stamped on every snapshot as `lifecycle`.
+function lifecycleOf(m) {
+  if (m.ended || m.game.gameOver) return 'MATCH_OVER';
+  switch (m.game.phase) {
+    case 'showdown': return 'SHOWDOWN';
+    case 'waiting':  return 'INTER_HAND';   // pre-first-hand or between hands
+    default:         return m.game.currentPlayerId ? 'WAITING_FOR_ACTION' : 'STREET_COMPLETE';
+  }
+}
+
 function broadcastMatchState(m, transition = null) {
   m.seq = (m.seq || 0) + 1;
   startTurnTimer(m);
@@ -340,7 +377,7 @@ function broadcastMatchState(m, transition = null) {
     const atTable = m.game.players.some(pl => pl.id === p.playerId);
     const state   = atTable ? m.game.getStateFor(p.playerId) : m.game.getStateFor(null);
     io.to(p.socketId).emit('game-state', {
-      seq: m.seq, transition,
+      seq: m.seq, lifecycle: lifecycleOf(m), transition,
       ...state, atTable,
       matchId: m.id,
       gameOver: m.game.gameOver || false,
@@ -355,7 +392,7 @@ function broadcastMatchState(m, transition = null) {
   // Observers see face-down cards; no transition (they join mid-stream)
   for (const sid of m.observers) {
     io.to(sid).emit('game-state', {
-      seq: m.seq,
+      seq: m.seq, lifecycle: lifecycleOf(m),
       ...m.game.getStateFor(null),
       atTable: false, observing: true,
       matchId: m.id, turnDeadline: m.turnDeadline,
@@ -472,34 +509,48 @@ function scheduleReadyStart(m) {
   }, READY_SAFETY_MS);
 }
 
-function scheduleNextHand(m, delay = 5000) {
+// ── INTER_HAND state (see docs/protocol-fsm.md §3) ──────────────────────────────
+// After a hand resolves the match enters INTER_HAND. The next hand deals on the
+// client's `hand-end-ready` ack — or, until the client sends that (Phase 4), when
+// the force-deal clamp elapses. Clamp defaults to inter_hand_delay_ms, so with no
+// ack the behaviour is identical to the old scheduleNextHand 5s delay.
+function enterInterHand(m, clampMs = cfg.inter_hand_delay_ms) {
   if (m.nextHandTimer) clearTimeout(m.nextHandTimer);
-  m.nextHandTimer = setTimeout(async () => {
-    m.nextHandTimer = null;
-    // flushHandToDb captures currentHandUuid synchronously before its first await — safe to clear immediately after
-    flushHandToDb(m, m.game, achiever?.checkHandAchievement).catch(e => console.error('[hand] flush:', e.message));
-    m.currentHandUuid = null;
-    m.handEventSeq    = 0;
+  m.awaitingDeal  = true;
+  m.nextHandTimer = setTimeout(() => exitInterHand(m), clampMs);
+}
 
-    const withChips = m.game.players.filter(p => p.isActive && p.chips > 0);
-    const active    = m.game.players.filter(p => p.isActive);
+// INTER_HAND exit: flush the finished hand, then either deal the next one or end the
+// match (the named INTER_HAND → MATCH_OVER edge). Runs at most once per hand boundary
+// — the ack and the clamp can race, so the awaitingDeal guard makes it idempotent.
+async function exitInterHand(m) {
+  if (!m.awaitingDeal || m.ended) return;
+  m.awaitingDeal = false;
+  if (m.nextHandTimer) { clearTimeout(m.nextHandTimer); m.nextHandTimer = null; }
 
-    if (active.length >= 2 && withChips.length === 1) {
-      // One player is bust — match over. Skip broadcastMatchState so the client
-      // stays in showdown (preserving the pot-flight animation) until match-over fires.
-      const winnerId = withChips[0].id;
-      m.game.phase   = 'waiting';
-      checkAndFireComplete(m);
-      await endMatch(m, winnerId, true);
-      return;
-    }
-    if (withChips.length >= 2 && m.game.canStart()) {
-      try { await beginHand(m); } catch { m.game.phase = 'waiting'; }
-    } else {
-      m.game.phase = 'waiting';
-    }
-    broadcastMatchState(m);
-  }, delay);
+  // flushHandToDb captures currentHandUuid synchronously before its first await — safe to clear immediately after
+  flushHandToDb(m, m.game, achiever?.checkHandAchievement).catch(e => console.error('[hand] flush:', e.message));
+  m.currentHandUuid = null;
+  m.handEventSeq    = 0;
+
+  const withChips = m.game.players.filter(p => p.isActive && p.chips > 0);
+  const active    = m.game.players.filter(p => p.isActive);
+
+  if (active.length >= 2 && withChips.length === 1) {
+    // INTER_HAND → MATCH_OVER: one player is bust. Skip broadcastMatchState so the
+    // client stays in showdown (preserving the pot-flight animation) until match-over fires.
+    const winnerId = withChips[0].id;
+    m.game.phase   = 'waiting';
+    checkAndFireComplete(m);
+    await endMatch(m, winnerId, true);
+    return;
+  }
+  if (withChips.length >= 2 && m.game.canStart()) {
+    try { await beginHand(m); } catch { m.game.phase = 'waiting'; }
+  } else {
+    m.game.phase = 'waiting';
+  }
+  broadcastMatchState(m);
 }
 
 // ── Quick Match funnel ────────────────────────────────────────────────────────
@@ -527,10 +578,10 @@ function spOf(playerId) {
 function voidMatch(m) {
   if (m.ended) return;
   m.ended = true;
-  clearTimeout(m.autoStartTimer); clearTimeout(m.nextHandTimer);
-  clearTimeout(m.turnTimer);      clearTimeout(m.botTimer);
+  clearTimeout(m.nextHandTimer);
+  clearTimeout(m.turnTimer);      clearTimeout(m.settleTimer);
   clearTimeout(m.cleanupTimer);
-  m.autoStartTimer = m.nextHandTimer = m.turnTimer = m.botTimer = null;
+  m.nextHandTimer = m.turnTimer = m.settleTimer = null;
   m.timerPlayerId = null;
   m.turnDeadline  = null;
   matches.delete(m.id);
@@ -716,11 +767,11 @@ async function endMatch(m, winnerId, bust = false) {
   m.ended = true;
   // Kill every pending timer — a leftover nextHandTimer would deal a zombie
   // hand on this ended match and keep spamming game-state at the players
-  clearTimeout(m.autoStartTimer);    m.autoStartTimer    = null;
   clearTimeout(m.readySafetyTimer);  m.readySafetyTimer  = null;
   clearTimeout(m.nextHandTimer);  m.nextHandTimer  = null;
+  m.awaitingDeal = false;
   clearTimeout(m.turnTimer);      m.turnTimer      = null;
-  clearTimeout(m.botTimer);       m.botTimer       = null;
+  clearTimeout(m.settleTimer);    m.settleTimer    = null;
   m.timerPlayerId = null;
   m.turnDeadline  = null;
   m.game.gameOver = true; // every end path counts as game over, not just busts
@@ -1111,6 +1162,7 @@ io.on('connection', (socket) => {
     m.observers.add(socket.id);
     // Send current state immediately
     io.to(socket.id).emit('game-state', {
+      seq: m.seq, lifecycle: lifecycleOf(m),
       ...m.game.getStateFor(null),
       atTable: false, observing: true,
       matchId: m.id, turnDeadline: m.turnDeadline,
@@ -1137,7 +1189,7 @@ io.on('connection', (socket) => {
       emitHandEvents(m, rows);
       broadcastMatchState(m, buildActionTransition(m.game, sp.playerId, action, amount, preBoardLen));
       checkAndFireBegun(m, sp.playerId);
-      if (m.game.phase === 'showdown') scheduleNextHand(m, cfg.inter_hand_delay_ms);
+      if (m.game.phase === 'showdown') enterInterHand(m);
     } catch (err) {
       socket.emit('error', { message: err.message });
     }
@@ -1147,6 +1199,22 @@ io.on('connection', (socket) => {
     const m = matchId ? matches.get(matchId) : null;
     if (!m) return;
     executeBotAction(m);
+  });
+
+  // Client finished its hand-end animation → exit INTER_HAND and deal the next hand
+  // early, ahead of the force-deal clamp (see docs/protocol-fsm.md §3, §8).
+  socket.on('hand-end-ready', () => {
+    const sp = socketPlayers.get(socket.id);
+    const m  = liveMatchOf(sp);
+    if (m) exitInterHand(m);
+  });
+
+  // Actor's client is SYNCED at its decision point (cards/board dealt, animations
+  // drained) → start its turn clock now, ahead of the settle clamp (§7, §8).
+  socket.on('action-ready', () => {
+    const sp = socketPlayers.get(socket.id);
+    const m  = liveMatchOf(sp);
+    if (m && sp && m.game.currentPlayerId === sp.playerId) startTurnClock(m, sp.playerId);
   });
 
   socket.on('rematch-vote', ({ vote }) => {
@@ -1886,9 +1954,9 @@ app.post('/auth/facebook', async (req, res) => {
 
 function doReset() {
   for (const m of matches.values()) {
-    clearTimeout(m.autoStartTimer);
     clearTimeout(m.nextHandTimer);
     clearTimeout(m.turnTimer);
+    clearTimeout(m.settleTimer);
   }
   matches.clear();
   socketPlayers.clear();
@@ -2541,10 +2609,6 @@ app.get('/admin', (_, res) => res.send(ADMIN_SHELL('Admin', `
         <div style="font-size:1rem;font-weight:700;margin-bottom:4px">🏁 Match Format</div>
         <div style="font-size:0.82rem;color:#8b949e">Blind escalation schedule — hands per level, blind levels</div>
       </a>
-      <a href="/admin/ui-config" style="display:block;background:#161b22;border:1px solid #30363d;border-radius:10px;padding:20px 24px;text-decoration:none;color:#e6edf3">
-        <div style="font-size:1rem;font-weight:700;margin-bottom:4px">🎨 UI Config</div>
-        <div style="font-size:0.82rem;color:#8b949e">Animation timings, deal speed, reveal delays</div>
-      </a>
       <a href="/admin/music" style="display:block;background:#161b22;border:1px solid #30363d;border-radius:10px;padding:20px 24px;text-decoration:none;color:#e6edf3">
         <div style="font-size:1rem;font-weight:700;margin-bottom:4px">♪ Music</div>
         <div style="font-size:0.82rem;color:#8b949e">Enable/disable each track per interface — menu vs in-game</div>
@@ -2664,34 +2728,7 @@ app.get('/admin/match-format', (_, res) => res.send(ADMIN_SHELL('Match Format', 
     }
   }`)));
 
-app.get('/admin/ui-config', (_, res) => res.send(ADMIN_SHELL('UI Config', `
-  <h1>♠ UI Config</h1>
-  <div class="nav"><a href="/admin">← Admin</a></div>
-  ${ADMIN_AUTH_BLOCK}
-  <div id="main" style="max-width:680px">
-    <table><thead><tr><th>Key</th><th>Value</th><th>Description</th><th></th></tr></thead>
-    <tbody id="cfg-body"></tbody></table>
-    <div class="reload"><button onclick="load()">↺ Reload</button></div>
-  </div>`, `
-  async function onLogin() { load(); }
-  async function load() {
-    const rows = await fetch('/api/admin/ui-config').then(r => r.json());
-    const tbody = document.getElementById('cfg-body');
-    tbody.innerHTML = '';
-    for (const row of rows) {
-      const tr = document.createElement('tr');
-      tr.innerHTML = \`<td class="key">\${row.key}</td><td class="val"><input type="number" id="val-\${row.key}" value="\${row.value}" /></td><td class="desc">\${row.description||''}</td><td class="action"><button id="btn-\${row.key}" onclick="save('\${row.key}')">Save</button></td>\`;
-      tbody.appendChild(tr);
-    }
-  }
-  async function save(key) {
-    const btn = document.getElementById('btn-'+key);
-    const res = await fetch('/admin/ui-config/'+key, { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({value:Number(document.getElementById('val-'+key).value)}) });
-    btn.textContent = res.ok ? '✓ Saved' : 'Error';
-    if (res.ok) { btn.classList.add('saved'); setTimeout(()=>{btn.textContent='Save';btn.classList.remove('saved');},2000); }
-  }`)));
-
-// ── Game / UI config routes (must be before catch-all) ───────────────────────
+// ── Game config routes (must be before catch-all) ────────────────────────────
 
 app.get('/admin/config', async (_, res) => {
   try {
@@ -2732,27 +2769,6 @@ app.put('/admin/match-format', async (req, res) => {
     await db.query('UPDATE match_format SET value=$1 WHERE key=$2', [serializeLevels(clean), 'blind_levels']);
     fmt = { handsPerLevel: per, levels: clean };
     res.json({ ok: true, ...fmt });
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-app.get('/api/config/ui', (_, res) => res.json(uiCfg));
-
-app.get('/api/admin/ui-config', async (_, res) => {
-  try {
-    const { rows } = await db.query('SELECT key, value, description FROM ui_config ORDER BY key');
-    res.json(rows);
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-app.put('/admin/ui-config/:key', async (req, res) => {
-  try {
-    const { key } = req.params;
-    const { value } = req.body;
-    if (value === undefined || isNaN(Number(value))) return res.status(400).json({ error: 'numeric value required' });
-    const { rowCount } = await db.query('UPDATE ui_config SET value=$1 WHERE key=$2', [Number(value), key]);
-    if (!rowCount) return res.status(404).json({ error: 'unknown ui_config key' });
-    uiCfg[key] = Number(value);
-    res.json({ ok: true, key, value: uiCfg[key] });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -3045,7 +3061,6 @@ async function loadGameConfig() {
     ['starting_chips',     1000, 'Starting chip count per player'],
     ['turn_seconds',         20, 'Seconds a player has to act'],
     ['inter_hand_delay_ms', 5000, 'Pause between hands (ms)'],
-    ['auto_start_delay_ms', 3000, 'Delay before first hand starts (ms)'],
   ];
 
   try {
@@ -3118,47 +3133,6 @@ async function loadMatchFormat() {
     console.error('[format] DB unavailable, using defaults:', e.message);
     return DEFAULT_FORMAT;
   }
-}
-
-async function loadUiConfig() {
-  await db.query(`
-    CREATE TABLE IF NOT EXISTS ui_config (
-      key         TEXT PRIMARY KEY,
-      value       NUMERIC NOT NULL,
-      description TEXT
-    )
-  `);
-
-  const defaults = [
-    ['card_deal_duration_ms',     500, 'Card deal slide-in animation duration'],
-    ['card_deal_stagger_ms',      180, 'Stagger delay between card 1 and card 2'],
-    ['action_flash_duration_ms', 2500, 'How long action label shows in nameplate'],
-    ['center_action_duration_ms',3000, 'How long center action narration shows'],
-    ['allin_reveal_pause_ms',    1500, 'Pause after hole cards revealed before board runs out (ms)'],
-    ['community_card_stagger_ms', 500, 'Delay between flop card reveals'],
-    ['showdown_card_stagger_ms', 1000, 'Delay between turn/river reveals at showdown'],
-    ['winner_reveal_delay_ms',   2000, 'Pause after last CC before winners highlighted'],
-    ['pot_flight_duration_ms',    900, 'Pot-to-winner banana flight duration'],
-    ['pot_flight_scale_peak_ms',  700, 'Time to peak scale during pot flight'],
-    ['pot_flight_fade_start_ms',  700, 'When opacity fade starts during pot flight'],
-    ['pot_flight_fade_ms',        200, 'Duration of opacity fade at end of flight'],
-    ['win_done_delay_ms',         950, 'Delay after winners shown before chip counts update'],
-    ['match_over_elo_pause_ms',     0, 'Extra pause before match-over modal appears'],
-    ['rematch_countdown_s',        10, 'Seconds to accept/decline rematch before auto-decline'],
-  ];
-
-  for (const [key, value, description] of defaults) {
-    await db.query(
-      `INSERT INTO ui_config (key, value, description) VALUES ($1, $2, $3) ON CONFLICT (key) DO NOTHING`,
-      [key, value, description]
-    );
-  }
-
-  const { rows } = await db.query('SELECT key, value FROM ui_config');
-  const loaded = {};
-  for (const { key, value } of rows) loaded[key] = Number(value);
-  console.log('[ui-config] loaded:', loaded);
-  return loaded;
 }
 
 async function initAvatars() {
@@ -3359,7 +3333,6 @@ async function start() {
   await initMusicTracks();
   cfg = await loadGameConfig();
   fmt = await loadMatchFormat();
-  uiCfg = await loadUiConfig();
   validAvatars = await initAvatars();
   await initBots();
   await runAchievementsMigration();

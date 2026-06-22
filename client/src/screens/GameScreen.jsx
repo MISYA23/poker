@@ -13,7 +13,7 @@ import { calcEquity } from '../utils/equity';
 import BettingControls from '../components/BettingControls';
 import PreviousHandDialog from '../components/PreviousHandDialog';
 import { colors } from '../theme';
-import { SERVER_URL } from '../config';
+import { SERVER_URL, IS_DEV_SERVER } from '../config';
 import { playSfx } from '../audio/sfx';
 import SoundToggleRows from '../components/SoundToggleRows';
 import BananaStore from '../components/BananaStore';
@@ -414,8 +414,8 @@ export default function GameScreen({ navigation }) {
   const {
     gameState, transition, myId, onAction, onLeave, onRematch, onLogout,
     matchOver, navigationRef, deckStyle, playerInfo, onHandEndAnimDone,
-    handEventsRef, bustReveal = null, forfeitReveal = null, uiConfig = {},
-    onBotActionRequest, lives = 3, maxLives = 3, myElo = null, opponentElo = null,
+    handEventsRef, bustReveal = null, forfeitReveal = null,
+    onBotActionRequest, onActionReady, lives = 3, maxLives = 3, myElo = null, opponentElo = null,
     myConnected = true, opponentConnected = true,
   } = useContext(GameContext);
 
@@ -741,6 +741,14 @@ export default function GameScreen({ navigation }) {
   // Full dealer_animating gate — all three flags must be clear before controls
   // appear or the bot is triggered. collecting is the third flag.
   const fullDealerAnimating = dealerAnimating || collecting;
+
+  // canAct: synced AND it's our decision point AND no animation is in flight. This is
+  // the single input guard (see docs/protocol-fsm.md §6) — controls show only here, and
+  // it's also the signal that we're ready, so we ack `action-ready` to start our clock.
+  const canAct = isMyTurn && !fullDealerAnimating;
+  useEffect(() => {
+    if (canAct) onActionReady?.();
+  }, [canAct, onActionReady]);
 
   // Bot trigger — fires 1000ms after all animations clear on the bot's turn.
   // botTurnRequestedRef is set only when the timer actually fires (not when arming it),
@@ -1107,7 +1115,7 @@ export default function GameScreen({ navigation }) {
               </Text>
             </View>
             <Pressable style={s.menuBtn} onPress={() => setMenuOpen(o => !o)}>
-              <Text style={s.menuBtnTxt}>☰</Text>
+              <Text style={[s.menuBtnTxt, IS_DEV_SERVER && { color: '#ff3b30' }]}>☰</Text>
             </Pressable>
           </View>
         </View>
@@ -1140,7 +1148,7 @@ export default function GameScreen({ navigation }) {
 
         {/* Bottom betting controls (Group B) — fixed ergonomic height */}
         <View style={s.bottomChrome} pointerEvents="box-none">
-          {isMyTurn && !fullDealerAnimating && (
+          {canAct && (
             <BettingControls
               gameState={gameState} myId={myId}
               onAction={onAction} raiseAmount={raiseAmount}

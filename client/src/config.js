@@ -13,5 +13,10 @@ function resolveUrl(url) {
 }
 
 export const SERVER_URL = resolveUrl(envUrl);
-export const VERSION = 'v1.59';
+
+// True whenever the client is pointed at a non-prod server (EXPO_PUBLIC_SERVER_URL
+// is only set in client/.env for local dev). Used to surface a dev-mode visual cue.
+export const IS_DEV_SERVER = !!envUrl;
+
+export const VERSION = 'v1.61';
 export const VERSION_DISPLAY = VERSION;
