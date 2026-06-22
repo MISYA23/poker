@@ -1114,7 +1114,9 @@ export default function GameScreen({ navigation }) {
             </View>
             <View style={[s.stakeChip, s.stakeChipElo]}>
               <Text style={s.stakeChipEloTxt}>
-                +{myElo && opponentElo ? calcEloGain(myElo, opponentElo) : '?'}
+                +{observing
+                    ? (gameState?.stakeElo ?? '?')
+                    : (myElo && opponentElo ? calcEloGain(myElo, opponentElo) : '?')}
               </Text>
             </View>
             <Pressable style={s.menuBtn} onPress={() => setMenuOpen(o => !o)}>
@@ -1330,16 +1332,33 @@ export default function GameScreen({ navigation }) {
                   {winnerName} Won!
                 </Animated.Text>
                 <Animated.View style={[s.moDuelRow, { opacity: moAvatar }]}>
-                  {gameState?.players?.map(p => (
-                    <View key={p.id} style={s.moDuelPlayer}>
-                      <View>
-                        <Avatar size={60} avatarId={p.avatarId} />
-                        {p.id === matchOver.winnerId && <Text style={s.moCrown}>👑</Text>}
+                  {gameState?.players?.map(p => {
+                    const pWon = p.id === matchOver.winnerId;
+                    return (
+                      <View key={p.id} style={s.moDuelPlayer}>
+                        <View>
+                          <Avatar size={60} avatarId={p.avatarId} />
+                          {pWon && <Text style={s.moCrown}>👑</Text>}
+                        </View>
+                        <Text style={s.moDuelName} numberOfLines={1}>{p.name}</Text>
+                        {eloAmt > 0 && (
+                          <Text style={[s.moDuelElo, pWon ? s.moDuelEloWin : s.moDuelEloLose]}>
+                            {pWon ? `+${eloAmt}` : `−${eloAmt}`}
+                          </Text>
+                        )}
                       </View>
-                      <Text style={s.moDuelName} numberOfLines={1}>{p.name}</Text>
-                    </View>
-                  ))}
+                    );
+                  })}
                 </Animated.View>
+                {eloAmt > 0 && (
+                  <Animated.View style={[s.moPot, s.moPotWin, { opacity: moElo }]}>
+                    <Text style={s.moPotLabel}>Stakes</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                      <Text style={s.moPotLine}>🍌 1 banana</Text>
+                      <Text style={s.moPotLineElo}>{eloAmt} ELO</Text>
+                    </View>
+                  </Animated.View>
+                )}
                 <Animated.View style={{ opacity: moBtns, alignSelf: 'stretch', marginTop: 4 }}>
                   <Pressable style={[s.modalBtn, s.modalBtnYes]} onPress={onLeave}>
                     <Text style={s.modalBtnTxt}>Back to Lobby</Text>

@@ -416,6 +416,16 @@ function matchStateOf(m) {
   return 'IN_MATCH';
 }
 
+// ELO at stake for a match — the winner's gain (symmetric with the loser's loss),
+// derived from the live cache. Players each see their own perspective; observers,
+// who have no seat, get this single neutral figure so the HUD/match-over can show
+// what's actually on the line instead of "?".
+function stakeEloOf(m) {
+  const a = eloCache[m.p1?.playerId] ?? 1200;
+  const b = eloCache[m.p2?.playerId] ?? 1200;
+  return calcElo(a, b).winnerGain;
+}
+
 function broadcastMatchState(m, transition = null) {
   m.seq = (m.seq || 0) + 1;
   startTurnTimer(m);
@@ -447,6 +457,7 @@ function broadcastMatchState(m, transition = null) {
       matchId: m.id, turnDeadline: m.turnDeadline,
       turnDurationMs: cfg.turn_seconds * 1000,
       handNumber: m.handCount,
+      stakeElo: stakeEloOf(m),
       sittingOut,
     });
   }
@@ -881,9 +892,14 @@ async function endMatch(m, winnerId, bust = false) {
       forfeit: !bust,
     });
   }
-  // Observers get the result too — without it they'd sit on a frozen table forever
+  // Observers get the result too — without it they'd sit on a frozen table forever.
+  // Carry the ELO swing so the spectator modal shows what changed hands (winner
+  // +eloChange / loser −eloChange), same as the players' own match-over graphic.
   for (const sid of m.observers) {
-    io.to(sid).emit('match-over', { matchState: 'MATCH_OVER', winnerId, winnerName: winner.playerName, observer: true });
+    io.to(sid).emit('match-over', {
+      matchState: 'MATCH_OVER', winnerId, winnerName: winner.playerName,
+      loserId: loser.playerId, eloChange: winnerGain, observer: true,
+    });
   }
   console.log(`[match] ended — winner: ${winner.playerName}, elo: ${wElo}→${wNewElo}`);
   broadcastMatchList();
@@ -1235,6 +1251,7 @@ io.on('connection', (socket) => {
       ...m.game.getStateFor(null),
       atTable: false, observing: true,
       matchId: m.id, turnDeadline: m.turnDeadline,
+      stakeElo: stakeEloOf(m),
       handNumber: m.handCount,
     });
   });
