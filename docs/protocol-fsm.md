@@ -353,3 +353,56 @@ match-over        { ... }                              // unchanged shape, gated
    Decide whether the force-deal clamp is even needed or if the existing match
    `cleanupTimer` already covers the stalled-client case.
 ```
+
+---
+
+## 11. Next: the MATCH-level FSM (handoff for the next session)
+
+`lifecycle` (§3) models only the **in-hand loop inside a live match**. There is a
+second, *outer* FSM — the match/session lifecycle — that is currently **implicit**
+(scattered across socket events + flags) and not surfaced anywhere. This is the same
+"make the implicit explicit" move as `INTER_HAND`, one level up.
+
+```
+MATCH / SESSION FSM  (outer — NOT modeled yet)
+  AWAITING_READY    match-found → pre-match "Match Starting" countdown → waiting for match-ready
+  IN_MATCH ─────────┐  the inner hand FSM (§3) runs entirely inside this state
+  MATCH_OVER        │
+  REMATCH_PENDING   │  rematch offered; votes accumulating
+  (exits to lobby, or rematch → AWAITING_READY/IN_MATCH)
+```
+
+Where each state is tracked **today** (server `index.js`):
+- AWAITING_READY — `m.game.phase === 'waiting'` before the first hand + `m.readySafetyTimer`
+  (15s safety) armed by `scheduleReadyStart`; client shows `PreMatchCountdown` (10s ELO
+  animation in `MatchFlowOverlays.jsx`) and emits `match-ready`.
+- IN_MATCH — a hand has begun; the §3 lifecycle applies.
+- MATCH_OVER — `m.ended === true`, `m.game.gameOver === true`; delivered to the client via
+  a **separate `match-over` socket event**, NOT a game-state snapshot.
+- REMATCH_PENDING — `m.rematchVotes` set; `m.cleanupTimer` (90s) reaps if nobody rematches;
+  `rematch-vote` → `resetRoom` → back to AWAITING_READY/IN_MATCH.
+
+### Two quirks the next session must know (discovered live, not obvious from code)
+
+1. **The debug panel freezes at `SHOWDOWN`/`FOLD` on the match-over screen.** On a bust,
+   `exitInterHand` deliberately **skips `broadcastMatchState`** ("stay in showdown until
+   match-over fires") and the match end arrives via the out-of-band `match-over` event. So
+   the client's last *game-state* is the hand-end snapshot — `gameState.lifecycle` never
+   advances to `MATCH_OVER`, and `seq`/`deadline`/`toAct` read empty on that held snapshot.
+2. **`INTER_HAND` is never broadcast to the client.** `enterInterHand` sets
+   `awaitingDeal=true` but does not broadcast; `exitInterHand` clears it *before* the
+   next-hand broadcast. So `lifecycle === 'INTER_HAND'` is only ever observable
+   server-side / pre-first-hand. The client's "between hands" period is the held
+   `FOLD`/`SHOWDOWN` snapshot during its hand-end animation.
+
+### Suggested implementation
+- Add a sibling **`matchState`** field (don't overload `lifecycle`): derive it like
+  `lifecycleOf`, and **stamp it onto the `match-over` and rematch transitions** so the
+  client actually receives `MATCH_OVER`/`REMATCH_PENDING` (the fix for quirk #1).
+- Add a `MATCH` section to the dev debug panel (`GameScreen.jsx`, next to the SERVER/CLIENT
+  blocks) showing `matchState` + client-side `matchOver`/rematch flags.
+- Decide whether the pre-match `PreMatchCountdown` and `match-ready` ack should fold into
+  this FSM (symmetry with `action-ready`/`hand-end-ready`) or stay as-is.
+
+Verify with `server/scripts/fsm-integration-test.js` (extend it to play a hand to bust and
+assert the client receives `matchState: MATCH_OVER`).
