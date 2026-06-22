@@ -19,10 +19,23 @@
       "env": {
         "SENTRY_DISABLE_AUTO_UPLOAD": "true"
       }
+    },
+    "production-pro": {
+      "autoIncrement": true,
+      "env": {
+        "SENTRY_DISABLE_AUTO_UPLOAD": "true",
+        "APP_VARIANT": "pro"
+      }
     }
   },
   "submit": {
     "production": {
+      "android": {
+        "serviceAccountKeyPath": "./playstore-key.json",
+        "track": "alpha"
+      }
+    },
+    "production-pro": {
       "android": {
         "serviceAccountKeyPath": "./playstore-key.json",
         "track": "alpha"
