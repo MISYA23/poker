@@ -1,6 +1,7 @@
 node_modules/
 .env
 .env.local
+.claude/settings.local.json
 
 # digital ads build artifacts (regenerable, heavy)
 digital ads/_build/node_modules/
