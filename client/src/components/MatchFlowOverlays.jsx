@@ -124,21 +124,12 @@ function RadarWeb() {
 
 const Radar = Platform.OS === 'web' ? RadarWeb : RadarNative;
 
-function OpponentCard({ name, avatarId, country, elo, isBot }) {
-  return (
-    <View style={ov.oppRow}>
-      <AvatarBadge avatarId={avatarId} country={country} isBot={isBot} />
-      <View>
-        <Text style={ov.oppName} numberOfLines={1}>{name}</Text>
-        <Text style={ov.oppMeta}>ELO <Text style={ov.oppElo}>{elo ?? 1200}</Text></Text>
-      </View>
-    </View>
-  );
-}
-
-// Pre-match vs card with animated ELO drop + ring countdown. Tap anywhere to skip.
-function PreMatchCountdown({ opponent, playerInfo, myElo, onReady, onLeave, canCancel = true }) {
-  const DURATION = 1000;
+// Pre-match vs card with animated ELO drop + ring countdown.
+// Both players have already opted in (Quick Match or an accepted challenge), so this
+// is a pure "match beginning" curtain: the matchup + ELO stakes, a 5s ring, no buttons.
+// When the ring completes it auto-acks ready (match-ready) and the first hand deals.
+function PreMatchCountdown({ opponent, playerInfo, myElo, onReady }) {
+  const DURATION = 5000;
   const RING_R = 36;
   const RING_C = 2 * Math.PI * RING_R;
 
@@ -212,18 +203,6 @@ function PreMatchCountdown({ opponent, playerInfo, myElo, onReady, onLeave, canC
         </View>
 
         <StakePot potElo={potElo} label="Winner takes the pot" />
-
-        <Pressable style={[ov.cta, { marginTop: 10, alignSelf: 'stretch' }]}
-          onPress={fireReady}>
-          <Text style={ov.ctaTxt}>LET'S PLAY</Text>
-        </Pressable>
-
-        {canCancel && (
-          <Pressable style={[ov.ghostBtn, { marginTop: 8, alignSelf: 'stretch' }]}
-            onPress={() => { onLeave?.(); setSkipped(true); }}>
-            <Text style={[ov.ghostBtnTxt, { fontSize: 13 }]}>Cancel</Text>
-          </Pressable>
-        )}
       </Pressable>
     </Pressable>
   );
@@ -270,7 +249,7 @@ function Scrim({ onPress, children }) {
 // Copy convention: opponents are "humans", bots are "🤖 bot" (never "human").
 export default function MatchFlowOverlays({
   searchOverlay, meantime, preMatch, playerInfo, myElo, incomingChallenges,
-  onCancelSearch, onPreMatchReady, onPreMatchCancel, onConfirmBot, onDismissMeantime,
+  onCancelSearch, onPreMatchReady, onConfirmBot, onDismissMeantime,
   onAcceptChallenge, onDeclineChallenge, copy,
 }) {
   // Challenges the user tap-dismissed: hide the dialog, the challenge itself
@@ -298,27 +277,18 @@ export default function MatchFlowOverlays({
       {/* Pre-match vs countdown */}
       {preMatch && !challenge && (
         <PreMatchCountdown opponent={preMatch.opponent} playerInfo={playerInfo} myElo={myElo}
-          onReady={onPreMatchReady} onLeave={onPreMatchCancel} canCancel={!preMatch.fromChallenge} />
+          onReady={onPreMatchReady} />
       )}
 
-      {/* Searching… / Human found! */}
+      {/* Searching… (a found human goes straight to the PreMatchCountdown curtain) */}
       {!preMatch && searchOverlay && (
         <Scrim onPress={() => {}}>
           <Radar />
-          {searchOverlay.status === 'found' ? (
-            <>
-              <Text style={ov.title}>{copy?.foundTitle ?? 'Human found!'}</Text>
-              <OpponentCard {...(searchOverlay.opponent || {})} />
-            </>
-          ) : (
-            <>
-              <Text style={ov.title}>{copy?.searchingTitle ?? 'Searching…'}</Text>
-              <Text style={ov.sub}>{copy?.searchingSub ?? 'Looking for a human to play'}</Text>
-              <Pressable style={ov.ghostBtn} onPress={onCancelSearch}>
-                <Text style={ov.ghostBtnTxt}>{copy?.searchingCancelBtn ?? 'Cancel'}</Text>
-              </Pressable>
-            </>
-          )}
+          <Text style={ov.title}>{copy?.searchingTitle ?? 'Searching…'}</Text>
+          <Text style={ov.sub}>{copy?.searchingSub ?? 'Looking for a human to play'}</Text>
+          <Pressable style={ov.ghostBtn} onPress={onCancelSearch}>
+            <Text style={ov.ghostBtnTxt}>{copy?.searchingCancelBtn ?? 'Cancel'}</Text>
+          </Pressable>
         </Scrim>
       )}
 

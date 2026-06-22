@@ -211,7 +211,7 @@ function App() {
     'opponent-connected':    () => setOpponentConnected(true),
     'in-queue':        ()            => { setInQueue(true); setError(null); },
     'queue-cancelled': ()            => { clearBotOfferTimer(); setInQueue(false); setSearch(null); setMeantime(false); },
-    'match-found':     ({ matchId, opponent, fallback, reconnect, fromChallenge }) => {
+    'match-found':     ({ matchId, opponent, fallback, reconnect }) => {
       clearBotOfferTimer();
       if (isObserverRef.current) {
         emit('unobserve', { matchId: matchIdRef.current });
@@ -252,7 +252,7 @@ function App() {
       // Navigate to the table immediately so the countdown appears over the felt.
       // foundDelayRef blocks game-state from re-navigating until the client confirms ready.
       setOpponentElo(opponent?.elo ?? null);
-      setPreMatch({ opponent, fromChallenge: !!fromChallenge });
+      setPreMatch({ opponent });
       foundDelayRef.current = true;
       navigationRef.navigate('Game');
     },
@@ -474,16 +474,6 @@ function App() {
     emit('match-ready', {});
   }, [emit]);
 
-  // Cancelled during pre-match countdown — forfeit the match (enter-lobby triggers
-  // endMatch server-side with the opponent as winner) and return to lobby.
-  const onPreMatchCancel = useCallback(() => {
-    foundDelayRef.current = false;
-    setPreMatch(null);
-    matchIdRef.current = null;
-    emit('enter-lobby', { playerId: playerIdRef.current });
-    navigationRef.reset({ index: 0, routes: [{ name: 'Lobby' }] });
-  }, [emit]);
-
   // "Keep Waiting" — hide the dialog, restore searching overlay, restart 5s timer
   const onDismissMeantime = useCallback(() => {
     setMeantime(false);
@@ -630,7 +620,6 @@ function App() {
             incomingChallenges={incomingChallenges}
             onCancelSearch={onCancelMatch}
             onPreMatchReady={onMatchReady}
-            onPreMatchCancel={onPreMatchCancel}
             onConfirmBot={onConfirmBot}
             onDismissMeantime={onDismissMeantime}
             onAcceptChallenge={onAcceptChallenge}
