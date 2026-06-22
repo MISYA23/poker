@@ -138,7 +138,7 @@ function OpponentCard({ name, avatarId, country, elo, isBot }) {
 
 // Pre-match vs card with animated ELO drop + ring countdown. Tap anywhere to skip.
 function PreMatchCountdown({ opponent, playerInfo, myElo, onReady, onLeave, canCancel = true }) {
-  const DURATION = 10000;
+  const DURATION = 1000;
   const RING_R = 36;
   const RING_C = 2 * Math.PI * RING_R;
 
