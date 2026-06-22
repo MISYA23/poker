@@ -607,13 +607,18 @@ export default function GameScreen({ navigation }) {
   const isShowdown = gameState?.phase === 'showdown';
   const [revealedCC, setRevealedCC] = useState(0);
 
-  // ── dealer_animating — three named flags, one per dealer animation that
-  // precedes a player/bot action. All must clear before controls show or bot fires.
-  const [dealingHoleCards, setDealingHoleCards] = useState(false);
-  const [revealingBoard,   setRevealingBoard]   = useState(false);
+  // ── dealer_animating — flags for the dealer animations that precede a
+  // player/bot action. All must clear before controls show or bot fires.
+  const [dealtHand,      setDealtHand]      = useState(0); // handNumber whose hole-card deal finished
+  const [revealingBoard, setRevealingBoard] = useState(false);
   // collecting (bet-slide) is already tracked below as `collecting = !!collect`
 
-  const dealerAnimating = dealingHoleCards || revealingBoard;
+  // Derived synchronously: a freshly-arrived hand is "dealing" from its very first
+  // render, until HoleCards' onDealComplete bumps dealtHand. Computing this (instead of
+  // setting a flag in an effect that runs after paint) closes the one-frame window where
+  // the action buttons would flash before the deal-animation flag caught up.
+  const dealPending = (gameState?.handNumber || 0) > dealtHand;
+  const dealerAnimating = dealPending || revealingBoard;
 
   // Gate actions on all streets: buttons/bot are suppressed until every community
   // card on the current street has finished animating in. Preflop is always open
@@ -665,10 +670,7 @@ export default function GameScreen({ navigation }) {
   const dealSeen = useRef(0);
   useEffect(() => {
     const h = gameState?.handNumber || 0;
-    if (h > dealSeen.current) {
-      playSfx('deal');
-      setDealingHoleCards(true);
-    }
+    if (h > dealSeen.current) playSfx('deal');
     dealSeen.current = h;
   }, [gameState?.handNumber]);
 
@@ -1058,7 +1060,7 @@ export default function GameScreen({ navigation }) {
           )}
 
           {/* Player hole cards — spec §5 playerCards: (0.43, 0.700) */}
-          <HoleCards player={me} isMe={true} deckStyle={deckStyle} onDealComplete={() => setDealingHoleCards(false)} handNumber={gameState?.handNumber} />
+          <HoleCards player={me} isMe={true} deckStyle={deckStyle} onDealComplete={() => setDealtHand(gameState?.handNumber || 0)} handNumber={gameState?.handNumber} />
 
           {/* Player pod */}
           <View style={s.myPodSlot}>
