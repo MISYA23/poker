@@ -18,5 +18,5 @@ export const SERVER_URL = resolveUrl(envUrl);
 // is only set in client/.env for local dev). Used to surface a dev-mode visual cue.
 export const IS_DEV_SERVER = !!envUrl;
 
-export const VERSION = 'v1.65';
+export const VERSION = 'v1.66';
 export const VERSION_DISPLAY = VERSION;

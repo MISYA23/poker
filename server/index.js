@@ -575,7 +575,9 @@ function clearSearchFor(playerId) {
 
 function socketIdOf(playerId) {
   for (const [sid, sp] of socketPlayers.entries()) {
-    if (sp.playerId === playerId) return sid;
+    // Skip sockets the server no longer considers connected — a stale entry
+    // can outlive its socket until the disconnect handler fires.
+    if (sp.playerId === playerId && io.sockets.sockets.has(sid)) return sid;
   }
   return null;
 }
@@ -939,9 +941,26 @@ async function bindIdentity(socket, playerId) {
     }
   } catch (e) { console.error('[identity] db lookup failed:', e.message); }
 
+  // Drop any prior socketPlayers entries for this identity. A reconnect (HMR
+  // reload, backgrounded app, network blip, second tab) arrives on a NEW
+  // socket.id; the old entry lingers until its socket times out. While both
+  // exist, every playerId→socket lookup (socketIdOf, challenge-send, friend
+  // notifications, lives-update) can resolve to the dead socket and silently
+  // drop the message. We delete the stale map entries but do NOT disconnect
+  // the underlying socket — letting it die on its own timeout avoids firing a
+  // spurious 'opponent-disconnected'/seat-vacated flicker mid-match. Carry
+  // forward any in-flight matchId so the new socket knows its table before
+  // reclaimSeat runs.
+  let staleMatchId = null;
+  for (const [sid, s] of socketPlayers.entries()) {
+    if (sid === socket.id || s.playerId !== playerId) continue;
+    staleMatchId = staleMatchId ?? s.matchId ?? null;
+    socketPlayers.delete(sid);
+  }
+
   const existing = socketPlayers.get(socket.id);
   const sp = {
-    matchId: existing?.matchId ?? null,
+    matchId: existing?.matchId ?? staleMatchId ?? null,
     ...existing,
     playerId,
     playerName,
@@ -1388,8 +1407,8 @@ io.on('connection', (socket) => {
       return;
     }
 
-    // Find target socket
-    const toSocket = [...socketPlayers.entries()].find(([, s]) => s.playerId === toId);
+    // Find target socket — skip any stale entry whose socket is already gone
+    const toSocket = [...socketPlayers.entries()].find(([sid, s]) => s.playerId === toId && io.sockets.sockets.has(sid));
     if (!toSocket) { socket.emit('error', { message: 'Player is not online.' }); return; }
     const [toSocketId, toSp] = toSocket;
 
@@ -1829,7 +1848,7 @@ app.post('/api/friends/request', async (req, res) => {
       [requesterId, addresseeId]
     );
     // Notify addressee if online
-    const target = [...socketPlayers.entries()].find(([, s]) => s.playerId === addresseeId);
+    const target = [...socketPlayers.entries()].find(([sid, s]) => s.playerId === addresseeId && io.sockets.sockets.has(sid));
     if (target) {
       const requester = [...socketPlayers.values()].find(s => s.playerId === requesterId);
       io.to(target[0]).emit('friend-request', {
@@ -1850,7 +1869,7 @@ app.post('/api/friends/accept', async (req, res) => {
       [requesterId, addresseeId]
     );
     // Notify requester if online
-    const target = [...socketPlayers.entries()].find(([, s]) => s.playerId === requesterId);
+    const target = [...socketPlayers.entries()].find(([sid, s]) => s.playerId === requesterId && io.sockets.sockets.has(sid));
     if (target) {
       const accepter = [...socketPlayers.values()].find(s => s.playerId === addresseeId);
       io.to(target[0]).emit('friend-accepted', {
