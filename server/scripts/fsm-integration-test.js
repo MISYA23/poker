@@ -79,7 +79,7 @@ function handle(myId, st) {
   }
 
   // Hand ended → both clients signal hand-end animation complete
-  if (phase === 'folded' && (st.lifecycle === 'SHOWDOWN' || st.lifecycle === 'INTER_HAND')) {
+  if (phase === 'folded' && (st.lifecycle === 'FOLD' || st.lifecycle === 'SHOWDOWN' || st.lifecycle === 'INTER_HAND')) {
     phase = 'await-next-hand';
     foldAckAt = Date.now();
     ok(`fold resolved hand; lifecycle=${st.lifecycle}`);

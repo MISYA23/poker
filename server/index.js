@@ -360,9 +360,12 @@ function emitHandEvents(m, rows) {
 // INTER_HAND a real state. Stamped on every snapshot as `lifecycle`.
 function lifecycleOf(m) {
   if (m.ended || m.game.gameOver) return 'MATCH_OVER';
+  if (m.awaitingDeal) return 'INTER_HAND';                  // hand resolved, waiting to deal next
   switch (m.game.phase) {
-    case 'showdown': return 'SHOWDOWN';
-    case 'waiting':  return 'INTER_HAND';   // pre-first-hand or between hands
+    // The engine reuses phase='showdown' for ANY hand resolution — distinguish a
+    // fold-win (no cards shown) from a real showdown for accurate FSM reporting.
+    case 'showdown': return m.game.handEndedByFold ? 'FOLD' : 'SHOWDOWN';
+    case 'waiting':  return 'INTER_HAND';                   // pre-first-hand or between hands
     default:         return m.game.currentPlayerId ? 'WAITING_FOR_ACTION' : 'STREET_COMPLETE';
   }
 }
