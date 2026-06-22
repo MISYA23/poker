@@ -426,6 +426,7 @@ export default function GameScreen({ navigation }) {
   }, []);
 
   const [menuOpen,      setMenuOpen]      = useState(false);
+  const [debugMode,     setDebugMode]     = useState(false); // dev-only FSM state overlay
   const [leaveWarning,  setLeaveWarning]  = useState(false);
   const [replayOpen,    setReplayOpen]    = useState(false);
 
@@ -1160,6 +1161,22 @@ export default function GameScreen({ navigation }) {
 
       </SafeAreaView>
 
+      {/* Dev-only FSM state overlay — server lifecycle + client presentation flags */}
+      {IS_DEV_SERVER && debugMode && (
+        <View style={s.debugPanel} pointerEvents="none">
+          <Text style={s.debugTitle}>SERVER</Text>
+          <Text style={s.debugTxt}>lifecycle: {gameState?.lifecycle || '—'}</Text>
+          <Text style={s.debugTxt}>street: {gameState?.phase || '—'}   seq: {gameState?.seq ?? '—'}</Text>
+          <Text style={s.debugTxt}>hand#: {gameState?.handNumber ?? '—'}   deadline: {gameState?.turnDeadline ? 'live' : 'null'}</Text>
+          <Text style={s.debugTxt}>toAct: {gameState?.currentPlayerId ? (gameState.currentPlayerId === myId ? 'me' : 'opp') : '—'}</Text>
+          <Text style={[s.debugTitle, { marginTop: 6 }]}>CLIENT</Text>
+          <Text style={s.debugTxt}>canAct: {String(canAct)}   myTurn: {String(isMyTurn)}</Text>
+          <Text style={s.debugTxt}>dealPending: {String(dealPending)}   board: {String(revealingBoard)}</Text>
+          <Text style={s.debugTxt}>collecting: {String(collecting)}   handEnded: {String(isHandEnded)}</Text>
+          <Text style={s.debugTxt}>showWinners: {String(showWinners)}   winDone: {String(winDone)}</Text>
+        </View>
+      )}
+
       {/* Menu scrim + panel — outside everything, highest z */}
       {menuOpen && (
         <Pressable style={s.menuScrim} onPress={() => setMenuOpen(false)}>
@@ -1171,6 +1188,11 @@ export default function GameScreen({ navigation }) {
                   onPress={() => { setMenuOpen(false); navigationRef.navigate('Profile'); }}>
                   <Text style={s.menuItemTxt}>👤 Profile</Text>
                 </Pressable>
+                {IS_DEV_SERVER && (
+                  <Pressable style={s.menuItem} onPress={() => setDebugMode(d => !d)}>
+                    <Text style={[s.menuItemTxt, { color: '#ff3b30' }]}>🐞 Debug Mode: {debugMode ? 'On' : 'Off'}</Text>
+                  </Pressable>
+                )}
                 <Pressable style={s.menuItem}
                   onPress={() => {
                     setMenuOpen(false);
@@ -1628,6 +1650,9 @@ const s = StyleSheet.create({
   menuScrim: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.6)', zIndex: 50 },
   menuPanelRow: { flexDirection: 'row', justifyContent: 'flex-end', paddingHorizontal: 12, paddingTop: TOP_BAR_H + 4 },
   menuPanel: { width: 200, backgroundColor: '#111', borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)', borderRadius: 14, overflow: 'hidden', elevation: 8 },
+  debugPanel:  { position: 'absolute', top: 96, alignSelf: 'center', backgroundColor: 'rgba(0,0,0,0.8)', borderColor: '#ff3b30', borderWidth: 1, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6, zIndex: 9999 },
+  debugTitle:  { color: '#ff3b30', fontSize: 10, fontWeight: '700', letterSpacing: 1.5 },
+  debugTxt:    { color: '#e6edf3', fontSize: 11, lineHeight: 16, fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace' },
   menuItem:    { paddingHorizontal: 16, paddingVertical: 13, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.07)' },
   menuItemRed: { borderBottomWidth: 0 },
   menuItemTxt: { color: 'rgba(255,255,255,0.9)', fontSize: 14 },
