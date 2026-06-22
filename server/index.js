@@ -370,6 +370,17 @@ function lifecycleOf(m) {
   }
 }
 
+// Outer MATCH-level FSM (see docs/protocol-fsm.md §11) — the session lifecycle that
+// wraps the per-hand `lifecycle` above. AWAITING_READY/IN_MATCH ride along on every
+// game-state; MATCH_OVER/REMATCH_PENDING are also stamped onto the out-of-band
+// match-over / rematch-pending events, because on those edges broadcastMatchState is
+// deliberately skipped (the client holds its last hand-end snapshot for the animation).
+function matchStateOf(m) {
+  if (m.ended) return m.rematchVotes?.size ? 'REMATCH_PENDING' : 'MATCH_OVER';
+  if (!m.handCount && m.game.phase === 'waiting') return 'AWAITING_READY'; // pre-first-hand
+  return 'IN_MATCH';
+}
+
 function broadcastMatchState(m, transition = null) {
   m.seq = (m.seq || 0) + 1;
   startTurnTimer(m);
@@ -380,7 +391,7 @@ function broadcastMatchState(m, transition = null) {
     const atTable = m.game.players.some(pl => pl.id === p.playerId);
     const state   = atTable ? m.game.getStateFor(p.playerId) : m.game.getStateFor(null);
     io.to(p.socketId).emit('game-state', {
-      seq: m.seq, lifecycle: lifecycleOf(m), transition,
+      seq: m.seq, lifecycle: lifecycleOf(m), matchState: matchStateOf(m), transition,
       ...state, atTable,
       matchId: m.id,
       gameOver: m.game.gameOver || false,
@@ -395,7 +406,7 @@ function broadcastMatchState(m, transition = null) {
   // Observers see face-down cards; no transition (they join mid-stream)
   for (const sid of m.observers) {
     io.to(sid).emit('game-state', {
-      seq: m.seq, lifecycle: lifecycleOf(m),
+      seq: m.seq, lifecycle: lifecycleOf(m), matchState: matchStateOf(m),
       ...m.game.getStateFor(null),
       atTable: false, observing: true,
       matchId: m.id, turnDeadline: m.turnDeadline,
@@ -823,6 +834,7 @@ async function endMatch(m, winnerId, bust = false) {
   for (const p of matchPlayers(m)) {
     const isWin = p.playerId === winnerId;
     io.to(p.socketId).emit('match-over', {
+      matchState: 'MATCH_OVER', // game-state is held in showdown here — carry the FSM edge on the event
       winnerId, winnerName: winner.playerName,
       loserName: loser.playerName,
       loserId: loser.playerId, loserChips,
@@ -834,7 +846,7 @@ async function endMatch(m, winnerId, bust = false) {
   }
   // Observers get the result too — without it they'd sit on a frozen table forever
   for (const sid of m.observers) {
-    io.to(sid).emit('match-over', { winnerId, winnerName: winner.playerName, observer: true });
+    io.to(sid).emit('match-over', { matchState: 'MATCH_OVER', winnerId, winnerName: winner.playerName, observer: true });
   }
   console.log(`[match] ended — winner: ${winner.playerName}, elo: ${wElo}→${wNewElo}`);
   broadcastMatchList();
@@ -1165,7 +1177,7 @@ io.on('connection', (socket) => {
     m.observers.add(socket.id);
     // Send current state immediately
     io.to(socket.id).emit('game-state', {
-      seq: m.seq, lifecycle: lifecycleOf(m),
+      seq: m.seq, lifecycle: lifecycleOf(m), matchState: matchStateOf(m),
       ...m.game.getStateFor(null),
       atTable: false, observing: true,
       matchId: m.id, turnDeadline: m.turnDeadline,
@@ -1235,7 +1247,7 @@ io.on('connection', (socket) => {
       // Notify the other player that this player wants a rematch
       const other = matchPlayers(m).find(p => p.playerId !== sp.playerId);
       if (other) {
-        io.to(other.socketId).emit('rematch-pending', { from: sp.playerName });
+        io.to(other.socketId).emit('rematch-pending', { matchState: 'REMATCH_PENDING', from: sp.playerName });
       }
 
       if (m.rematchVotes.size >= 2) {

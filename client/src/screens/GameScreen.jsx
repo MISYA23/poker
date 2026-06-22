@@ -1164,7 +1164,17 @@ export default function GameScreen({ navigation }) {
       {/* Dev-only FSM state overlay — server lifecycle + client presentation flags */}
       {IS_DEV_SERVER && debugMode && (
         <View style={s.debugPanel} pointerEvents="none">
-          <Text style={s.debugTitle}>SERVER</Text>
+          <Text style={s.debugTitle}>MATCH</Text>
+          {/* matchState rides on game-state for live play, but on a bust/forfeit/rematch
+              the game-state is held in showdown — so the MATCH_OVER/REMATCH_PENDING edge
+              comes off the match-over / rematch-pending events (carried on matchOver). */}
+          <Text style={s.debugTxt}>matchState: {
+            matchOver
+              ? (matchOver.opponentWantsRematch || matchOver.myVote ? 'REMATCH_PENDING' : (matchOver.matchState || 'MATCH_OVER'))
+              : (gameState?.matchState || '—')
+          }</Text>
+          <Text style={s.debugTxt}>matchOver: {String(!!matchOver)}   myVote: {String(matchOver?.myVote ?? false)}   oppWants: {String(matchOver?.opponentWantsRematch ?? false)}</Text>
+          <Text style={[s.debugTitle, { marginTop: 6 }]}>SERVER</Text>
           <Text style={s.debugTxt}>lifecycle: {gameState?.lifecycle || '—'}</Text>
           <Text style={s.debugTxt}>street: {gameState?.phase || '—'}   seq: {gameState?.seq ?? '—'}</Text>
           <Text style={s.debugTxt}>hand#: {gameState?.handNumber ?? '—'}   deadline: {gameState?.turnDeadline ? 'live' : 'null'}</Text>

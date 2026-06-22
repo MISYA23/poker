@@ -356,21 +356,31 @@ match-over        { ... }                              // unchanged shape, gated
 
 ---
 
-## 11. Next: the MATCH-level FSM (handoff for the next session)
+## 11. The MATCH-level FSM (`matchState`)
 
 `lifecycle` (§3) models only the **in-hand loop inside a live match**. There is a
-second, *outer* FSM — the match/session lifecycle — that is currently **implicit**
-(scattered across socket events + flags) and not surfaced anywhere. This is the same
-"make the implicit explicit" move as `INTER_HAND`, one level up.
+second, *outer* FSM — the match/session lifecycle — that used to be **implicit**
+(scattered across socket events + flags). It is now made explicit as a sibling
+`matchState` field, the same "make the implicit explicit" move as `INTER_HAND`, one
+level up. Derived by `matchStateOf(m)` in `server/index.js`.
 
 ```
-MATCH / SESSION FSM  (outer — NOT modeled yet)
+MATCH / SESSION FSM  (outer — `matchState`)
   AWAITING_READY    match-found → pre-match "Match Starting" countdown → waiting for match-ready
   IN_MATCH ─────────┐  the inner hand FSM (§3) runs entirely inside this state
   MATCH_OVER        │
   REMATCH_PENDING   │  rematch offered; votes accumulating
   (exits to lobby, or rematch → AWAITING_READY/IN_MATCH)
 ```
+
+**Implemented (v1.64):** `matchStateOf(m)` derives the state; `broadcastMatchState`
+stamps `matchState` on every game-state snapshot (AWAITING_READY/IN_MATCH). Because
+the game-state is deliberately held in showdown across the bust/forfeit/rematch edges
+(quirk #1 below), `MATCH_OVER` is also stamped on the out-of-band `match-over` event
+and `REMATCH_PENDING` on the `rematch-pending` event, so the client receives the edge.
+The dev debug panel (`GameScreen.jsx`) shows it in a `MATCH` block. Covered by
+`server/scripts/fsm-integration-test.js` (shoves to a bust and asserts the `match-over`
+event carries `matchState: 'MATCH_OVER'`).
 
 Where each state is tracked **today** (server `index.js`):
 - AWAITING_READY — `m.game.phase === 'waiting'` before the first hand + `m.readySafetyTimer`
@@ -382,7 +392,7 @@ Where each state is tracked **today** (server `index.js`):
 - REMATCH_PENDING — `m.rematchVotes` set; `m.cleanupTimer` (90s) reaps if nobody rematches;
   `rematch-vote` → `resetRoom` → back to AWAITING_READY/IN_MATCH.
 
-### Two quirks the next session must know (discovered live, not obvious from code)
+### Two quirks behind the design (discovered live, not obvious from code)
 
 1. **The debug panel freezes at `SHOWDOWN`/`FOLD` on the match-over screen.** On a bust,
    `exitInterHand` deliberately **skips `broadcastMatchState`** ("stay in showdown until
@@ -395,14 +405,15 @@ Where each state is tracked **today** (server `index.js`):
    server-side / pre-first-hand. The client's "between hands" period is the held
    `FOLD`/`SHOWDOWN` snapshot during its hand-end animation.
 
-### Suggested implementation
-- Add a sibling **`matchState`** field (don't overload `lifecycle`): derive it like
-  `lifecycleOf`, and **stamp it onto the `match-over` and rematch transitions** so the
-  client actually receives `MATCH_OVER`/`REMATCH_PENDING` (the fix for quirk #1).
-- Add a `MATCH` section to the dev debug panel (`GameScreen.jsx`, next to the SERVER/CLIENT
-  blocks) showing `matchState` + client-side `matchOver`/rematch flags.
-- Decide whether the pre-match `PreMatchCountdown` and `match-ready` ack should fold into
-  this FSM (symmetry with `action-ready`/`hand-end-ready`) or stay as-is.
+### How it was implemented (done)
+- Added a sibling **`matchState`** field (does not overload `lifecycle`): `matchStateOf(m)`
+  derives it, and it is **stamped onto the `match-over` and `rematch-pending` events** so the
+  client receives `MATCH_OVER`/`REMATCH_PENDING` even though the game-state is held in
+  showdown across those edges (the fix for quirk #1).
+- Added a `MATCH` section to the dev debug panel (`GameScreen.jsx`, above the SERVER/CLIENT
+  blocks) showing `matchState` + client-side `matchOver`/`myVote`/`opponentWantsRematch` flags.
 
-Verify with `server/scripts/fsm-integration-test.js` (extend it to play a hand to bust and
-assert the client receives `matchState: MATCH_OVER`).
+### Still open
+- Decide whether the pre-match `PreMatchCountdown` and `match-ready` ack should fold into
+  this FSM (symmetry with `action-ready`/`hand-end-ready`) or stay as-is. `matchState` makes
+  `AWAITING_READY` explicit, but the ack itself is still a bespoke event, not an FSM edge.
