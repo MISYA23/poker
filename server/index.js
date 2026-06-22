@@ -201,6 +201,7 @@ function createMatch(p1, p2) {
     ended: false,
     nextHandTimer: null, awaitingDeal: false,
     turnTimer: null, settleTimer: null, timerPlayerId: null, turnDeadline: null,
+    timeoutCounts: {},       // playerId → # of turn-clock expiries this match (2 = loss)
     isBotMatch: false, botId: null,
     seq: 0,
     handCount: 0, handEventSeq: 0, currentHandUuid: null,
@@ -269,11 +270,45 @@ function startTurnClock(m, pid) {
     if (m.ended || m.game.currentPlayerId !== pid) return;
     m.timerPlayerId = null;
     m.turnDeadline  = null;
-    const opponent = matchPlayers(m).find(p => p.playerId !== pid);
-    endMatch(m, opponent?.playerId ?? pid);
+    const strike = (m.timeoutCounts[pid] = (m.timeoutCounts[pid] || 0) + 1);
+    if (strike >= TIMEOUT_STRIKE_LIMIT) {
+      // Second timeout this match — they've clearly left the table. Opponent wins.
+      console.log(`[timeout] ${pid} timed out ${strike}× — match forfeit`);
+      const opponent = matchPlayers(m).find(p => p.playerId !== pid);
+      endMatch(m, opponent?.playerId ?? pid);
+      return;
+    }
+    // First timeout: auto check/fold this decision and play on, no forfeit.
+    console.log(`[timeout] ${pid} timed out (strike ${strike}/${TIMEOUT_STRIKE_LIMIT}) — auto check/fold`);
+    forceTimeoutAction(m, pid);
   }, cfg.turn_seconds * 1000);
 
   broadcastMatchState(m); // re-push so clients pick up the started deadline (pid unchanged → no re-arm)
+}
+
+// A timed-out player is not forfeited on the spot (see startTurnClock). They are auto
+// CHECKED if they face no bet, otherwise FOLDED, and the hand plays on — identical to
+// the player having sent that action themselves. Two timeouts in a match ends it.
+const TIMEOUT_STRIKE_LIMIT = 2;
+
+function forceTimeoutAction(m, pid) {
+  const player = m.game.players.find(p => p.id === pid);
+  if (!player) return;
+  const action = player.roundBet >= m.game.currentBet ? 'check' : 'fold';
+  try {
+    const pre = preActionState(m.game, pid);
+    const preBoardLen = m.game.communityCards.length;
+    m.game.handleAction(pid, action);
+    const rows = buildActionRows(m, m.game, pre);
+    writeHandRows(m, m.game, m.currentHandUuid, rows)
+      .catch(e => console.error('[timeout] logAction:', e.message));
+    emitHandEvents(m, rows);
+    broadcastMatchState(m, buildActionTransition(m.game, pid, action, undefined, preBoardLen));
+    checkAndFireBegun(m, pid);
+    if (m.game.phase === 'showdown') enterInterHand(m);
+  } catch (e) {
+    console.error('[timeout] auto-action failed:', e.message);
+  }
 }
 
 // ── Bot play ──────────────────────────────────────────────────────────────────
