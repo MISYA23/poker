@@ -38,7 +38,8 @@
     "production-pro": {
       "android": {
         "serviceAccountKeyPath": "./playstore-key.json",
-        "track": "alpha"
+        "track": "alpha",
+        "releaseStatus": "draft"
       }
     }
   }
