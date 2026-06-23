@@ -34,6 +34,7 @@ function trackAdEvent(name, params = {}) {
   if (Platform.OS !== 'web') return;
   if (typeof window.fbq === 'function') window.fbq('track', name, params);
   if (typeof window.gtag === 'function') window.gtag('event', 'conversion', { send_to: 'AW-18227143328', ...params });
+  if (window.ttq && typeof window.ttq.track === 'function') window.ttq.track(name, params);
 }
 
 export default function AdLandingScreen() {

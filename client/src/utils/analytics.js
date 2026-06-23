@@ -15,11 +15,18 @@ function gtag(...args) {
   if (typeof window !== 'undefined' && typeof window.gtag === 'function') window.gtag(...args);
 }
 
-// Custom events — sent to both Meta and Google with the same name/params.
+function ttq(method, ...args) {
+  if (typeof window !== 'undefined' && window.ttq && typeof window.ttq[method] === 'function') {
+    window.ttq[method](...args);
+  }
+}
+
+// Custom events — sent to Meta, Google and TikTok with the same name/params.
 export function track(event, params) {
   if (Platform.OS !== 'web') return;
   fbq('trackCustom', event, params);
   gtag('event', event, { ...params, send_to: GOOGLE_ADS_ID });
+  ttq('track', event, params);
 }
 
 // Screen views — gtag('config', …) in index.html has send_page_view:false
