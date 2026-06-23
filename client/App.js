@@ -261,7 +261,14 @@ function App() {
     'hand-events': (batch)           => { handEventsRef.current = batch; },
     'game-state':  (payload)         => {
       if (bustRevealRef.current || forfeitRevealRef.current) return;
-      const { transition: t, seq, ...state } = payload;
+      const { transition: t, seq, serverNow, ...state } = payload;
+      // Re-base the server's turn deadline onto this device's clock. turnDeadline
+      // is a server-clock timestamp; if the phone's wall clock is skewed, the raw
+      // `deadline - Date.now()` would read short (or long). Subtracting the
+      // server↔client offset cancels the skew so the clock starts at a true 20s.
+      if (state.turnDeadline && serverNow) {
+        state.turnDeadline -= (serverNow - Date.now());
+      }
       if (handEndLockRef.current) {
         handEndPendingRef.current = { t, state };
         return;

@@ -444,6 +444,7 @@ function broadcastMatchState(m, transition = null) {
       botId: m.botId || null,
       turnDeadline: m.turnDeadline,
       turnDurationMs: cfg.turn_seconds * 1000,
+      serverNow: Date.now(), // client re-bases turnDeadline onto its own clock (kills wall-clock skew)
       handNumber: m.handCount,
       sittingOut,
     });
@@ -456,6 +457,7 @@ function broadcastMatchState(m, transition = null) {
       atTable: false, observing: true,
       matchId: m.id, turnDeadline: m.turnDeadline,
       turnDurationMs: cfg.turn_seconds * 1000,
+      serverNow: Date.now(), // see above — observers re-base onto their own clock too
       handNumber: m.handCount,
       stakeElo: stakeEloOf(m),
       sittingOut,
