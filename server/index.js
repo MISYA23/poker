@@ -275,7 +275,7 @@ function startTurnClock(m, pid) {
       // Second timeout this match — they've clearly left the table. Opponent wins.
       console.log(`[timeout] ${pid} timed out ${strike}× — match forfeit`);
       const opponent = matchPlayers(m).find(p => p.playerId !== pid);
-      endMatch(m, opponent?.playerId ?? pid);
+      endMatch(m, opponent?.playerId ?? pid, false, 'timeout');
       return;
     }
     // First timeout: auto check/fold this decision and play on, no forfeit.
@@ -824,7 +824,7 @@ function markHumanRefused(sp) {
 
 // ── Match end + ELO ───────────────────────────────────────────────────────────
 
-async function endMatch(m, winnerId, bust = false) {
+async function endMatch(m, winnerId, bust = false, reason = null) {
   if (m.ended) return;
   m.ended = true;
   // Kill every pending timer — a leftover nextHandTimer would deal a zombie
@@ -890,6 +890,7 @@ async function endMatch(m, winnerId, bust = false) {
       newElo:    isWin ? wNewElo : lNewElo,
       bust,
       forfeit: !bust,
+      forfeitReason: bust ? null : reason, // 'timeout' = clock ran out, 'left' = stood up / logged out
     });
   }
   // Observers get the result too — without it they'd sit on a frozen table forever.
@@ -1385,7 +1386,7 @@ io.on('connection', (socket) => {
     const m = matches.get(sp.matchId);
     if (m && !m.ended) {
       const otherId = matchPlayers(m).find(p => p.playerId !== sp.playerId)?.playerId;
-      if (otherId) endMatch(m, otherId);
+      if (otherId) endMatch(m, otherId, false, 'left');
     }
     sp.matchId = null;
     socket.emit('reset');
@@ -1431,7 +1432,7 @@ io.on('connection', (socket) => {
       const m = liveMatchOf(sp);
       if (m) {
         const otherId = matchPlayers(m).find(p => p.playerId !== sp.playerId)?.playerId;
-        endMatch(m, otherId ?? sp.playerId);
+        endMatch(m, otherId ?? sp.playerId, false, 'left');
       }
     }
     socketPlayers.delete(socket.id);

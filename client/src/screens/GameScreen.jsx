@@ -1383,6 +1383,14 @@ export default function GameScreen({ navigation }) {
                   : (iWon ? 'You Win!' : 'You Lose')}
               </Animated.Text>
 
+              {matchOver.forfeit && iWon && matchOver.forfeitReason && (
+                <Animated.Text style={[s.moForfeitReason, { opacity: moTitle }]}>
+                  {matchOver.forfeitReason === 'left'
+                    ? `${matchOver.loserName || opponent?.name || 'Your opponent'} left the table`
+                    : `${matchOver.loserName || opponent?.name || 'Your opponent'} ran out of time`}
+                </Animated.Text>
+              )}
+
               {/* Duel row */}
               <Animated.View style={[s.moDuelRow, { opacity: moAvatar }]}>
                 <View style={s.moDuelPlayer}>
@@ -1699,6 +1707,7 @@ const s = StyleSheet.create({
 
   moCrest:       { fontSize: 52 },
   moResult:      { fontSize: 22, fontWeight: '900', textAlign: 'center' },
+  moForfeitReason: { fontSize: 13, fontWeight: '600', textAlign: 'center', color: '#9aa0a6', marginTop: 3 },
   moResultWin:   { color: '#36d07f' },
   moResultLose:  { color: '#e0564d' },
   moDuelRow:     { flexDirection: 'row', alignItems: 'center', gap: 12, marginVertical: 4 },
