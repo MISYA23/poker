@@ -414,7 +414,7 @@ export default function GameScreen({ navigation }) {
   const {
     gameState, transition, myId, onAction, onLeave, onRematch, onLogout,
     matchOver, navigationRef, deckStyle, playerInfo, onHandEndAnimDone,
-    handEventsRef, bustReveal = null, forfeitReveal = null,
+    handEventsRef, bustReveal = null,
     onBotActionRequest, onActionReady, lives = 3, maxLives = 3, myElo = null, opponentElo = null,
     myConnected = true, opponentConnected = true,
   } = useContext(GameContext);
@@ -872,46 +872,6 @@ export default function GameScreen({ navigation }) {
     Animated.parallel(anims).start();
   }, [showWinners]);
 
-  // Forfeit animation — chip countdown + flight from loser to winner
-  const forfeitFlightY       = useRef(new Animated.Value(0)).current;
-  const forfeitFlightOpacity = useRef(new Animated.Value(0)).current;
-  const [forfeitChipDisplay, setForfeitChipDisplay] = useState(null);
-  useEffect(() => {
-    if (!forfeitReveal) {
-      setForfeitChipDisplay(null);
-      forfeitFlightOpacity.setValue(0);
-      return;
-    }
-    const { loserId, loserChips } = forfeitReveal;
-    const loserIsBottom = loserId === bottomId;
-    const travelY = loserIsBottom ? -(MY_POD_T - OPP_POD_T - POD_H) : (MY_POD_T - OPP_POD_T - POD_H);
-    // Number countdown
-    const startTime = Date.now();
-    const duration = 1500;
-    setForfeitChipDisplay(loserChips);
-    const countId = setInterval(() => {
-      const elapsed = Date.now() - startTime;
-      const t = Math.min(1, elapsed / duration);
-      const eased = t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t; // ease-in-out
-      setForfeitChipDisplay(Math.round(loserChips * (1 - eased)));
-      if (t >= 1) clearInterval(countId);
-    }, 16);
-    // Chip flight
-    forfeitFlightY.setValue(0);
-    forfeitFlightOpacity.setValue(1);
-    Animated.parallel([
-      Animated.timing(forfeitFlightY, {
-        toValue: travelY, duration: 1500,
-        easing: Easing.bezier(0.25, 0.46, 0.45, 0.94), useNativeDriver: true,
-      }),
-      Animated.sequence([
-        Animated.delay(1200),
-        Animated.timing(forfeitFlightOpacity, { toValue: 0, duration: 300, useNativeDriver: true }),
-      ]),
-    ]).start();
-    return () => clearInterval(countId);
-  }, [forfeitReveal]);
-
   const currentBet   = gameState?.currentBet || 0;
   const myBet        = me?.roundBet || 0;
   const bigBlind     = gameState?.bigBlind || 20;
@@ -953,7 +913,7 @@ export default function GameScreen({ navigation }) {
               win={bustWinId ? opponent?.id === bustWinId : (opponent ? activeWinners[opponent.id] : null)}
               splitPot={isSplit}
               allInLocked={oppAllInLocked}
-              displayChips={forfeitReveal?.loserId === opponent?.id && forfeitChipDisplay != null ? forfeitChipDisplay : (opponent ? chipsFor(opponent) : 0)}
+              displayChips={opponent ? chipsFor(opponent) : 0}
               deckStyle={deckStyle} sittingOut={oppSittingOut} connected={opponentConnected} />
           </View>
 
@@ -1050,15 +1010,6 @@ export default function GameScreen({ navigation }) {
           )}
 
           {/* Forfeit chip flight — loser's chips slide to winner */}
-          {forfeitReveal && (
-            <Animated.View pointerEvents="none" style={[s.winFlight, {
-              top: forfeitReveal.loserId === bottomId ? MY_POD_T + POD_H / 2 : OPP_POD_T + POD_H / 2,
-              opacity: forfeitFlightOpacity,
-              transform: [{ translateY: forfeitFlightY }],
-            }]}>
-              <ChipStack amount={forfeitReveal.loserChips || 0} size={33} />
-            </Animated.View>
-          )}
 
           {/* Player hole cards — spec §5 playerCards: (0.43, 0.700) */}
           <HoleCards player={me} isMe={true} deckStyle={deckStyle} onDealComplete={() => setDealtHand(gameState?.handNumber || 0)} handNumber={gameState?.handNumber} />
@@ -1070,7 +1021,7 @@ export default function GameScreen({ navigation }) {
               win={bustWinId ? me?.id === bustWinId : (me ? activeWinners[me.id] : null)}
               splitPot={isSplit}
               allInLocked={myAllInLocked}
-              displayChips={forfeitReveal?.loserId === me?.id && forfeitChipDisplay != null ? forfeitChipDisplay : (me ? chipsFor(me) : 0)}
+              displayChips={me ? chipsFor(me) : 0}
               avatarOverride={observing ? undefined : playerInfo?.avatarId}
               deckStyle={deckStyle} sittingOut={meSittingOut} connected={myConnected} />
           </View>

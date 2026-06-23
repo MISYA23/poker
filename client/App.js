@@ -17,7 +17,7 @@ import { track, trackScreen } from './src/utils/analytics';
 import { SERVER_URL } from './src/config';
 import { startMusic, setMusicContext, loadMusicConfig, setMusicMuted } from './src/audio/music';
 import { setSfxEnabled } from './src/audio/sfx';
-import { HAND_END_MAX_MS, BUST_REVEAL_MS, FORFEIT_REVEAL_MS, MATCH_OVER_FALLBACK_MS } from './src/timings';
+import { HAND_END_MAX_MS, BUST_REVEAL_MS, MATCH_OVER_FALLBACK_MS } from './src/timings';
 import MatchFlowOverlays from './src/components/MatchFlowOverlays';
 import LoginScreen   from './src/screens/LoginScreen';
 import LobbyScreen   from './src/screens/LobbyScreen';
@@ -76,7 +76,6 @@ function App() {
   const [meantime, setMeantime]           = useState(false); // "play a bot while we keep searching" dialog
   const [preMatch, setPreMatch]           = useState(null);  // null | { opponent } — vs countdown before first hand
   const [bustReveal, setBustReveal]       = useState(null);  // null | { winnerId } — bust chip-flight + winner badge window
-  const [forfeitReveal, setForfeitReveal] = useState(null);  // null | { loserId, loserChips, loserName } — forfeit countdown animation window
 
   const navigationRef = useNavigationContainerRef();
   const matchIdRef          = useRef(null);
@@ -92,7 +91,6 @@ function App() {
   const botOfferTimerRef   = useRef(null); // 5s timer → show bot-offer dialog
   const matchOverTimerRef  = useRef(null); // pending match-over reveal delay
   const bustRevealRef      = useRef(null); // mirrors bustReveal for socket-bound handlers
-  const forfeitRevealRef   = useRef(null); // mirrors forfeitReveal for socket-bound handlers
   const handEndLockRef     = useRef(null); // truthy (holds the safety-cap timer) while a hand-end animation is playing
   const handEndPendingRef  = useRef(null); // queued game-state to apply when lock releases
   const releaseHandEndRef  = useRef(null); // set while locked; the client animation calls this to release
@@ -166,22 +164,12 @@ function App() {
         setMatchOver({ ...data, myVote: null, opponentWantsRematch: null });
       }, BUST_REVEAL_MS);
     } else if (data.forfeit) {
-      // Forfeit: chip countdown + flight animation for 2.5s, then modal
-      const rev = { loserId: data.loserId, loserChips: data.loserChips, loserName: data.loserName };
-      forfeitRevealRef.current = rev;
-      setForfeitReveal(rev);
-      matchOverTimerRef.current = setTimeout(() => {
-        matchOverTimerRef.current = null;
-        forfeitRevealRef.current = null;
-        setForfeitReveal(null);
-        setMatchOver({ ...data, myVote: null, opponentWantsRematch: null });
-      }, FORFEIT_REVEAL_MS);
+      // Forfeit: no table animation — leave the table as-is and show the dialog now.
+      setMatchOver({ ...data, myVote: null, opponentWantsRematch: null });
     } else {
       // Fallback: plain brief pause
       bustRevealRef.current = null;
       setBustReveal(null);
-      forfeitRevealRef.current = null;
-      setForfeitReveal(null);
       matchOverTimerRef.current = setTimeout(() => {
         matchOverTimerRef.current = null;
         setMatchOver({ ...data, myVote: null, opponentWantsRematch: null });
@@ -230,7 +218,6 @@ function App() {
       releaseHandEndRef.current = null;
       matchOverPendingRef.current = null;
       bustRevealRef.current = null;
-      forfeitRevealRef.current = null;
       // Starting any match voids all challenges (server does the same)
       setOpponentConnected(true);
       setIncomingChallenges([]);
@@ -260,7 +247,7 @@ function App() {
     'analytics-status': ({ firstMatchBegun }) => { firstMatchBegunRef.current = firstMatchBegun; },
     'hand-events': (batch)           => { handEventsRef.current = batch; },
     'game-state':  (payload)         => {
-      if (bustRevealRef.current || forfeitRevealRef.current) return;
+      if (bustRevealRef.current) return;
       const { transition: t, seq, serverNow, ...state } = payload;
       // Re-base the server's turn deadline onto this device's clock. turnDeadline
       // is a server-clock timestamp; if the phone's wall clock is skewed, the raw
@@ -357,7 +344,6 @@ function App() {
       clearBotOfferTimer();
       if (isObserverRef.current) emit('unobserve', { matchId: matchIdRef.current });
       bustRevealRef.current = null;
-      forfeitRevealRef.current = null;
       if (handEndLockRef.current) { clearTimeout(handEndLockRef.current); handEndLockRef.current = null; }
       handEndPendingRef.current = null;
       releaseHandEndRef.current = null;
@@ -577,13 +563,13 @@ function App() {
   // lobby broadcasts (match-list, challenges) don't re-render mid-game screens.
   const gameValue = useMemo(() => ({
     gameState, transition, myId, matchOver, handEventsRef,
-    playerInfo, deckStyle, setDeckStyle, bustReveal, forfeitReveal,
+    playerInfo, deckStyle, setDeckStyle, bustReveal,
     lives, maxLives, lifeRefillAt, fetchLives,
     myElo, opponentElo,
     myConnected, opponentConnected,
     emit, onLogin, onLogout, onUpdateProfile,
     onAction, onLeave, onRematch, onHandEndAnimDone, onBotActionRequest, onActionReady, navigationRef,
-  }), [gameState, transition, myId, matchOver, playerInfo, deckStyle, bustReveal, forfeitReveal,
+  }), [gameState, transition, myId, matchOver, playerInfo, deckStyle, bustReveal,
        lives, maxLives, lifeRefillAt, fetchLives, myElo, opponentElo,
        myConnected, opponentConnected,
        emit, onLogin, onLogout, onUpdateProfile, onAction, onLeave, onRematch, onHandEndAnimDone, onBotActionRequest, onActionReady]);
