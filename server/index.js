@@ -1099,31 +1099,25 @@ io.on('connection', (socket) => {
         ).catch(e => console.error('[acquisition] insert failed:', e.message));
       }
 
-      // Safety reconciliation for navigation races (e.g. a web refresh that boots
-      // straight into the Lobby) where enter-lobby fires while this identity still
-      // holds a vacant seat: treat it as a reconnect, not an abandon. The primary
-      // reconnect path is the `session` handshake above; this guards the race.
+      // Reconnect reconciliation for navigation races (e.g. a web refresh that
+      // boots straight into the Lobby) where enter-lobby fires while this identity
+      // still holds a vacant seat: treat it as a reconnect, not an abandon. The
+      // primary reconnect path is the `session` handshake above; this guards the race.
       if (reclaimSeat(socket, playerId)) return;
 
-      // Lobby and table are mutually exclusive. If this socket is still seated
-      // at a live match, arriving at the lobby means they abandoned it —
-      // opponent wins. (A freshly reconnected socket is seated at nothing, so
-      // refreshes can never trip this.)
+      // enter-lobby NEVER ends a live match. A socket still seated at one here is a
+      // reconnect/refresh — `session` already re-seated it at the table — so leave
+      // the match (and matchId) alone and let them resume. Deliberately quitting a
+      // match goes through `leave-table` (and `logout`); that is the ONLY way a
+      // player forfeits by walking away. Conflating "arrived at the lobby" with
+      // "abandoned my table" is what insta-forfeited refreshers.
       const sp = socketPlayers.get(socket.id);
-      const live = liveMatchOf(sp);
-      if (live) {
-        if (live.handCount === 0) {
-          // Pre-match cancel — no hand was ever played, void with no ELO/banana effect
-          voidMatch(live);
-        } else {
-          const otherId = matchPlayers(live).find(p => p.playerId !== playerId)?.playerId;
-          endMatch(live, otherId ?? playerId);
-        }
+      if (!liveMatchOf(sp)) {
+        sp.matchId = null;
+        // A real lobby arrival (no live match) also means "not searching anymore"
+        dequeue(playerId);
+        clearSearchFor(playerId);
       }
-      sp.matchId = null;
-      // Arriving at the lobby always means "not searching anymore"
-      dequeue(playerId);
-      clearSearchFor(playerId);
     }
     broadcastMatchList();
     // Anyone mid-search asks this fresh arrival too
