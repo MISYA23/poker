@@ -18,7 +18,10 @@ import ScreenBackground from '../components/ScreenBackground';
 WebBrowser.maybeCompleteAuthSession();
 
 const GOOGLE_WEB_CLIENT_ID     = '1056319941649-g1feki5rvo6bm7jltur6eo4oanrn1tvo.apps.googleusercontent.com';
-const GOOGLE_ANDROID_CLIENT_ID = '1056319941649-see3orn4pr726lj32s8leecpn98sidpf.apps.googleusercontent.com';
+// Per-listing Android OAuth client (package + SHA-1 bound); picked in app.config.js.
+const GOOGLE_ANDROID_CLIENT_ID = Constants.expoConfig?.extra?.googleAndroidClientId
+  ?? '1056319941649-see3orn4pr726lj32s8leecpn98sidpf.apps.googleusercontent.com';
+const GOOGLE_ANDROID_REDIRECT  = `com.googleusercontent.apps.${GOOGLE_ANDROID_CLIENT_ID.replace(/\.apps\.googleusercontent\.com$/, '')}:/oauth2redirect/google`;
 const GOOGLE_DISCOVERY = {
   authorizationEndpoint: 'https://accounts.google.com/o/oauth2/v2/auth',
   tokenEndpoint: 'https://oauth2.googleapis.com/token',
@@ -47,7 +50,7 @@ export default function LoginScreen() {
   const redirectUri = Platform.OS === 'web'
     ? window.location.origin + '/'
     : (Platform.OS === 'android' && !isExpoGo)
-      ? AuthSession.makeRedirectUri({ native: 'com.googleusercontent.apps.1056319941649-see3orn4pr726lj32s8leecpn98sidpf:/oauth2redirect/google' })
+      ? AuthSession.makeRedirectUri({ native: GOOGLE_ANDROID_REDIRECT })
       : AuthSession.makeRedirectUri({ useProxy: true });
 
   const [request, response, promptAsync] = AuthSession.useAuthRequest(
