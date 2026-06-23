@@ -151,6 +151,14 @@ function App() {
   // match-over handler — so a busting all-in finishes its runout first.
   const applyMatchOver = useCallback((data) => {
     setMeantime(false);
+    // Match is decided here — fire the funnel event once per match-over (sent to
+    // Meta, Google and TikTok via track). Skip when we're only observing.
+    if (!data.observer) {
+      track('FinishMatch', {
+        result: data.winnerId === playerIdRef.current ? 'win' : 'loss',
+        forfeit: !!data.forfeit,
+      });
+    }
     if (data.newElo != null) setMyElo(data.newElo);
     if (matchOverTimerRef.current) clearTimeout(matchOverTimerRef.current);
     if (data.bust) {
